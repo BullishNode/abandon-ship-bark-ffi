@@ -1,0 +1,201 @@
+// UniFFI Definition Language for Bark Wallet
+namespace bark_ffi {};
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+/// Bitcoin network types
+enum Network {
+    "Bitcoin",
+    "Testnet",
+    "Signet",
+    "Regtest",
+};
+
+/// Error types that can occur when using the Bark wallet
+[Error]
+interface BarkError {
+    Network(string message);
+    Database(string message);
+    InvalidMnemonic(string message);
+    InvalidAddress(string message);
+    InvalidInvoice(string message);
+    InsufficientFunds(string message);
+    NotFound(string message);
+    ServerConnection(string message);
+    Internal(string message);
+};
+
+// ============================================================================
+// Records (Data Structures)
+// ============================================================================
+
+/// Configuration for creating/opening a Bark wallet
+dictionary Config {
+    string server_address;
+    string? esplora_address;
+    Network network;
+    u32? vtxo_refresh_expiry_threshold;
+    u16? vtxo_exit_margin;
+    u16? htlc_recv_claim_delta;
+};
+
+/// Read-only properties of the wallet
+dictionary WalletProperties {
+    Network network;
+    string fingerprint;
+};
+
+/// Detailed balance breakdown of the wallet
+dictionary Balance {
+    /// Spendable off-chain balance (Ark) in sats
+    u64 spendable_sats;
+
+    /// Coins locked in a round
+    u64 pending_in_round_sats;
+
+    /// Coins being unilaterally exited
+    u64 pending_exit_sats;
+
+    /// Coins pending as Lightning sends
+    u64 pending_lightning_send_sats;
+
+    /// Total pending Lightning receives (all invoices)
+    u64 pending_lightning_receive_total_sats;
+
+    /// Claimable pending Lightning receives
+    u64 pending_lightning_receive_claimable_sats;
+
+    /// Coins pending board confirmations
+    u64 pending_board_sats;
+};
+
+/// Simplified view of a VTXO
+dictionary Vtxo {
+    /// VTXO id like "686...9aa:0"
+    string id;
+
+    /// Amount in sats
+    u64 amount_sats;
+
+    /// Expiry height (0 if unknown)
+    u32 expiry_height;
+
+    /// Type of VTXO (e.g., "board", "round", "arkoor")
+    string kind;
+
+    /// State of VTXO (e.g., "spendable", "spent", "locked")
+    string state;
+};
+
+/// Result of creating a BOLT11 invoice
+dictionary LightningInvoice {
+    /// The BOLT11 invoice string
+    string invoice;
+
+    /// Amount in sats
+    u64 amount_sats;
+};
+
+/// Result of a successful lightning payment
+dictionary LightningPaymentResult {
+    /// The invoice that was paid
+    string invoice;
+
+    /// Payment preimage as hex string
+    string preimage;
+};
+
+/// Result of an offboard operation
+dictionary OffboardResult {
+    /// The round ID
+    string round_id;
+};
+
+// ============================================================================
+// Main Wallet Interface
+// ============================================================================
+
+/// The main Bark wallet interface for Ark operations
+interface Wallet {
+    /// Create a new Bark wallet
+    [Throws=BarkError, Name=create]
+    constructor(string mnemonic, Config config, string datadir, boolean force_rescan);
+
+    /// Open an existing Bark wallet
+    [Throws=BarkError, Name=open]
+    constructor(string mnemonic, Config config, string datadir);
+
+    // ------------------------------------------------------------------------
+    // Wallet Properties
+    // ------------------------------------------------------------------------
+
+    [Throws=BarkError]
+    WalletProperties properties();
+
+    // ------------------------------------------------------------------------
+    // Synchronization & Maintenance
+    // ------------------------------------------------------------------------
+
+    [Throws=BarkError]
+    void sync();
+
+    [Throws=BarkError]
+    void maintenance();
+
+    // ------------------------------------------------------------------------
+    // Address Generation
+    // ------------------------------------------------------------------------
+
+    [Throws=BarkError]
+    string new_address();
+
+    // ------------------------------------------------------------------------
+    // Balance & VTXOs
+    // ------------------------------------------------------------------------
+
+    [Throws=BarkError]
+    Balance balance();
+
+    [Throws=BarkError]
+    sequence<Vtxo> vtxos();
+
+    // ------------------------------------------------------------------------
+    // Offboarding (Move funds from Ark to on-chain)
+    // ------------------------------------------------------------------------
+
+    [Throws=BarkError]
+    OffboardResult offboard_all(string bitcoin_address);
+
+    // ------------------------------------------------------------------------
+    // Lightning Payments (Send)
+    // ------------------------------------------------------------------------
+
+    [Throws=BarkError]
+    LightningPaymentResult pay_lightning_invoice(string invoice, u64? amount_sats);
+
+    [Throws=BarkError]
+    LightningPaymentResult pay_lightning_address(
+        string lightning_address,
+        u64 amount_sats,
+        string? comment
+    );
+
+    // ------------------------------------------------------------------------
+    // Lightning Payments (Receive)
+    // ------------------------------------------------------------------------
+
+    [Throws=BarkError]
+    LightningInvoice bolt11_invoice(u64 amount_sats);
+
+    [Throws=BarkError]
+    void try_claim_all_lightning_receives(boolean wait);
+
+    // ------------------------------------------------------------------------
+    // Arkoor Payments (Out-of-round Ark payments)
+    // ------------------------------------------------------------------------
+
+    [Throws=BarkError]
+    void send_arkoor_payment(string ark_address, u64 amount_sats);
+};
