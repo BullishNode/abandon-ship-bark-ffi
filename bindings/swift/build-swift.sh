@@ -1,0 +1,141 @@
+#!/bin/bash
+set -e
+
+# Build script for creating Swift bindings and XCFramework
+# This script builds the Rust library for iOS and macOS, generates Swift bindings,
+# and packages everything into an XCFramework suitable for distribution.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+BUILD_DIR="$SCRIPT_DIR/build"
+XCFRAMEWORK_DIR="$BUILD_DIR/xcframework"
+
+echo "🔨 Building Bark Swift bindings..."
+echo "Project root: $PROJECT_ROOT"
+echo "Build dir: $BUILD_DIR"
+
+# Clean previous build
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+mkdir -p "$XCFRAMEWORK_DIR"
+
+cd "$PROJECT_ROOT"
+
+# Install targets if needed
+echo "📦 Ensuring Rust targets are installed..."
+rustup target add aarch64-apple-ios
+rustup target add x86_64-apple-ios
+rustup target add aarch64-apple-ios-sim
+rustup target add aarch64-apple-darwin
+rustup target add x86_64-apple-darwin
+
+# Build for iOS device (arm64)
+echo "🍎 Building for iOS device (arm64)..."
+cargo build --release --target aarch64-apple-ios
+
+# Build for iOS simulator (arm64 + x86_64)
+echo "📱 Building for iOS simulator (arm64)..."
+cargo build --release --target aarch64-apple-ios-sim
+
+echo "📱 Building for iOS simulator (x86_64)..."
+cargo build --release --target x86_64-apple-ios
+
+# Build for macOS (arm64 + x86_64)
+echo "💻 Building for macOS (arm64)..."
+cargo build --release --target aarch64-apple-darwin
+
+echo "💻 Building for macOS (x86_64)..."
+cargo build --release --target x86_64-apple-darwin
+
+# Create universal binaries
+echo "🔗 Creating universal binaries..."
+
+# iOS simulator universal binary
+mkdir -p "$BUILD_DIR/ios-simulator"
+lipo -create \
+    "$PROJECT_ROOT/target/aarch64-apple-ios-sim/release/libbark_ffi.a" \
+    "$PROJECT_ROOT/target/x86_64-apple-ios/release/libbark_ffi.a" \
+    -output "$BUILD_DIR/ios-simulator/libbark_ffi.a"
+
+# macOS universal binary
+mkdir -p "$BUILD_DIR/macos"
+lipo -create \
+    "$PROJECT_ROOT/target/aarch64-apple-darwin/release/libbark_ffi.dylib" \
+    "$PROJECT_ROOT/target/x86_64-apple-darwin/release/libbark_ffi.dylib" \
+    -output "$BUILD_DIR/macos/libbark_ffi.dylib"
+
+# Generate Swift bindings using uniffi-bindgen
+echo "🦀 Generating Swift bindings..."
+cargo run --bin uniffi-bindgen -- generate \
+    --library "$PROJECT_ROOT/target/aarch64-apple-darwin/release/libbark_ffi.dylib" \
+    --language swift \
+    --out-dir "$BUILD_DIR/swift"
+
+# Fix modulemap to use framework module
+echo "🔧 Fixing modulemap..."
+sed -i '' 's/^module BarkFFI {/framework module BarkFFI {/' "$BUILD_DIR/swift/BarkFFI.modulemap"
+
+# Create framework structure for each platform
+echo "📦 Creating framework structures..."
+
+# iOS device framework
+IOS_DEVICE_FRAMEWORK="$BUILD_DIR/ios-device/BarkFFI.framework"
+mkdir -p "$IOS_DEVICE_FRAMEWORK/Headers"
+mkdir -p "$IOS_DEVICE_FRAMEWORK/Modules"
+cp "$PROJECT_ROOT/target/aarch64-apple-ios/release/libbark_ffi.a" "$IOS_DEVICE_FRAMEWORK/BarkFFI"
+cp "$BUILD_DIR/swift/BarkFFI.h" "$IOS_DEVICE_FRAMEWORK/Headers/"
+cp "$BUILD_DIR/swift/BarkFFI.modulemap" "$IOS_DEVICE_FRAMEWORK/Modules/module.modulemap"
+cp "$SCRIPT_DIR/resources/Info-iOS.plist" "$IOS_DEVICE_FRAMEWORK/Info.plist"
+
+# iOS simulator framework
+IOS_SIM_FRAMEWORK="$BUILD_DIR/ios-simulator-framework/BarkFFI.framework"
+mkdir -p "$IOS_SIM_FRAMEWORK/Headers"
+mkdir -p "$IOS_SIM_FRAMEWORK/Modules"
+cp "$BUILD_DIR/ios-simulator/libbark_ffi.a" "$IOS_SIM_FRAMEWORK/BarkFFI"
+cp "$BUILD_DIR/swift/BarkFFI.h" "$IOS_SIM_FRAMEWORK/Headers/"
+cp "$BUILD_DIR/swift/BarkFFI.modulemap" "$IOS_SIM_FRAMEWORK/Modules/module.modulemap"
+cp "$SCRIPT_DIR/resources/Info-iOSSimulator.plist" "$IOS_SIM_FRAMEWORK/Info.plist"
+
+# macOS framework
+MACOS_FRAMEWORK="$BUILD_DIR/macos-framework/BarkFFI.framework"
+mkdir -p "$MACOS_FRAMEWORK/Headers"
+mkdir -p "$MACOS_FRAMEWORK/Modules"
+mkdir -p "$MACOS_FRAMEWORK/Resources"
+cp "$BUILD_DIR/macos/libbark_ffi.dylib" "$MACOS_FRAMEWORK/BarkFFI"
+cp "$BUILD_DIR/swift/BarkFFI.h" "$MACOS_FRAMEWORK/Headers/"
+cp "$BUILD_DIR/swift/BarkFFI.modulemap" "$MACOS_FRAMEWORK/Modules/module.modulemap"
+cp "$SCRIPT_DIR/resources/Info-macOS.plist" "$MACOS_FRAMEWORK/Resources/Info.plist"
+
+# Create XCFramework
+echo "📦 Creating XCFramework..."
+xcodebuild -create-xcframework \
+    -framework "$IOS_DEVICE_FRAMEWORK" \
+    -framework "$IOS_SIM_FRAMEWORK" \
+    -framework "$MACOS_FRAMEWORK" \
+    -output "$XCFRAMEWORK_DIR/BarkFFI.xcframework"
+
+# Copy Swift source files to Sources directory
+echo "📝 Copying Swift source files..."
+SOURCES_DIR="$SCRIPT_DIR/Sources/Bark"
+mkdir -p "$SOURCES_DIR"
+cp "$BUILD_DIR/swift/BarkFFI.swift" "$SOURCES_DIR/"
+
+# Note: Package.swift must be at repository root for SPM to work
+echo "ℹ️  Note: Ensure Package.swift is at repository root (not in bindings/swift/)"
+
+# Create zip for distribution
+echo "📦 Creating distribution zip..."
+cd "$XCFRAMEWORK_DIR"
+zip -r BarkFFI.xcframework.zip BarkFFI.xcframework
+CHECKSUM=$(swift package compute-checksum BarkFFI.xcframework.zip)
+
+echo ""
+echo "✅ Build complete!"
+echo ""
+echo "📦 XCFramework: $XCFRAMEWORK_DIR/BarkFFI.xcframework.zip"
+echo "📝 Swift sources: $SOURCES_DIR"
+echo ""
+echo "📊 Checksum for Package.swift:"
+echo "   $CHECKSUM"
+echo ""
+echo "Update Package.swift with this checksum!"
