@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_app/core/frameworks/flutter/themes/color_palette.dart';
 import 'package:flutter_app/core/frameworks/flutter/widgets/tabs/chip_tabs.dart';
 import 'package:flutter_app/core/frameworks/get_it/injection_container.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_bloc.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_event.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_state.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/transaction_vm.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/vtxo_vm.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_balance_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_bloc.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_event.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_state.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/transaction_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/vtxo_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/wallet_balance_vm.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/widgets/create_wallet_dialog.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/widgets/no_wallet_card.dart';
 import 'package:flutter_app/features/wallet/frameworks/go_router/wallet_routes.dart';
@@ -202,6 +202,68 @@ class _WalletViewState extends State<WalletView>
                                 ],
                               ),
                             ),
+
+                            // Backup Card
+                            if (hasWallets && state.wallets.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? AppColors.gray900
+                                        : AppColors.white,
+                                    border: Border.all(
+                                      color: isDark
+                                          ? AppColors.gray800
+                                          : AppColors.gray200,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: ListTile(
+                                    leading: Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(
+                                        Icons.shield_outlined,
+                                        color: Colors.orange,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    title: Text(
+                                      'Backup Seed Phrase',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark
+                                            ? AppColors.white
+                                            : AppColors.black,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      'Secure your wallet',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: isDark
+                                            ? AppColors.gray400
+                                            : AppColors.gray600,
+                                      ),
+                                    ),
+                                    trailing: Icon(
+                                      Icons.chevron_right,
+                                      color: isDark
+                                          ? AppColors.gray600
+                                          : AppColors.gray400,
+                                    ),
+                                    onTap: () => context.pushNamed(
+                                      WalletRoute.backup.name,
+                                      extra: state.wallets.first.id,
+                                    ),
+                                  ),
+                                ),
+                              ),
 
                             // Tabs
                             Padding(

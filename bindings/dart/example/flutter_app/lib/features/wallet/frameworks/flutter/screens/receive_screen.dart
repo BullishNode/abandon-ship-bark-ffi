@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_app/core/frameworks/flutter/themes/color_palette.dart';
 import 'package:flutter_app/core/frameworks/get_it/injection_container.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_bloc.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_event.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_state.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_summary_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_bloc.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_event.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_state.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/wallet_summary_vm.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 

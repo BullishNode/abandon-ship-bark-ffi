@@ -3,19 +3,18 @@ import 'package:flutter_app/core/application/error/failures.dart';
 import 'package:flutter_app/features/wallet/application/ports/esplora_endpoint_port.dart';
 import 'package:flutter_app/features/wallet/application/ports/wallets_repository_port.dart';
 import 'package:flutter_app/features/wallet/application/ports/mnemonic_repository_port.dart';
-import 'package:flutter_app/features/wallet/domain/entities/wallet_config.dart';
 import 'package:flutter_app/features/wallet/domain/entities/wallet_entity.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/bark_balance_vo.dart';
+import 'package:flutter_app/features/wallet/domain/value_objects/new_wallet_config_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/transaction_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/vtxo_vo.dart';
+import 'package:flutter_app/features/wallet/domain/value_objects/wallet_backup_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/wallet_type_vo.dart';
-import 'package:flutter_app/features/wallet/driven_adapters/wallets/bark_wallet.dart';
 import 'package:flutter_app/features/wallet/driven_adapters/wallets/wallet_port_registry.dart';
 
 class WalletService {
   final WalletPortRegistry _walletPortRegistry;
   final WalletsRepositoryPort _walletsRepository;
-  final MnemonicRepositoryPort _mnemonicRepository;
   final EsploraEndpointPort _esploraEndpointPort;
 
   WalletService({
@@ -25,10 +24,9 @@ class WalletService {
     required EsploraEndpointPort esploraEndpointPort,
   }) : _walletPortRegistry = walletPortRegistry,
        _walletsRepository = walletsRepository,
-       _mnemonicRepository = mnemonicRepository,
        _esploraEndpointPort = esploraEndpointPort;
 
-  /// Create a new bark wallet from mnemonic
+  /// Create a bark wallet
   Future<Either<Failure, WalletEntity>> createBarkWallet({
     required String name,
     String? description,
@@ -39,8 +37,6 @@ class WalletService {
     int? htlcRecvClaimDelta,
   }) async {
     try {
-      final mnemonic = await _mnemonicRepository.generateMnemonic();
-
       // Get Esplora endpoint for the network
       final esploraResult = await _esploraEndpointPort.getEndpointUrlForNetwork(
         network,
@@ -49,36 +45,36 @@ class WalletService {
       return await esploraResult.fold((failure) => Left(failure), (
         esploraAddress,
       ) async {
-        final walletPort =
-            _walletPortRegistry.getPort(WalletTypeVO.bark) as BarkWallet;
-
-        // Configure the wallet using the provided mnemonic
-        final configResult = await walletPort.configureWallet(
-          mnemonic: mnemonic,
+        // Create the bark wallet in the repository
+        final walletResult = await _walletsRepository.createWallet(
+          name: name,
           network: network,
-          asp: asp,
-          esploraAddress: esploraAddress,
-          vtxoRefreshExpiryThreshold: vtxoRefreshExpiryThreshold,
-          vtxoExitMargin: vtxoExitMargin,
-          htlcRecvClaimDelta: htlcRecvClaimDelta,
+          type: WalletTypeVO.bark,
+          description: description,
         );
 
-        return await configResult.fold((failure) => Left(failure), (
-          config,
+        return await walletResult.fold((failure) => Left(failure), (
+          wallet,
         ) async {
-          // Store the mnemonic securely
-          await _mnemonicRepository.storeMnemonic(
-            fingerprint: config.fingerprint,
-            mnemonic: mnemonic,
-          );
+          final walletPort = _walletPortRegistry.getPort(WalletTypeVO.bark);
 
-          // Create the bark wallet in the repository
-          return await _walletsRepository.createBarkWallet(
-            name: name,
-            network: network,
-            description: description,
-            config: config,
+          // Configure the wallet using the correct port
+          final walletConfig = await walletPort.createWallet(
+            NewBarkWalletConfigVO(
+              walletId: wallet.id,
+              network: network,
+              asp: asp,
+              esploraAddresses: [esploraAddress],
+              vtxoRefreshExpiryThreshold: vtxoRefreshExpiryThreshold,
+              vtxoExitMargin: vtxoExitMargin,
+              htlcRecvClaimDelta: htlcRecvClaimDelta,
+            ),
           );
+          return await walletConfig.fold((failure) => Left(failure), (
+            walletConfig,
+          ) async {
+            return Right(wallet);
+          });
         });
       });
     } catch (e) {
@@ -95,9 +91,24 @@ class WalletService {
       return await walletResult.fold((failure) => Left(failure), (
         wallet,
       ) async {
-        await _prepareWalletConfig(wallet);
         final walletPort = _walletPortRegistry.getPort(wallet.type);
-        return await walletPort.generatePaymentRequest(wallet: wallet);
+        final configResult = await walletPort.loadWalletConfig(
+          walletId: walletId,
+        );
+        return await configResult.fold((failure) => Left(failure), (
+          config,
+        ) async {
+          // Get Esplora endpoint for the network
+          final esploraResult = await _esploraEndpointPort
+              .getEndpointUrlForNetwork(config.network);
+
+          return await esploraResult.fold((failure) => Left(failure), (
+            esploraAddress,
+          ) async {
+            config.setEsploraAddresses([esploraAddress]);
+            return await walletPort.generatePaymentRequest(config: config);
+          });
+        });
       });
     } catch (e) {
       return Left(
@@ -115,9 +126,24 @@ class WalletService {
       return await walletResult.fold((failure) => Left(failure), (
         wallet,
       ) async {
-        await _prepareWalletConfig(wallet);
         final walletPort = _walletPortRegistry.getPort(wallet.type);
-        return await walletPort.getBalance(wallet: wallet);
+        final configResult = await walletPort.loadWalletConfig(
+          walletId: walletId,
+        );
+        return await configResult.fold((failure) => Left(failure), (
+          config,
+        ) async {
+          // Get Esplora endpoint for the network
+          final esploraResult = await _esploraEndpointPort
+              .getEndpointUrlForNetwork(config.network);
+
+          return await esploraResult.fold((failure) => Left(failure), (
+            esploraAddress,
+          ) async {
+            config.setEsploraAddresses([esploraAddress]);
+            return await walletPort.getBalance(config: config);
+          });
+        });
       });
     } catch (e) {
       return Left(ServiceFailure(message: 'Failed to get balance: $e'));
@@ -133,9 +159,24 @@ class WalletService {
       return await walletResult.fold((failure) => Left(failure), (
         wallet,
       ) async {
-        await _prepareWalletConfig(wallet);
         final walletPort = _walletPortRegistry.getPort(wallet.type);
-        return await walletPort.getVtxos(wallet: wallet);
+        final configResult = await walletPort.loadWalletConfig(
+          walletId: walletId,
+        );
+        return await configResult.fold((failure) => Left(failure), (
+          config,
+        ) async {
+          // Get Esplora endpoint for the network
+          final esploraResult = await _esploraEndpointPort
+              .getEndpointUrlForNetwork(config.network);
+
+          return await esploraResult.fold((failure) => Left(failure), (
+            esploraAddress,
+          ) async {
+            config.setEsploraAddresses([esploraAddress]);
+            return await walletPort.getVtxos(config: config);
+          });
+        });
       });
     } catch (e) {
       return Left(ServiceFailure(message: 'Failed to get vtxos: $e'));
@@ -151,9 +192,24 @@ class WalletService {
       return await walletResult.fold((failure) => Left(failure), (
         wallet,
       ) async {
-        await _prepareWalletConfig(wallet);
         final walletPort = _walletPortRegistry.getPort(wallet.type);
-        return await walletPort.getTransactions(wallet: wallet);
+        final configResult = await walletPort.loadWalletConfig(
+          walletId: walletId,
+        );
+        return await configResult.fold((failure) => Left(failure), (
+          config,
+        ) async {
+          // Get Esplora endpoint for the network
+          final esploraResult = await _esploraEndpointPort
+              .getEndpointUrlForNetwork(config.network);
+
+          return await esploraResult.fold((failure) => Left(failure), (
+            esploraAddress,
+          ) async {
+            config.setEsploraAddresses([esploraAddress]);
+            return await walletPort.getTransactions(config: config);
+          });
+        });
       });
     } catch (e) {
       return Left(ServiceFailure(message: 'Failed to get transactions: $e'));
@@ -167,45 +223,58 @@ class WalletService {
       return await walletResult.fold((failure) => Left(failure), (
         wallet,
       ) async {
-        await _prepareWalletConfig(wallet);
         final walletPort = _walletPortRegistry.getPort(wallet.type);
-        return await walletPort.sync(wallet: wallet);
+        final configResult = await walletPort.loadWalletConfig(
+          walletId: walletId,
+        );
+        return await configResult.fold((failure) => Left(failure), (
+          config,
+        ) async {
+          // Get Esplora endpoint for the network
+          final esploraResult = await _esploraEndpointPort
+              .getEndpointUrlForNetwork(config.network);
+
+          return await esploraResult.fold((failure) => Left(failure), (
+            esploraAddress,
+          ) async {
+            config.setEsploraAddresses([esploraAddress]);
+            return await walletPort.sync(config: config);
+          });
+        });
       });
     } catch (e) {
       return Left(ServiceFailure(message: 'Failed to sync wallet: $e'));
     }
   }
 
-  /// Prepare wallet config with mnemonic and esplora addresses
-  Future<void> _prepareWalletConfig(WalletEntity wallet) async {
-    final config = wallet.config;
-    if (wallet.type == WalletTypeVO.bark) {
-      if (config is! BarkWalletConfig) {
-        throw ServiceFailure(
-          message:
-              'Invalid wallet config type for BarkWallet: ${wallet.runtimeType}',
-        );
-      }
+  Future<Either<Failure, WalletBackupVO>> getWalletBackup(int walletId) async {
+    try {
+      final walletResult = await _walletsRepository.getWalletById(walletId);
 
-      // Set mnemonic
-      final mnemonic = await _mnemonicRepository.getMnemonic(
-        config.fingerprint,
-      );
-      if (mnemonic == null) {
-        throw NotFoundFailure(
-          message: 'Mnemonic not found for wallet ${wallet.id}',
+      return await walletResult.fold((failure) => Left(failure), (
+        wallet,
+      ) async {
+        final walletPort = _walletPortRegistry.getPort(wallet.type);
+        final configResult = await walletPort.loadWalletConfig(
+          walletId: walletId,
         );
-      }
-      config.setMnemonic(mnemonic);
+        return await configResult.fold((failure) => Left(failure), (
+          config,
+        ) async {
+          // Get Esplora endpoint for the network
+          final esploraResult = await _esploraEndpointPort
+              .getEndpointUrlForNetwork(config.network);
 
-      // Set esplora addresses
-      final esploraResult = await _esploraEndpointPort.getEndpointUrlForNetwork(
-        wallet.network,
-      );
-      esploraResult.fold(
-        (failure) => throw failure,
-        (esploraAddress) => config.setEsploraAddresses([esploraAddress]),
-      );
+          return await esploraResult.fold((failure) => Left(failure), (
+            esploraAddress,
+          ) async {
+            config.setEsploraAddresses([esploraAddress]);
+            return await walletPort.getBackup(config: config);
+          });
+        });
+      });
+    } catch (e) {
+      return Left(ServiceFailure(message: 'Failed to get wallet backup: $e'));
     }
   }
 }

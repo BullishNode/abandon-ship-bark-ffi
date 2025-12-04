@@ -1,8 +1,9 @@
 import 'package:equatable/equatable.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/transaction_vm.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/vtxo_vm.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_balance_vm.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_summary_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/transaction_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/vtxo_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/wallet_backup_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/wallet_balance_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/wallet_summary_vm.dart';
 
 /// Base class for wallet states
 abstract class WalletState extends Equatable {
@@ -112,4 +113,28 @@ class PaymentRequestGenerated extends WalletState {
 
   @override
   List<Object> get props => [walletId, paymentRequest];
+}
+
+/// Loading wallet backup
+class LoadingBackup extends WalletState {
+  final int walletId;
+
+  const LoadingBackup(this.walletId);
+
+  @override
+  List<Object> get props => [walletId];
+}
+
+/// Wallet backup loaded successfully
+class BackupLoaded extends WalletState {
+  final int walletId;
+  final WalletBackupVM backup;
+
+  const BackupLoaded({
+    required this.walletId,
+    required this.backup,
+  });
+
+  @override
+  List<Object> get props => [walletId, backup];
 }

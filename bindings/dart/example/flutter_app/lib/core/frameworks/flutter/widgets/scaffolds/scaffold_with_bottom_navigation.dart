@@ -72,13 +72,16 @@ class ScaffoldWithBottomNavigation extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.gray900 : AppColors.gray100,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Icon(
-                  Icons.person_outline,
-                  size: 22,
-                  color: isDark ? AppColors.white : AppColors.black,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.asset(
+                    'assets/bark/bark-smiling-square-white-2.jpg',
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),

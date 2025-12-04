@@ -1,19 +1,22 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_app/core/application/usecases/usecase.dart';
+import 'package:flutter_app/features/wallet/application/dtos/wallet_backup_dto.dart';
 import 'package:flutter_app/features/wallet/application/usecases/create_bark_wallet.dart';
 import 'package:flutter_app/features/wallet/application/usecases/generate_payment_request.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_all_wallets.dart';
+import 'package:flutter_app/features/wallet/application/usecases/get_wallet_backup.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_balance.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_transactions.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_vtxos.dart';
 import 'package:flutter_app/features/wallet/application/usecases/sync_wallet.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_event.dart'
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_event.dart'
     as events;
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_state.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/transaction_vm.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/vtxo_vm.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_balance_vm.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_summary_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_state.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/transaction_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/vtxo_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/wallet_backup_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/wallet_balance_vm.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/view_models/wallet_summary_vm.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 /// BLoC for managing wallets
@@ -26,6 +29,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
   final SyncWallet _syncWallet;
   final GetWalletVtxos _getWalletVtxos;
   final GetWalletTransactions _getWalletTransactions;
+  final GetWalletBackup _getWalletBackup;
 
   WalletBloc({
     required GetAllWallets getAllWallets,
@@ -35,6 +39,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
     required SyncWallet syncWallet,
     required GetWalletVtxos getWalletVtxos,
     required GetWalletTransactions getWalletTransactions,
+    required GetWalletBackup getWalletBackup,
   }) : _getAllWallets = getAllWallets,
        _createBarkWallet = createBarkWallet,
        _getWalletBalance = getWalletBalance,
@@ -42,6 +47,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
        _syncWallet = syncWallet,
        _getWalletVtxos = getWalletVtxos,
        _getWalletTransactions = getWalletTransactions,
+       _getWalletBackup = getWalletBackup,
        super(const WalletInitial()) {
     on<events.LoadWallets>(_onLoadWallets);
     on<events.CreateWallet>(_onCreateWallet);
@@ -51,6 +57,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
     on<events.SyncWallet>(_onSyncWallet);
     on<events.LoadVtxos>(_onLoadVtxos);
     on<events.LoadTransactions>(_onLoadTransactions);
+    on<events.GetBackup>(_onGetBackup);
   }
 
   Future<void> _onLoadWallets(
@@ -316,6 +323,40 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
 
           emit(currentState.copyWith(transactions: updatedTransactions));
         }
+      },
+    );
+  }
+
+  Future<void> _onGetBackup(
+    events.GetBackup event,
+    Emitter<WalletState> emit,
+  ) async {
+    emit(LoadingBackup(event.walletId));
+
+    final result = await _getWalletBackup(
+      GetWalletBackupQuery(walletId: event.walletId),
+    );
+
+    result.fold(
+      (failure) => emit(WalletError(failure.message)),
+      (response) {
+        // Map DTO to VM
+        final WalletBackupVM backupVM;
+        final dto = response.backup;
+        if (dto is BarkWalletBackupDto) {
+          backupVM = BarkWalletBackupVM(
+            mnemonic: dto.mnemonic,
+            fingerprint: dto.fingerprint,
+          );
+        } else {
+          emit(WalletError('Unsupported wallet backup type'));
+          return;
+        }
+
+        emit(BackupLoaded(
+          walletId: event.walletId,
+          backup: backupVM,
+        ));
       },
     );
   }

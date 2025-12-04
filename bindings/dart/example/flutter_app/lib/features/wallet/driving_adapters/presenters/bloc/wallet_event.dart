@@ -102,3 +102,13 @@ class LoadTransactions extends WalletEvent {
   @override
   List<Object> get props => [walletId];
 }
+
+/// Event to get wallet backup
+class GetBackup extends WalletEvent {
+  final int walletId;
+
+  const GetBackup(this.walletId);
+
+  @override
+  List<Object> get props => [walletId];
+}

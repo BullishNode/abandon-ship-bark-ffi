@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_app/core/frameworks/flutter/themes/color_palette.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_bloc.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_event.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_bloc.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class CreateWalletDialog extends StatefulWidget {
@@ -41,18 +41,19 @@ class _CreateWalletDialogState extends State<CreateWalletDialog> {
   void _handleCreate() {
     if (_formKey.currentState!.validate()) {
       context.read<WalletBloc>().add(
-            CreateWallet(
-              name: _nameController.text,
-              asp: _aspController.text,
-              description: _descriptionController.text.isEmpty
-                  ? null
-                  : _descriptionController.text,
-              vtxoRefreshExpiryThreshold:
-                  _parseInt(_vtxoRefreshExpiryThresholdController.text),
-              vtxoExitMargin: _parseInt(_vtxoExitMarginController.text),
-              htlcRecvClaimDelta: _parseInt(_htlcRecvClaimDeltaController.text),
-            ),
-          );
+        CreateWallet(
+          name: _nameController.text,
+          asp: _aspController.text,
+          description: _descriptionController.text.isEmpty
+              ? null
+              : _descriptionController.text,
+          vtxoRefreshExpiryThreshold: _parseInt(
+            _vtxoRefreshExpiryThresholdController.text,
+          ),
+          vtxoExitMargin: _parseInt(_vtxoExitMarginController.text),
+          htlcRecvClaimDelta: _parseInt(_htlcRecvClaimDeltaController.text),
+        ),
+      );
       Navigator.of(context).pop();
     }
   }
@@ -244,10 +245,12 @@ class _CreateWalletDialogState extends State<CreateWalletDialog> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        backgroundColor:
-                            isDark ? AppColors.white : AppColors.black,
-                        foregroundColor:
-                            isDark ? AppColors.black : AppColors.white,
+                        backgroundColor: isDark
+                            ? AppColors.white
+                            : AppColors.black,
+                        foregroundColor: isDark
+                            ? AppColors.black
+                            : AppColors.white,
                       ),
                       child: const Text('Create'),
                     ),
@@ -272,9 +275,7 @@ class _CreateWalletDialogState extends State<CreateWalletDialog> {
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         filled: true,
         fillColor: isDark ? AppColors.gray800 : AppColors.gray100,
       ),
