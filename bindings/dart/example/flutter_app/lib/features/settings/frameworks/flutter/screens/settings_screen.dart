@@ -263,15 +263,35 @@ class _EsploraEndpointsTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
-        title: Text(
-          'Esplora Endpoints',
-          style: TextStyle(
-            fontWeight: FontWeight.w500,
-            color: isDark ? AppColors.white : AppColors.black,
-          ),
+        title: Row(
+          children: [
+            Text(
+              'Esplora Endpoints',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: isDark ? AppColors.white : AppColors.black,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.gray800 : AppColors.gray200,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'Coming soon',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.gray400 : AppColors.gray600,
+                ),
+              ),
+            ),
+          ],
         ),
         subtitle: Text(
-          'Manage Esplora server endpoints',
+          'Manage your own Esplora server endpoints',
           style: TextStyle(
             fontSize: 13,
             color: isDark ? AppColors.gray400 : AppColors.gray600,
@@ -281,9 +301,8 @@ class _EsploraEndpointsTile extends StatelessWidget {
           Icons.chevron_right,
           color: isDark ? AppColors.gray600 : AppColors.gray400,
         ),
-        onTap: () {
-          // TODO: Navigate to Esplora endpoints screen
-        },
+        enabled: false,
+        onTap: null,
       ),
     );
   }
