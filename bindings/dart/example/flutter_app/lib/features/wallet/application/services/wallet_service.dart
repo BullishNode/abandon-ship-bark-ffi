@@ -6,6 +6,7 @@ import 'package:flutter_app/features/wallet/application/ports/mnemonic_repositor
 import 'package:flutter_app/features/wallet/domain/entities/wallet_config.dart';
 import 'package:flutter_app/features/wallet/domain/entities/wallet_entity.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/bark_balance_vo.dart';
+import 'package:flutter_app/features/wallet/domain/value_objects/transaction_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/vtxo_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/wallet_type_vo.dart';
 import 'package:flutter_app/features/wallet/driven_adapters/wallets/bark_wallet.dart';
@@ -138,6 +139,24 @@ class WalletService {
       });
     } catch (e) {
       return Left(ServiceFailure(message: 'Failed to get vtxos: $e'));
+    }
+  }
+
+  Future<Either<Failure, List<TransactionVO>>> getTransactions({
+    required int walletId,
+  }) async {
+    try {
+      final walletResult = await _walletsRepository.getWalletById(walletId);
+
+      return await walletResult.fold((failure) => Left(failure), (
+        wallet,
+      ) async {
+        await _prepareWalletConfig(wallet);
+        final walletPort = _walletPortRegistry.getPort(wallet.type);
+        return await walletPort.getTransactions(wallet: wallet);
+      });
+    } catch (e) {
+      return Left(ServiceFailure(message: 'Failed to get transactions: $e'));
     }
   }
 

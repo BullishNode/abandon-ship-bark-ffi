@@ -31,6 +31,22 @@ pub enum BarkError {
     Internal { message: String },
 }
 
+impl BarkError {
+    pub fn message(&self) -> String {
+        match self {
+            BarkError::Network { message } => message.clone(),
+            BarkError::Database { message } => message.clone(),
+            BarkError::InvalidMnemonic { message } => message.clone(),
+            BarkError::InvalidAddress { message } => message.clone(),
+            BarkError::InvalidInvoice { message } => message.clone(),
+            BarkError::InsufficientFunds { message } => message.clone(),
+            BarkError::NotFound { message } => message.clone(),
+            BarkError::ServerConnection { message } => message.clone(),
+            BarkError::Internal { message } => message.clone(),
+        }
+    }
+}
+
 impl From<anyhow::Error> for BarkError {
     fn from(e: anyhow::Error) -> Self {
         let msg = format!("{:#}", e);

@@ -1,4 +1,4 @@
-import 'package:bark/src/generated/bark_ffi.dart';
+import 'package:bark/src/generated/bark.dart';
 
 /// Extension on BarkException to provide a common message getter
 extension BarkExceptionMessage on BarkException {

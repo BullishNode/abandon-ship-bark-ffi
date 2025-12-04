@@ -92,3 +92,13 @@ class LoadVtxos extends WalletEvent {
   @override
   List<Object> get props => [walletId];
 }
+
+/// Event to load transactions for a wallet
+class LoadTransactions extends WalletEvent {
+  final int walletId;
+
+  const LoadTransactions(this.walletId);
+
+  @override
+  List<Object> get props => [walletId];
+}

@@ -39,8 +39,10 @@ impl Wallet {
         let network: BtcNetwork = config.network.into();
         let cfg: bark::Config = config.into();
 
-        let mnemonic = Mnemonic::parse(mnemonic.trim())
-            .map_err(|e| BarkError::InvalidMnemonic { message: e.to_string() })?;
+        let mnemonic =
+            Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
+                message: e.to_string(),
+            })?;
 
         let datadir = PathBuf::from(datadir);
         let db_path = datadir.join("bark.sqlite");
@@ -70,8 +72,10 @@ impl Wallet {
     ) -> Result<InnerWallet, BarkError> {
         let cfg: bark::Config = config.into();
 
-        let mnemonic = Mnemonic::parse(mnemonic.trim())
-            .map_err(|e| BarkError::InvalidMnemonic { message: e.to_string() })?;
+        let mnemonic =
+            Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
+                message: e.to_string(),
+            })?;
 
         let datadir = PathBuf::from(datadir);
         let db_path = datadir.join("bark.sqlite");
@@ -184,7 +188,9 @@ impl Wallet {
         TOKIO_RT.block_on(async {
             let addr = bitcoin_address
                 .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-                .map_err(|e| BarkError::InvalidAddress { message: e.to_string() })?
+                .map_err(|e| BarkError::InvalidAddress {
+                    message: e.to_string(),
+                })?
                 .assume_checked();
 
             let status = self.inner.offboard_all(addr).await?;
@@ -206,9 +212,10 @@ impl Wallet {
         amount_sats: Option<u64>,
     ) -> Result<LightningPaymentResult, BarkError> {
         TOKIO_RT.block_on(async {
-            let invoice: Bolt11Invoice = invoice
-                .parse()
-                .map_err(|e| BarkError::InvalidInvoice { message: format!("invalid invoice: {}", e) })?;
+            let invoice: Bolt11Invoice =
+                invoice.parse().map_err(|e| BarkError::InvalidInvoice {
+                    message: format!("invalid invoice: {}", e),
+                })?;
 
             let amount = amount_sats.map(bitcoin::Amount::from_sat);
 
@@ -232,9 +239,12 @@ impl Wallet {
         comment: Option<String>,
     ) -> Result<LightningPaymentResult, BarkError> {
         TOKIO_RT.block_on(async {
-            let addr: LightningAddress = lightning_address.parse().map_err(|e| {
-                BarkError::InvalidAddress { message: format!("invalid lightning address: {}", e) }
-            })?;
+            let addr: LightningAddress =
+                lightning_address
+                    .parse()
+                    .map_err(|e| BarkError::InvalidAddress {
+                        message: format!("invalid lightning address: {}", e),
+                    })?;
 
             let amount = bitcoin::Amount::from_sat(amount_sats);
 
@@ -286,14 +296,263 @@ impl Wallet {
         amount_sats: u64,
     ) -> Result<(), BarkError> {
         TOKIO_RT.block_on(async {
-            let addr: ark_lib::Address = ark_address
-                .parse()
-                .map_err(|e| BarkError::InvalidAddress { message: format!("invalid ark address: {}", e) })?;
+            let addr: ark_lib::Address =
+                ark_address.parse().map_err(|e| BarkError::InvalidAddress {
+                    message: format!("invalid ark address: {}", e),
+                })?;
 
             let amount = bitcoin::Amount::from_sat(amount_sats);
 
             self.inner.send_arkoor_payment(&addr, amount).await?;
             Ok(())
         })
+    }
+
+    // ------------------------------------------------------------------------
+    // Extended Address Management
+    // ------------------------------------------------------------------------
+
+    /// Generate a new address and return it with its index
+    pub fn new_address_with_index(&self) -> Result<AddressWithIndex, BarkError> {
+        TOKIO_RT.block_on(async {
+            let (addr, index) = self.inner.new_address_with_index().await?;
+            Ok(AddressWithIndex {
+                address: addr.to_string(),
+                index,
+            })
+        })
+    }
+
+    /// Peek at an address at a specific index
+    pub fn peak_address(&self, index: u32) -> Result<String, BarkError> {
+        TOKIO_RT.block_on(async {
+            let addr = self.inner.peak_address(index).await?;
+            Ok(addr.to_string())
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    // Movement History
+    // ------------------------------------------------------------------------
+
+    /// Get all wallet movements (transaction history)
+    pub fn movements(&self) -> Result<Vec<Movement>, BarkError> {
+        Ok(self
+            .inner
+            .movements()?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    // ------------------------------------------------------------------------
+    // Extended VTXO Queries
+    // ------------------------------------------------------------------------
+
+    /// Get a specific VTXO by ID
+    pub fn get_vtxo_by_id(&self, vtxo_id: String) -> Result<Vtxo, BarkError> {
+        let id = vtxo_id.parse().map_err(|e| BarkError::InvalidAddress {
+            message: format!("invalid vtxo id: {}", e),
+        })?;
+        Ok(self.inner.get_vtxo_by_id(id)?.into())
+    }
+
+    /// Get all spendable VTXOs
+    pub fn spendable_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+        Ok(self
+            .inner
+            .spendable_vtxos()?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// Get all VTXOs (including spent)
+    pub fn all_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+        Ok(self
+            .inner
+            .all_vtxos()?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// Get VTXOs expiring within threshold blocks
+    pub fn get_expiring_vtxos(&self, threshold_blocks: u32) -> Result<Vec<Vtxo>, BarkError> {
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .get_expiring_vtxos(threshold_blocks)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+    }
+
+    /// Get VTXOs that should be refreshed
+    pub fn get_vtxos_to_refresh(&self) -> Result<Vec<Vtxo>, BarkError> {
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .get_vtxos_to_refresh()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    // Extended Offboarding
+    // ------------------------------------------------------------------------
+
+    /// Offboard specific VTXOs to a Bitcoin address
+    pub fn offboard_vtxos(
+        &self,
+        vtxo_ids: Vec<String>,
+        bitcoin_address: String,
+    ) -> Result<String, BarkError> {
+        TOKIO_RT.block_on(async {
+            let addr = bitcoin_address
+                .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+                .map_err(|e| BarkError::InvalidAddress {
+                    message: e.to_string(),
+                })?
+                .assume_checked();
+
+            let ids: Result<Vec<_>, _> = vtxo_ids
+                .iter()
+                .map(|id| {
+                    id.parse::<ark_lib::VtxoId>()
+                        .map_err(|e| BarkError::InvalidAddress {
+                            message: format!("invalid vtxo id: {}", e),
+                        })
+                })
+                .collect();
+
+            let status = self.inner.offboard_vtxos(ids?, addr).await?;
+            Ok(format!("{:?}", status))
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    // VTXO Refresh
+    // ------------------------------------------------------------------------
+
+    /// Refresh specific VTXOs
+    pub fn refresh_vtxos(&self, vtxo_ids: Vec<String>) -> Result<Option<String>, BarkError> {
+        TOKIO_RT.block_on(async {
+            let ids: Result<Vec<_>, _> = vtxo_ids
+                .iter()
+                .map(|id| {
+                    id.parse::<ark_lib::VtxoId>()
+                        .map_err(|e| BarkError::InvalidAddress {
+                            message: format!("invalid vtxo id: {}", e),
+                        })
+                })
+                .collect();
+
+            let result = self.inner.refresh_vtxos(ids?).await?;
+            Ok(result.map(|s| format!("{:?}", s)))
+        })
+    }
+
+    /// Perform maintenance refresh
+    pub fn maintenance_refresh(&self) -> Result<Option<String>, BarkError> {
+        TOKIO_RT.block_on(async {
+            let result = self.inner.maintenance_refresh().await?;
+            Ok(result.map(|s| format!("{:?}", s)))
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    // Extended Lightning
+    // ------------------------------------------------------------------------
+
+    /// Get all pending lightning sends
+    pub fn pending_lightning_sends(&self) -> Result<Vec<LightningSendStatus>, BarkError> {
+        Ok(self
+            .inner
+            .pending_lightning_sends()?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// Get all pending lightning receives
+    pub fn pending_lightning_receives(&self) -> Result<Vec<LightningReceiveStatus>, BarkError> {
+        Ok(self
+            .inner
+            .pending_lightning_receives()?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// Get claimable lightning receive balance
+    pub fn claimable_lightning_receive_balance_sats(&self) -> Result<u64, BarkError> {
+        Ok(self.inner.claimable_lightning_receive_balance()?.to_sat())
+    }
+
+    // ------------------------------------------------------------------------
+    // Onchain Payments
+    // ------------------------------------------------------------------------
+
+    /// Send an onchain payment during a round
+    pub fn send_round_onchain_payment(
+        &self,
+        address: String,
+        amount_sats: u64,
+    ) -> Result<String, BarkError> {
+        TOKIO_RT.block_on(async {
+            let addr = address
+                .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+                .map_err(|e| BarkError::InvalidAddress {
+                    message: e.to_string(),
+                })?
+                .assume_checked();
+
+            let amount = bitcoin::Amount::from_sat(amount_sats);
+            let status = self.inner.send_round_onchain_payment(addr, amount).await?;
+
+            Ok(format!("{:?}", status))
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    // Info
+    // ------------------------------------------------------------------------
+    /// Get Ark server info
+    pub fn ark_info(&self) -> Option<ArkInfo> {
+        TOKIO_RT.block_on(async {
+            match self.inner.ark_info().await {
+                Ok(Some(info)) => Some((&info).into()),
+                _ => None,
+            }
+        })
+    }
+
+    /// Get wallet config
+    pub fn config(&self) -> Config {
+        let cfg = self.inner.config();
+        let props = self.inner.properties().unwrap();
+        Config {
+            server_address: cfg.server_address.clone(),
+            esplora_address: cfg.esplora_address.clone(),
+            bitcoind_address: cfg.bitcoind_address.clone(),
+            bitcoind_cookiefile: cfg
+                .bitcoind_cookiefile
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string()),
+            bitcoind_user: cfg.bitcoind_user.clone(),
+            bitcoind_pass: cfg.bitcoind_pass.clone(),
+            network: props.network.into(),
+            vtxo_refresh_expiry_threshold: Some(cfg.vtxo_refresh_expiry_threshold),
+            vtxo_exit_margin: Some(cfg.vtxo_exit_margin),
+            htlc_recv_claim_delta: Some(cfg.htlc_recv_claim_delta),
+            fallback_fee_rate: cfg.fallback_fee_rate.map(|r| r.to_sat_per_kwu()),
+            round_tx_required_confirmations: Some(cfg.round_tx_required_confirmations),
+        }
     }
 }

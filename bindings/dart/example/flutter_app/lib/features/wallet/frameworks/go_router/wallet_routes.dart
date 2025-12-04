@@ -1,6 +1,6 @@
 import 'package:flutter_app/core/frameworks/go_router/app_route_module.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_state.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/screens/receive_screen.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_summary_vm.dart';
 import 'package:go_router/go_router.dart';
 
 enum WalletRoute {
@@ -19,7 +19,7 @@ class WalletRouteModule implements AppRouteModule {
       path: WalletRoute.receive.path,
       name: WalletRoute.receive.name,
       builder: (context, state) =>
-          ReceiveScreen(wallets: state.extra as List<WalletSummary>),
+          ReceiveScreen(wallets: state.extra as List<WalletSummaryVM>),
     ),
   ];
 }

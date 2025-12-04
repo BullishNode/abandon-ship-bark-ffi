@@ -45,6 +45,7 @@ swift run
 ```
 
 This example demonstrates:
+
 - Creating a wallet
 - Generating addresses
 - Connecting to Signet network
@@ -61,10 +62,16 @@ import Bark
 let config = Config(
     serverAddress: "https://ark.signet.2nd.dev",
     esploraAddress: "https://esplora.signet.2nd.dev",
+    bitcoindAddress: nil,
+    bitcoindCookiefile: nil,
+    bitcoindUser: nil,
+    bitcoindPass: nil,
     network: .signet,
     vtxoRefreshExpiryThreshold: nil,
     vtxoExitMargin: nil,
-    htlcRecvClaimDelta: nil
+    htlcRecvClaimDelta: nil,
+    fallbackFeeRate: nil,
+    roundTxRequiredConfirmations: nil
 )
 
 // Create or open a wallet
@@ -166,7 +173,7 @@ Contributions are welcome! Please see our [contributing guidelines](../../CONTRI
 ### Development Workflow
 
 1. Make changes to Rust code in `src/`
-2. Update `src/bark_ffi.udl` if adding new APIs
+2. Update `src/bark.udl` if adding new APIs
 3. Run `./bindings/swift/build-swift.sh` to regenerate bindings
 4. Test with an example app
 5. Submit a merge request

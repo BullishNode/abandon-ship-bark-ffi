@@ -7,8 +7,8 @@ import Foundation
 // Depending on the consumer's build setup, the low-level FFI code
 // might be in a separate module, or it might be compiled inline into
 // this module. This is a bit of light hackery to work with both.
-#if canImport(BarkFFI)
-import BarkFFI
+#if canImport(barkFFI)
+import barkFFI
 #endif
 
 fileprivate extension RustBuffer {
@@ -467,6 +467,22 @@ fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
+    typealias FfiType = Int64
+    typealias SwiftType = Int64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int64, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterBool : FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
@@ -537,23 +553,108 @@ fileprivate struct FfiConverterString: FfiConverter {
  */
 public protocol WalletProtocol: AnyObject, Sendable {
     
+    /**
+     * Get all VTXOs (including spent)
+     */
+    func allVtxos() throws  -> [Vtxo]
+    
+    /**
+     * Get Ark server info (null if not connected)
+     */
+    func arkInfo()  -> ArkInfo?
+    
     func balance() throws  -> Balance
     
     func bolt11Invoice(amountSats: UInt64) throws  -> LightningInvoice
     
+    /**
+     * Get claimable lightning receive balance
+     */
+    func claimableLightningReceiveBalanceSats() throws  -> UInt64
+    
+    /**
+     * Get wallet config
+     */
+    func config()  -> Config
+    
+    /**
+     * Get VTXOs expiring within threshold blocks
+     */
+    func getExpiringVtxos(thresholdBlocks: UInt32) throws  -> [Vtxo]
+    
+    /**
+     * Get a specific VTXO by ID
+     */
+    func getVtxoById(vtxoId: String) throws  -> Vtxo
+    
+    /**
+     * Get VTXOs that should be refreshed
+     */
+    func getVtxosToRefresh() throws  -> [Vtxo]
+    
     func maintenance() throws 
+    
+    /**
+     * Perform maintenance refresh
+     */
+    func maintenanceRefresh() throws  -> String?
+    
+    /**
+     * Get all wallet movements (transaction history)
+     */
+    func movements() throws  -> [Movement]
     
     func newAddress() throws  -> String
     
+    /**
+     * Generate a new address and return it with its index
+     */
+    func newAddressWithIndex() throws  -> AddressWithIndex
+    
     func offboardAll(bitcoinAddress: String) throws  -> OffboardResult
+    
+    /**
+     * Offboard specific VTXOs to a Bitcoin address
+     */
+    func offboardVtxos(vtxoIds: [String], bitcoinAddress: String) throws  -> String
     
     func payLightningAddress(lightningAddress: String, amountSats: UInt64, comment: String?) throws  -> LightningPaymentResult
     
     func payLightningInvoice(invoice: String, amountSats: UInt64?) throws  -> LightningPaymentResult
     
+    /**
+     * Peek at an address at a specific index
+     */
+    func peakAddress(index: UInt32) throws  -> String
+    
+    /**
+     * Get all pending lightning receives
+     */
+    func pendingLightningReceives() throws  -> [LightningReceiveStatus]
+    
+    /**
+     * Get all pending lightning sends
+     */
+    func pendingLightningSends() throws  -> [LightningSendStatus]
+    
     func properties() throws  -> WalletProperties
     
+    /**
+     * Refresh specific VTXOs
+     */
+    func refreshVtxos(vtxoIds: [String]) throws  -> String?
+    
     func sendArkoorPayment(arkAddress: String, amountSats: UInt64) throws 
+    
+    /**
+     * Send an onchain payment during a round
+     */
+    func sendRoundOnchainPayment(address: String, amountSats: UInt64) throws  -> String
+    
+    /**
+     * Get all spendable VTXOs
+     */
+    func spendableVtxos() throws  -> [Vtxo]
     
     func sync() throws 
     
@@ -640,6 +741,28 @@ public static func `open`(mnemonic: String, config: Config, datadir: String)thro
     
 
     
+    /**
+     * Get all VTXOs (including spent)
+     */
+open func allVtxos()throws  -> [Vtxo]  {
+    return try  FfiConverterSequenceTypeVtxo.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_all_vtxos(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get Ark server info (null if not connected)
+     */
+open func arkInfo() -> ArkInfo?  {
+    return try!  FfiConverterOptionTypeArkInfo.lift(try! rustCall() {
+    uniffi_bark_ffi_fn_method_wallet_ark_info(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
 open func balance()throws  -> Balance  {
     return try  FfiConverterTypeBalance_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_balance(
@@ -657,11 +780,90 @@ open func bolt11Invoice(amountSats: UInt64)throws  -> LightningInvoice  {
 })
 }
     
+    /**
+     * Get claimable lightning receive balance
+     */
+open func claimableLightningReceiveBalanceSats()throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_claimable_lightning_receive_balance_sats(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get wallet config
+     */
+open func config() -> Config  {
+    return try!  FfiConverterTypeConfig_lift(try! rustCall() {
+    uniffi_bark_ffi_fn_method_wallet_config(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get VTXOs expiring within threshold blocks
+     */
+open func getExpiringVtxos(thresholdBlocks: UInt32)throws  -> [Vtxo]  {
+    return try  FfiConverterSequenceTypeVtxo.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_get_expiring_vtxos(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(thresholdBlocks),$0
+    )
+})
+}
+    
+    /**
+     * Get a specific VTXO by ID
+     */
+open func getVtxoById(vtxoId: String)throws  -> Vtxo  {
+    return try  FfiConverterTypeVtxo_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_get_vtxo_by_id(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(vtxoId),$0
+    )
+})
+}
+    
+    /**
+     * Get VTXOs that should be refreshed
+     */
+open func getVtxosToRefresh()throws  -> [Vtxo]  {
+    return try  FfiConverterSequenceTypeVtxo.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_get_vtxos_to_refresh(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
 open func maintenance()throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_maintenance(
             self.uniffiCloneHandle(),$0
     )
 }
+}
+    
+    /**
+     * Perform maintenance refresh
+     */
+open func maintenanceRefresh()throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_maintenance_refresh(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get all wallet movements (transaction history)
+     */
+open func movements()throws  -> [Movement]  {
+    return try  FfiConverterSequenceTypeMovement.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_movements(
+            self.uniffiCloneHandle(),$0
+    )
+})
 }
     
 open func newAddress()throws  -> String  {
@@ -672,10 +874,34 @@ open func newAddress()throws  -> String  {
 })
 }
     
+    /**
+     * Generate a new address and return it with its index
+     */
+open func newAddressWithIndex()throws  -> AddressWithIndex  {
+    return try  FfiConverterTypeAddressWithIndex_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_new_address_with_index(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
 open func offboardAll(bitcoinAddress: String)throws  -> OffboardResult  {
     return try  FfiConverterTypeOffboardResult_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_offboard_all(
             self.uniffiCloneHandle(),
+        FfiConverterString.lower(bitcoinAddress),$0
+    )
+})
+}
+    
+    /**
+     * Offboard specific VTXOs to a Bitcoin address
+     */
+open func offboardVtxos(vtxoIds: [String], bitcoinAddress: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_offboard_vtxos(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceString.lower(vtxoIds),
         FfiConverterString.lower(bitcoinAddress),$0
     )
 })
@@ -702,10 +928,56 @@ open func payLightningInvoice(invoice: String, amountSats: UInt64?)throws  -> Li
 })
 }
     
+    /**
+     * Peek at an address at a specific index
+     */
+open func peakAddress(index: UInt32)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_peak_address(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(index),$0
+    )
+})
+}
+    
+    /**
+     * Get all pending lightning receives
+     */
+open func pendingLightningReceives()throws  -> [LightningReceiveStatus]  {
+    return try  FfiConverterSequenceTypeLightningReceiveStatus.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_pending_lightning_receives(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get all pending lightning sends
+     */
+open func pendingLightningSends()throws  -> [LightningSendStatus]  {
+    return try  FfiConverterSequenceTypeLightningSendStatus.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_pending_lightning_sends(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
 open func properties()throws  -> WalletProperties  {
     return try  FfiConverterTypeWalletProperties_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_properties(
             self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Refresh specific VTXOs
+     */
+open func refreshVtxos(vtxoIds: [String])throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_refresh_vtxos(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceString.lower(vtxoIds),$0
     )
 })
 }
@@ -717,6 +989,30 @@ open func sendArkoorPayment(arkAddress: String, amountSats: UInt64)throws   {try
         FfiConverterUInt64.lower(amountSats),$0
     )
 }
+}
+    
+    /**
+     * Send an onchain payment during a round
+     */
+open func sendRoundOnchainPayment(address: String, amountSats: UInt64)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_send_round_onchain_payment(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(address),
+        FfiConverterUInt64.lower(amountSats),$0
+    )
+})
+}
+    
+    /**
+     * Get all spendable VTXOs
+     */
+open func spendableVtxos()throws  -> [Vtxo]  {
+    return try  FfiConverterSequenceTypeVtxo.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_spendable_vtxos(
+            self.uniffiCloneHandle(),$0
+    )
+})
 }
     
 open func sync()throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
@@ -788,6 +1084,260 @@ public func FfiConverterTypeWallet_lower(_ value: Wallet) -> UInt64 {
 }
 
 
+
+
+/**
+ * An Ark address with its derivation index
+ */
+public struct AddressWithIndex: Equatable, Hashable {
+    /**
+     * The Ark address string
+     */
+    public var address: String
+    /**
+     * The derivation index
+     */
+    public var index: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The Ark address string
+         */address: String, 
+        /**
+         * The derivation index
+         */index: UInt32) {
+        self.address = address
+        self.index = index
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension AddressWithIndex: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAddressWithIndex: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressWithIndex {
+        return
+            try AddressWithIndex(
+                address: FfiConverterString.read(from: &buf), 
+                index: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AddressWithIndex, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterUInt32.write(value.index, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressWithIndex_lift(_ buf: RustBuffer) throws -> AddressWithIndex {
+    return try FfiConverterTypeAddressWithIndex.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddressWithIndex_lower(_ value: AddressWithIndex) -> RustBuffer {
+    return FfiConverterTypeAddressWithIndex.lower(value)
+}
+
+
+/**
+ * Ark server configuration information
+ */
+public struct ArkInfo: Equatable, Hashable {
+    /**
+     * The bitcoin network the server operates on
+     */
+    public var network: Network
+    /**
+     * The Ark server pubkey as hex string
+     */
+    public var serverPubkey: String
+    /**
+     * The interval between each round in seconds
+     */
+    public var roundIntervalSecs: UInt64
+    /**
+     * Number of nonces per round
+     */
+    public var nbRoundNonces: UInt32
+    /**
+     * Delta between exit confirmation and coins becoming spendable
+     */
+    public var vtxoExitDelta: UInt32
+    /**
+     * Expiration delta of the VTXO
+     */
+    public var vtxoExpiryDelta: UInt32
+    /**
+     * The number of blocks after which an HTLC-send VTXO expires once granted
+     */
+    public var htlcSendExpiryDelta: UInt32
+    /**
+     * The number of blocks to keep between Lightning and Ark HTLCs expiries
+     */
+    public var htlcExpiryDelta: UInt32
+    /**
+     * Maximum amount of a VTXO in sats (null if no limit)
+     */
+    public var maxVtxoAmountSats: UInt64?
+    /**
+     * The number of confirmations required to register a board vtxo
+     */
+    public var requiredBoardConfirmations: UInt32
+    /**
+     * Maximum CLTV delta server will allow clients to request an invoice generation with
+     */
+    public var maxUserInvoiceCltvDelta: UInt16
+    /**
+     * Minimum amount for a board the server will cosign in sats
+     */
+    public var minBoardAmountSats: UInt64
+    /**
+     * Offboard fee rate in sats per vbyte
+     */
+    public var offboardFeerateSatPerVb: UInt64
+    /**
+     * Whether the Ark server requires anti-DoS measures for lightning receives
+     */
+    public var lnReceiveAntiDosRequired: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The bitcoin network the server operates on
+         */network: Network, 
+        /**
+         * The Ark server pubkey as hex string
+         */serverPubkey: String, 
+        /**
+         * The interval between each round in seconds
+         */roundIntervalSecs: UInt64, 
+        /**
+         * Number of nonces per round
+         */nbRoundNonces: UInt32, 
+        /**
+         * Delta between exit confirmation and coins becoming spendable
+         */vtxoExitDelta: UInt32, 
+        /**
+         * Expiration delta of the VTXO
+         */vtxoExpiryDelta: UInt32, 
+        /**
+         * The number of blocks after which an HTLC-send VTXO expires once granted
+         */htlcSendExpiryDelta: UInt32, 
+        /**
+         * The number of blocks to keep between Lightning and Ark HTLCs expiries
+         */htlcExpiryDelta: UInt32, 
+        /**
+         * Maximum amount of a VTXO in sats (null if no limit)
+         */maxVtxoAmountSats: UInt64?, 
+        /**
+         * The number of confirmations required to register a board vtxo
+         */requiredBoardConfirmations: UInt32, 
+        /**
+         * Maximum CLTV delta server will allow clients to request an invoice generation with
+         */maxUserInvoiceCltvDelta: UInt16, 
+        /**
+         * Minimum amount for a board the server will cosign in sats
+         */minBoardAmountSats: UInt64, 
+        /**
+         * Offboard fee rate in sats per vbyte
+         */offboardFeerateSatPerVb: UInt64, 
+        /**
+         * Whether the Ark server requires anti-DoS measures for lightning receives
+         */lnReceiveAntiDosRequired: Bool) {
+        self.network = network
+        self.serverPubkey = serverPubkey
+        self.roundIntervalSecs = roundIntervalSecs
+        self.nbRoundNonces = nbRoundNonces
+        self.vtxoExitDelta = vtxoExitDelta
+        self.vtxoExpiryDelta = vtxoExpiryDelta
+        self.htlcSendExpiryDelta = htlcSendExpiryDelta
+        self.htlcExpiryDelta = htlcExpiryDelta
+        self.maxVtxoAmountSats = maxVtxoAmountSats
+        self.requiredBoardConfirmations = requiredBoardConfirmations
+        self.maxUserInvoiceCltvDelta = maxUserInvoiceCltvDelta
+        self.minBoardAmountSats = minBoardAmountSats
+        self.offboardFeerateSatPerVb = offboardFeerateSatPerVb
+        self.lnReceiveAntiDosRequired = lnReceiveAntiDosRequired
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension ArkInfo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArkInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArkInfo {
+        return
+            try ArkInfo(
+                network: FfiConverterTypeNetwork.read(from: &buf), 
+                serverPubkey: FfiConverterString.read(from: &buf), 
+                roundIntervalSecs: FfiConverterUInt64.read(from: &buf), 
+                nbRoundNonces: FfiConverterUInt32.read(from: &buf), 
+                vtxoExitDelta: FfiConverterUInt32.read(from: &buf), 
+                vtxoExpiryDelta: FfiConverterUInt32.read(from: &buf), 
+                htlcSendExpiryDelta: FfiConverterUInt32.read(from: &buf), 
+                htlcExpiryDelta: FfiConverterUInt32.read(from: &buf), 
+                maxVtxoAmountSats: FfiConverterOptionUInt64.read(from: &buf), 
+                requiredBoardConfirmations: FfiConverterUInt32.read(from: &buf), 
+                maxUserInvoiceCltvDelta: FfiConverterUInt16.read(from: &buf), 
+                minBoardAmountSats: FfiConverterUInt64.read(from: &buf), 
+                offboardFeerateSatPerVb: FfiConverterUInt64.read(from: &buf), 
+                lnReceiveAntiDosRequired: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArkInfo, into buf: inout [UInt8]) {
+        FfiConverterTypeNetwork.write(value.network, into: &buf)
+        FfiConverterString.write(value.serverPubkey, into: &buf)
+        FfiConverterUInt64.write(value.roundIntervalSecs, into: &buf)
+        FfiConverterUInt32.write(value.nbRoundNonces, into: &buf)
+        FfiConverterUInt32.write(value.vtxoExitDelta, into: &buf)
+        FfiConverterUInt32.write(value.vtxoExpiryDelta, into: &buf)
+        FfiConverterUInt32.write(value.htlcSendExpiryDelta, into: &buf)
+        FfiConverterUInt32.write(value.htlcExpiryDelta, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxVtxoAmountSats, into: &buf)
+        FfiConverterUInt32.write(value.requiredBoardConfirmations, into: &buf)
+        FfiConverterUInt16.write(value.maxUserInvoiceCltvDelta, into: &buf)
+        FfiConverterUInt64.write(value.minBoardAmountSats, into: &buf)
+        FfiConverterUInt64.write(value.offboardFeerateSatPerVb, into: &buf)
+        FfiConverterBool.write(value.lnReceiveAntiDosRequired, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArkInfo_lift(_ buf: RustBuffer) throws -> ArkInfo {
+    return try FfiConverterTypeArkInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArkInfo_lower(_ value: ArkInfo) -> RustBuffer {
+    return FfiConverterTypeArkInfo.lower(value)
+}
 
 
 /**
@@ -911,22 +1461,106 @@ public func FfiConverterTypeBalance_lower(_ value: Balance) -> RustBuffer {
  * Configuration for creating/opening a Bark wallet
  */
 public struct Config: Equatable, Hashable {
+    /**
+     * Ark server address
+     */
     public var serverAddress: String
+    /**
+     * Esplora HTTP REST server address
+     */
     public var esploraAddress: String?
+    /**
+     * Bitcoind RPC server address
+     */
+    public var bitcoindAddress: String?
+    /**
+     * Bitcoind RPC cookie file path
+     */
+    public var bitcoindCookiefile: String?
+    /**
+     * Bitcoind RPC username
+     */
+    public var bitcoindUser: String?
+    /**
+     * Bitcoind RPC password
+     */
+    public var bitcoindPass: String?
+    /**
+     * Bitcoin network
+     */
     public var network: Network
+    /**
+     * Number of blocks before expiration to refresh VTXOs
+     */
     public var vtxoRefreshExpiryThreshold: UInt32?
+    /**
+     * Upper limit of blocks needed to safely exit VTXOs
+     */
     public var vtxoExitMargin: UInt16?
+    /**
+     * Number of blocks to claim a HTLC-recv VTXO
+     */
     public var htlcRecvClaimDelta: UInt16?
+    /**
+     * Fallback fee rate in sat/kWu
+     */
+    public var fallbackFeeRate: UInt64?
+    /**
+     * Confirmations required before considering a round tx fully confirmed
+     */
+    public var roundTxRequiredConfirmations: UInt32?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(serverAddress: String, esploraAddress: String?, network: Network, vtxoRefreshExpiryThreshold: UInt32?, vtxoExitMargin: UInt16?, htlcRecvClaimDelta: UInt16?) {
+    public init(
+        /**
+         * Ark server address
+         */serverAddress: String, 
+        /**
+         * Esplora HTTP REST server address
+         */esploraAddress: String?, 
+        /**
+         * Bitcoind RPC server address
+         */bitcoindAddress: String?, 
+        /**
+         * Bitcoind RPC cookie file path
+         */bitcoindCookiefile: String?, 
+        /**
+         * Bitcoind RPC username
+         */bitcoindUser: String?, 
+        /**
+         * Bitcoind RPC password
+         */bitcoindPass: String?, 
+        /**
+         * Bitcoin network
+         */network: Network, 
+        /**
+         * Number of blocks before expiration to refresh VTXOs
+         */vtxoRefreshExpiryThreshold: UInt32?, 
+        /**
+         * Upper limit of blocks needed to safely exit VTXOs
+         */vtxoExitMargin: UInt16?, 
+        /**
+         * Number of blocks to claim a HTLC-recv VTXO
+         */htlcRecvClaimDelta: UInt16?, 
+        /**
+         * Fallback fee rate in sat/kWu
+         */fallbackFeeRate: UInt64?, 
+        /**
+         * Confirmations required before considering a round tx fully confirmed
+         */roundTxRequiredConfirmations: UInt32?) {
         self.serverAddress = serverAddress
         self.esploraAddress = esploraAddress
+        self.bitcoindAddress = bitcoindAddress
+        self.bitcoindCookiefile = bitcoindCookiefile
+        self.bitcoindUser = bitcoindUser
+        self.bitcoindPass = bitcoindPass
         self.network = network
         self.vtxoRefreshExpiryThreshold = vtxoRefreshExpiryThreshold
         self.vtxoExitMargin = vtxoExitMargin
         self.htlcRecvClaimDelta = htlcRecvClaimDelta
+        self.fallbackFeeRate = fallbackFeeRate
+        self.roundTxRequiredConfirmations = roundTxRequiredConfirmations
     }
 
     
@@ -945,20 +1579,32 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
             try Config(
                 serverAddress: FfiConverterString.read(from: &buf), 
                 esploraAddress: FfiConverterOptionString.read(from: &buf), 
+                bitcoindAddress: FfiConverterOptionString.read(from: &buf), 
+                bitcoindCookiefile: FfiConverterOptionString.read(from: &buf), 
+                bitcoindUser: FfiConverterOptionString.read(from: &buf), 
+                bitcoindPass: FfiConverterOptionString.read(from: &buf), 
                 network: FfiConverterTypeNetwork.read(from: &buf), 
                 vtxoRefreshExpiryThreshold: FfiConverterOptionUInt32.read(from: &buf), 
                 vtxoExitMargin: FfiConverterOptionUInt16.read(from: &buf), 
-                htlcRecvClaimDelta: FfiConverterOptionUInt16.read(from: &buf)
+                htlcRecvClaimDelta: FfiConverterOptionUInt16.read(from: &buf), 
+                fallbackFeeRate: FfiConverterOptionUInt64.read(from: &buf), 
+                roundTxRequiredConfirmations: FfiConverterOptionUInt32.read(from: &buf)
         )
     }
 
     public static func write(_ value: Config, into buf: inout [UInt8]) {
         FfiConverterString.write(value.serverAddress, into: &buf)
         FfiConverterOptionString.write(value.esploraAddress, into: &buf)
+        FfiConverterOptionString.write(value.bitcoindAddress, into: &buf)
+        FfiConverterOptionString.write(value.bitcoindCookiefile, into: &buf)
+        FfiConverterOptionString.write(value.bitcoindUser, into: &buf)
+        FfiConverterOptionString.write(value.bitcoindPass, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterOptionUInt32.write(value.vtxoRefreshExpiryThreshold, into: &buf)
         FfiConverterOptionUInt16.write(value.vtxoExitMargin, into: &buf)
         FfiConverterOptionUInt16.write(value.htlcRecvClaimDelta, into: &buf)
+        FfiConverterOptionUInt64.write(value.fallbackFeeRate, into: &buf)
+        FfiConverterOptionUInt32.write(value.roundTxRequiredConfirmations, into: &buf)
     }
 }
 
@@ -1109,6 +1755,377 @@ public func FfiConverterTypeLightningPaymentResult_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeLightningPaymentResult_lower(_ value: LightningPaymentResult) -> RustBuffer {
     return FfiConverterTypeLightningPaymentResult.lower(value)
+}
+
+
+/**
+ * Status of a pending Lightning receive
+ */
+public struct LightningReceiveStatus: Equatable, Hashable {
+    /**
+     * Payment hash
+     */
+    public var paymentHash: String
+    /**
+     * The BOLT11 invoice
+     */
+    public var invoice: String
+    /**
+     * Amount in sats
+     */
+    public var amountSats: UInt64
+    /**
+     * Whether HTLC VTXOs have been received
+     */
+    public var hasHtlcVtxos: Bool
+    /**
+     * Whether preimage has been revealed
+     */
+    public var preimageRevealed: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Payment hash
+         */paymentHash: String, 
+        /**
+         * The BOLT11 invoice
+         */invoice: String, 
+        /**
+         * Amount in sats
+         */amountSats: UInt64, 
+        /**
+         * Whether HTLC VTXOs have been received
+         */hasHtlcVtxos: Bool, 
+        /**
+         * Whether preimage has been revealed
+         */preimageRevealed: Bool) {
+        self.paymentHash = paymentHash
+        self.invoice = invoice
+        self.amountSats = amountSats
+        self.hasHtlcVtxos = hasHtlcVtxos
+        self.preimageRevealed = preimageRevealed
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension LightningReceiveStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLightningReceiveStatus: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LightningReceiveStatus {
+        return
+            try LightningReceiveStatus(
+                paymentHash: FfiConverterString.read(from: &buf), 
+                invoice: FfiConverterString.read(from: &buf), 
+                amountSats: FfiConverterUInt64.read(from: &buf), 
+                hasHtlcVtxos: FfiConverterBool.read(from: &buf), 
+                preimageRevealed: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LightningReceiveStatus, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.paymentHash, into: &buf)
+        FfiConverterString.write(value.invoice, into: &buf)
+        FfiConverterUInt64.write(value.amountSats, into: &buf)
+        FfiConverterBool.write(value.hasHtlcVtxos, into: &buf)
+        FfiConverterBool.write(value.preimageRevealed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLightningReceiveStatus_lift(_ buf: RustBuffer) throws -> LightningReceiveStatus {
+    return try FfiConverterTypeLightningReceiveStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLightningReceiveStatus_lower(_ value: LightningReceiveStatus) -> RustBuffer {
+    return FfiConverterTypeLightningReceiveStatus.lower(value)
+}
+
+
+/**
+ * Status of a pending Lightning send
+ */
+public struct LightningSendStatus: Equatable, Hashable {
+    /**
+     * The invoice being paid
+     */
+    public var invoice: String
+    /**
+     * Amount in sats
+     */
+    public var amountSats: UInt64
+    /**
+     * Number of HTLC VTXOs locked
+     */
+    public var htlcVtxoCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The invoice being paid
+         */invoice: String, 
+        /**
+         * Amount in sats
+         */amountSats: UInt64, 
+        /**
+         * Number of HTLC VTXOs locked
+         */htlcVtxoCount: UInt32) {
+        self.invoice = invoice
+        self.amountSats = amountSats
+        self.htlcVtxoCount = htlcVtxoCount
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension LightningSendStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLightningSendStatus: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LightningSendStatus {
+        return
+            try LightningSendStatus(
+                invoice: FfiConverterString.read(from: &buf), 
+                amountSats: FfiConverterUInt64.read(from: &buf), 
+                htlcVtxoCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LightningSendStatus, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.invoice, into: &buf)
+        FfiConverterUInt64.write(value.amountSats, into: &buf)
+        FfiConverterUInt32.write(value.htlcVtxoCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLightningSendStatus_lift(_ buf: RustBuffer) throws -> LightningSendStatus {
+    return try FfiConverterTypeLightningSendStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLightningSendStatus_lower(_ value: LightningSendStatus) -> RustBuffer {
+    return FfiConverterTypeLightningSendStatus.lower(value)
+}
+
+
+/**
+ * Wallet movement/transaction record
+ */
+public struct Movement: Equatable, Hashable {
+    /**
+     * Movement ID
+     */
+    public var id: UInt32
+    /**
+     * Status (pending, finished, failed, cancelled)
+     */
+    public var status: String
+    /**
+     * Subsystem name
+     */
+    public var subsystemName: String
+    /**
+     * Subsystem kind
+     */
+    public var subsystemKind: String
+    /**
+     * Metadata as JSON string
+     */
+    public var metadataJson: String
+    /**
+     * Intended balance change in sats
+     */
+    public var intendedBalanceSats: Int64
+    /**
+     * Effective balance change in sats
+     */
+    public var effectiveBalanceSats: Int64
+    /**
+     * Offchain fee in sats
+     */
+    public var offchainFeeSats: UInt64
+    /**
+     * Addresses/invoices sent to
+     */
+    public var sentToAddresses: [String]
+    /**
+     * Addresses/invoices received on
+     */
+    public var receivedOnAddresses: [String]
+    /**
+     * Input VTXO IDs
+     */
+    public var inputVtxoIds: [String]
+    /**
+     * Output VTXO IDs
+     */
+    public var outputVtxoIds: [String]
+    /**
+     * Created at timestamp
+     */
+    public var createdAt: String
+    /**
+     * Updated at timestamp
+     */
+    public var updatedAt: String
+    /**
+     * Completed at timestamp (null if not completed)
+     */
+    public var completedAt: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Movement ID
+         */id: UInt32, 
+        /**
+         * Status (pending, finished, failed, cancelled)
+         */status: String, 
+        /**
+         * Subsystem name
+         */subsystemName: String, 
+        /**
+         * Subsystem kind
+         */subsystemKind: String, 
+        /**
+         * Metadata as JSON string
+         */metadataJson: String, 
+        /**
+         * Intended balance change in sats
+         */intendedBalanceSats: Int64, 
+        /**
+         * Effective balance change in sats
+         */effectiveBalanceSats: Int64, 
+        /**
+         * Offchain fee in sats
+         */offchainFeeSats: UInt64, 
+        /**
+         * Addresses/invoices sent to
+         */sentToAddresses: [String], 
+        /**
+         * Addresses/invoices received on
+         */receivedOnAddresses: [String], 
+        /**
+         * Input VTXO IDs
+         */inputVtxoIds: [String], 
+        /**
+         * Output VTXO IDs
+         */outputVtxoIds: [String], 
+        /**
+         * Created at timestamp
+         */createdAt: String, 
+        /**
+         * Updated at timestamp
+         */updatedAt: String, 
+        /**
+         * Completed at timestamp (null if not completed)
+         */completedAt: String?) {
+        self.id = id
+        self.status = status
+        self.subsystemName = subsystemName
+        self.subsystemKind = subsystemKind
+        self.metadataJson = metadataJson
+        self.intendedBalanceSats = intendedBalanceSats
+        self.effectiveBalanceSats = effectiveBalanceSats
+        self.offchainFeeSats = offchainFeeSats
+        self.sentToAddresses = sentToAddresses
+        self.receivedOnAddresses = receivedOnAddresses
+        self.inputVtxoIds = inputVtxoIds
+        self.outputVtxoIds = outputVtxoIds
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.completedAt = completedAt
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension Movement: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMovement: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Movement {
+        return
+            try Movement(
+                id: FfiConverterUInt32.read(from: &buf), 
+                status: FfiConverterString.read(from: &buf), 
+                subsystemName: FfiConverterString.read(from: &buf), 
+                subsystemKind: FfiConverterString.read(from: &buf), 
+                metadataJson: FfiConverterString.read(from: &buf), 
+                intendedBalanceSats: FfiConverterInt64.read(from: &buf), 
+                effectiveBalanceSats: FfiConverterInt64.read(from: &buf), 
+                offchainFeeSats: FfiConverterUInt64.read(from: &buf), 
+                sentToAddresses: FfiConverterSequenceString.read(from: &buf), 
+                receivedOnAddresses: FfiConverterSequenceString.read(from: &buf), 
+                inputVtxoIds: FfiConverterSequenceString.read(from: &buf), 
+                outputVtxoIds: FfiConverterSequenceString.read(from: &buf), 
+                createdAt: FfiConverterString.read(from: &buf), 
+                updatedAt: FfiConverterString.read(from: &buf), 
+                completedAt: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Movement, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.id, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterString.write(value.subsystemName, into: &buf)
+        FfiConverterString.write(value.subsystemKind, into: &buf)
+        FfiConverterString.write(value.metadataJson, into: &buf)
+        FfiConverterInt64.write(value.intendedBalanceSats, into: &buf)
+        FfiConverterInt64.write(value.effectiveBalanceSats, into: &buf)
+        FfiConverterUInt64.write(value.offchainFeeSats, into: &buf)
+        FfiConverterSequenceString.write(value.sentToAddresses, into: &buf)
+        FfiConverterSequenceString.write(value.receivedOnAddresses, into: &buf)
+        FfiConverterSequenceString.write(value.inputVtxoIds, into: &buf)
+        FfiConverterSequenceString.write(value.outputVtxoIds, into: &buf)
+        FfiConverterString.write(value.createdAt, into: &buf)
+        FfiConverterString.write(value.updatedAt, into: &buf)
+        FfiConverterOptionString.write(value.completedAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMovement_lift(_ buf: RustBuffer) throws -> Movement {
+    return try FfiConverterTypeMovement.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMovement_lower(_ value: Movement) -> RustBuffer {
+    return FfiConverterTypeMovement.lower(value)
 }
 
 
@@ -1656,6 +2673,130 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeArkInfo: FfiConverterRustBuffer {
+    typealias SwiftType = ArkInfo?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeArkInfo.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeArkInfo.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeLightningReceiveStatus: FfiConverterRustBuffer {
+    typealias SwiftType = [LightningReceiveStatus]
+
+    public static func write(_ value: [LightningReceiveStatus], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLightningReceiveStatus.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LightningReceiveStatus] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LightningReceiveStatus]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLightningReceiveStatus.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeLightningSendStatus: FfiConverterRustBuffer {
+    typealias SwiftType = [LightningSendStatus]
+
+    public static func write(_ value: [LightningSendStatus], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLightningSendStatus.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LightningSendStatus] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LightningSendStatus]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLightningSendStatus.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeMovement: FfiConverterRustBuffer {
+    typealias SwiftType = [Movement]
+
+    public static func write(_ value: [Movement], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeMovement.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Movement] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Movement]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeMovement.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeVtxo: FfiConverterRustBuffer {
     typealias SwiftType = [Vtxo]
 
@@ -1677,6 +2818,26 @@ fileprivate struct FfiConverterSequenceTypeVtxo: FfiConverterRustBuffer {
         return seq
     }
 }
+public func generateMnemonic()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_func_generate_mnemonic($0
+    )
+})
+}
+public func validateArkAddress(address: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_func_validate_ark_address(
+        FfiConverterString.lower(address),$0
+    )
+})
+}
+public func validateMnemonic(mnemonic: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_func_validate_mnemonic(
+        FfiConverterString.lower(mnemonic),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -1693,19 +2854,61 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_bark_ffi_checksum_func_generate_mnemonic() != 49933) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_func_validate_ark_address() != 49932) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_func_validate_mnemonic() != 2707) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_all_vtxos() != 48937) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_ark_info() != 36948) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_balance() != 11221) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_bolt11_invoice() != 64551) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_wallet_claimable_lightning_receive_balance_sats() != 64974) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_config() != 57616) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_get_expiring_vtxos() != 19482) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_get_vtxo_by_id() != 41126) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_get_vtxos_to_refresh() != 55019) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_maintenance() != 9626) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_maintenance_refresh() != 29994) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_movements() != 23904) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_new_address() != 25174) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_wallet_new_address_with_index() != 52446) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_offboard_all() != 61123) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_offboard_vtxos() != 19001) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_pay_lightning_address() != 8340) {
@@ -1714,10 +2917,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_method_wallet_pay_lightning_invoice() != 3587) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_wallet_peak_address() != 23469) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_pending_lightning_receives() != 7863) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_pending_lightning_sends() != 5489) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_properties() != 34715) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_wallet_refresh_vtxos() != 720) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_send_arkoor_payment() != 24856) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_send_round_onchain_payment() != 21156) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_spendable_vtxos() != 48976) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_sync() != 3312) {

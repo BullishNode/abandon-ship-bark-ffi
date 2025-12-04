@@ -5,6 +5,9 @@ import 'package:flutter_app/core/frameworks/get_it/injection_container.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_bloc.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_event.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_state.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/transaction_vm.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/vtxo_vm.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_balance_vm.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/widgets/create_wallet_dialog.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/widgets/no_wallet_card.dart';
 import 'package:flutter_app/features/wallet/frameworks/go_router/wallet_routes.dart';
@@ -72,7 +75,7 @@ class _WalletViewState extends State<WalletView>
 
         final hasWallets = state is WalletsLoaded && state.wallets.isNotEmpty;
         // Calculate total balance across all wallets
-        WalletBalance? totalBalance;
+        WalletBalanceVM? totalBalance;
         if (state is WalletsLoaded && state.balances.isNotEmpty) {
           int totalSpendable = 0;
           int totalPendingInRound = 0;
@@ -94,7 +97,7 @@ class _WalletViewState extends State<WalletView>
             totalPendingBoard += balance.pendingBoardSats;
           }
 
-          totalBalance = WalletBalance(
+          totalBalance = WalletBalanceVM(
             walletId: 0, // Not specific to any wallet
             spendableSats: totalSpendable,
             pendingInRoundSats: totalPendingInRound,
@@ -219,7 +222,7 @@ class _WalletViewState extends State<WalletView>
                                             ),
                                       // Transactions tab
                                       hasWallets
-                                          ? _buildTransactionsTab(isDark)
+                                          ? _buildTransactionsTab(context, state)
                                           : NoWalletCard(
                                               onNewPressed: () =>
                                                   _showCreateWalletDialog(
@@ -321,7 +324,7 @@ class _WalletViewState extends State<WalletView>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Collect all VTXOs from all wallets
-    final allVtxos = <Vtxo>[];
+    final allVtxos = <VtxoVM>[];
     for (final wallet in state.wallets) {
       final walletVtxos = state.vtxos[wallet.id] ?? [];
       allVtxos.addAll(walletVtxos);
@@ -441,16 +444,105 @@ class _WalletViewState extends State<WalletView>
     }
   }
 
-  Widget _buildTransactionsTab(bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Text(
-        'Transactions list placeholder',
-        style: TextStyle(
-          fontSize: 11,
-          color: isDark ? AppColors.slate400 : AppColors.slate500,
+  Widget _buildTransactionsTab(BuildContext context, WalletsLoaded state) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Collect all transactions from all wallets
+    final allTransactions = <TransactionVM>[];
+    for (final wallet in state.wallets) {
+      final walletTransactions = state.transactions[wallet.id] ?? [];
+      allTransactions.addAll(walletTransactions);
+    }
+
+    // Sort by creation date (newest first)
+    allTransactions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    if (allTransactions.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          'No transactions yet. Start by receiving or sending bitcoin.',
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? AppColors.slate400 : AppColors.slate500,
+          ),
         ),
-      ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: allTransactions.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final transaction = allTransactions[index];
+        final isPositive = transaction.effectiveBalanceSats > 0;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.black : AppColors.white,
+            border: Border.all(
+              color: isDark ? AppColors.gray900 : AppColors.gray200,
+              width: 1,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              // Transaction icon
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.gray900 : AppColors.gray100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  isPositive ? Icons.arrow_downward : Icons.arrow_upward,
+                  size: 20,
+                  color: isPositive ? Colors.green : Colors.orange,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Transaction details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${transaction.subsystemName} (${transaction.subsystemKind})',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? AppColors.white : AppColors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Status: ${transaction.status}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? AppColors.gray400 : AppColors.gray600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Amount
+              Text(
+                '${isPositive ? '+' : ''}₿ ${transaction.effectiveBalanceBtc}',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isPositive ? Colors.green : Colors.orange,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

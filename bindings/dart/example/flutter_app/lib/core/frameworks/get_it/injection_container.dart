@@ -25,6 +25,7 @@ import 'package:flutter_app/features/wallet/application/usecases/create_bark_wal
 import 'package:flutter_app/features/wallet/application/usecases/generate_payment_request.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_all_wallets.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_balance.dart';
+import 'package:flutter_app/features/wallet/application/usecases/get_wallet_transactions.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_vtxos.dart';
 import 'package:flutter_app/features/wallet/application/usecases/sync_wallet.dart';
 import 'package:flutter_app/features/wallet/application/ports/mnemonic_repository_port.dart';
@@ -144,6 +145,7 @@ Future<void> _initUseCases() async {
   sl.registerLazySingleton(() => GeneratePaymentRequest(walletService: sl()));
   sl.registerLazySingleton(() => SyncWallet(sl()));
   sl.registerLazySingleton(() => GetWalletVtxos(sl()));
+  sl.registerLazySingleton(() => GetWalletTransactions(sl()));
 }
 
 // Facades (Driving adapters exposing use cases)
@@ -180,6 +182,7 @@ Future<void> _initDrivingAdapters() async {
       generatePaymentRequest: sl(),
       syncWallet: sl(),
       getWalletVtxos: sl(),
+      getWalletTransactions: sl(),
     ),
   );
 }

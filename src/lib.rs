@@ -6,13 +6,15 @@
 //! from other languages like Dart, Swift, Kotlin, and Python.
 
 mod error;
+mod functions;
 mod runtime;
 mod types;
 mod wallet;
 
 pub use error::BarkError;
+pub use functions::*;
 pub use types::*;
 pub use wallet::Wallet;
 
 // Include the UniFFI scaffolding code
-uniffi::include_scaffolding!("bark_ffi");
+uniffi::include_scaffolding!("bark");

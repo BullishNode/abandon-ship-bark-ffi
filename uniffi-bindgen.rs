@@ -33,7 +33,7 @@ fn main() {
                 .expect("--out-dir is required when using --library");
 
             // For library mode, we extract metadata from the built library
-            let udl_path = Utf8Path::new("src/bark_ffi.udl");
+            let udl_path = Utf8Path::new("src/bark.udl");
 
             // Get absolute path to uniffi.toml in current directory
             let current_dir = std::env::current_dir().expect("Failed to get current directory");
