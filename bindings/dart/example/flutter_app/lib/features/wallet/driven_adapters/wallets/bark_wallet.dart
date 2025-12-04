@@ -7,6 +7,7 @@ import 'package:flutter_app/features/wallet/application/ports/wallet_port.dart';
 import 'package:flutter_app/features/wallet/domain/entities/wallet_entity.dart';
 import 'package:flutter_app/features/wallet/domain/entities/wallet_config.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/bark_balance_vo.dart';
+import 'package:flutter_app/features/wallet/domain/value_objects/transaction_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/vtxo_vo.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -34,10 +35,16 @@ class BarkWallet implements WalletPort {
       final config = bark.Config(
         asp,
         esploraAddress,
+        null,
+        null,
+        null,
+        null,
         _mapNetwork(network),
         vtxoRefreshExpiryThreshold,
         vtxoExitMargin,
         htlcRecvClaimDelta,
+        null,
+        null,
       );
 
       final wallet = await bark.Wallet.create(
@@ -125,6 +132,33 @@ class BarkWallet implements WalletPort {
   }
 
   @override
+  Future<Either<Failure, List<TransactionVO>>> getTransactions({
+    required WalletEntity wallet,
+  }) async {
+    return _executeWithEsploraRetry<List<TransactionVO>>(
+      wallet: wallet,
+      operation: (barkWallet) async {
+        final movements = barkWallet.movements();
+        return movements
+            .map(
+              (movement) => TransactionVO(
+                id: movement.id,
+                status: movement.status,
+                subsystemName: movement.subsystemName,
+                subsystemKind: movement.subsystemKind,
+                intendedBalanceSats: movement.intendedBalanceSats,
+                effectiveBalanceSats: movement.effectiveBalanceSats,
+                offchainFeeSats: movement.offchainFeeSats,
+                createdAt: movement.createdAt,
+                completedAt: movement.completedAt,
+              ),
+            )
+            .toList();
+      },
+    );
+  }
+
+  @override
   Future<Either<Failure, void>> sync({required WalletEntity wallet}) async {
     return _executeWithEsploraRetry<void>(
       wallet: wallet,
@@ -199,17 +233,22 @@ class BarkWallet implements WalletPort {
     final fullDbPath = await _getWalletDataDir(walletConfig.dbPath);
 
     // Try each esplora endpoint until one succeeds
-
     Exception? lastException;
     for (final esploraAddress in esploraAddresses) {
       try {
         final config = bark.Config(
           walletConfig.asp,
           esploraAddress,
+          null,
+          null,
+          null,
+          null,
           _mapNetwork(wallet.network),
           walletConfig.vtxoRefreshExpiryThreshold,
           walletConfig.vtxoExitMargin,
           walletConfig.htlcRecvClaimDelta,
+          null,
+          null,
         );
 
         final barkWallet = await bark.Wallet.open(mnemonic, config, fullDbPath);

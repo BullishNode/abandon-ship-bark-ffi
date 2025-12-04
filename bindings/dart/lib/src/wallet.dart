@@ -1,5 +1,5 @@
 import 'dart:isolate';
-import 'package:bark/src/generated/bark_ffi.dart' as ffi;
+import 'package:bark/src/generated/bark.dart' as ffi;
 import 'package:bark/src/errors.dart';
 
 /// The central entry point for using Bark as an Ark wallet.
@@ -244,5 +244,147 @@ class Wallet {
   /// - `amountSats`: The amount to send in satoshis
   Future<void> sendArkoorPayment(String arkAddress, int amountSats) async {
     return Isolate.run(() => _inner.sendArkoorPayment(arkAddress, amountSats));
+  }
+
+  // ------------------------------------------------------------------------
+  // Extended Address Management
+  // ------------------------------------------------------------------------
+
+  /// Generate a new address and return it with its derivation index.
+  ffi.AddressWithIndex newAddressWithIndex() {
+    return _inner.newAddressWithIndex();
+  }
+
+  /// Peek at an address at a specific index without incrementing.
+  String peakAddress(int index) {
+    return _inner.peakAddress(index);
+  }
+
+  // ------------------------------------------------------------------------
+  // Movement History
+  // ------------------------------------------------------------------------
+
+  /// Get all wallet movements (transaction history).
+  ///
+  /// Returns a list of movements ordered from newest to oldest.
+  List<ffi.Movement> movements() {
+    return _inner.movements();
+  }
+
+  // ------------------------------------------------------------------------
+  // Extended VTXO Queries
+  // ------------------------------------------------------------------------
+
+  /// Get a specific VTXO by ID.
+  ffi.Vtxo getVtxoById(String vtxoId) {
+    return _inner.getVtxoById(vtxoId);
+  }
+
+  /// Get all spendable VTXOs.
+  List<ffi.Vtxo> spendableVtxos() {
+    return _inner.spendableVtxos();
+  }
+
+  /// Get all VTXOs (including spent).
+  List<ffi.Vtxo> allVtxos() {
+    return _inner.allVtxos();
+  }
+
+  /// Get VTXOs expiring within threshold blocks.
+  ///
+  /// Parameters:
+  /// - `thresholdBlocks`: Number of blocks before expiry
+  Future<List<ffi.Vtxo>> getExpiringVtxos(int thresholdBlocks) async {
+    return Isolate.run(() => _inner.getExpiringVtxos(thresholdBlocks));
+  }
+
+  /// Get VTXOs that should be refreshed.
+  Future<List<ffi.Vtxo>> getVtxosToRefresh() async {
+    return Isolate.run(() => _inner.getVtxosToRefresh());
+  }
+
+  // ------------------------------------------------------------------------
+  // Extended Offboarding
+  // ------------------------------------------------------------------------
+
+  /// Offboard specific VTXOs to a Bitcoin address.
+  ///
+  /// Parameters:
+  /// - `vtxoIds`: List of VTXO IDs to offboard
+  /// - `bitcoinAddress`: Destination Bitcoin address
+  Future<String> offboardVtxos(
+    List<String> vtxoIds,
+    String bitcoinAddress,
+  ) async {
+    return Isolate.run(() => _inner.offboardVtxos(vtxoIds, bitcoinAddress));
+  }
+
+  // ------------------------------------------------------------------------
+  // VTXO Refresh
+  // ------------------------------------------------------------------------
+
+  /// Refresh specific VTXOs.
+  ///
+  /// Parameters:
+  /// - `vtxoIds`: List of VTXO IDs to refresh
+  ///
+  /// Returns the round status if refresh occurred, null otherwise.
+  Future<String?> refreshVtxos(List<String> vtxoIds) async {
+    return Isolate.run(() => _inner.refreshVtxos(vtxoIds));
+  }
+
+  /// Perform automatic maintenance refresh.
+  ///
+  /// Returns the round status if refresh occurred, null otherwise.
+  Future<String?> maintenanceRefresh() async {
+    return Isolate.run(() => _inner.maintenanceRefresh());
+  }
+
+  // ------------------------------------------------------------------------
+  // Extended Lightning
+  // ------------------------------------------------------------------------
+
+  /// Get all pending lightning sends.
+  List<ffi.LightningSendStatus> pendingLightningSends() {
+    return _inner.pendingLightningSends();
+  }
+
+  /// Get all pending lightning receives.
+  List<ffi.LightningReceiveStatus> pendingLightningReceives() {
+    return _inner.pendingLightningReceives();
+  }
+
+  /// Get claimable lightning receive balance in satoshis.
+  int claimableLightningReceiveBalanceSats() {
+    return _inner.claimableLightningReceiveBalanceSats();
+  }
+
+  // ------------------------------------------------------------------------
+  // Onchain Payments
+  // ------------------------------------------------------------------------
+
+  /// Send an onchain payment during a round.
+  ///
+  /// Parameters:
+  /// - `address`: Bitcoin address to send to
+  /// - `amountSats`: Amount in satoshis
+  Future<String> sendRoundOnchainPayment(String address, int amountSats) async {
+    return Isolate.run(
+      () => _inner.sendRoundOnchainPayment(address, amountSats),
+    );
+  }
+
+  // ------------------------------------------------------------------------
+  // Connection & Info
+  // ------------------------------------------------------------------------
+
+  /// Get Ark server info (null if not connected).
+  ffi.ArkInfo? arkInfo() {
+    return _inner.arkInfo();
+  }
+
+  /// Get wallet config.
+  ffi.Config config() {
+    return _inner.config();
   }
 }

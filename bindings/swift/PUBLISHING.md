@@ -42,8 +42,8 @@ bark-ffi/
 ├── .gitlab-ci.yml             ← CI/CD configuration
 ├── uniffi.toml                ← UniFFI configuration
 ├── src/                       ← Rust FFI implementation
-│   ├── bark_ffi.udl          ← UniFFI interface definition
-│   └── *.rs                  ← Rust sources
+│   ├── bark.udl               ← UniFFI interface definition
+│   └── *.rs                   ← Rust sources
 └── bindings/
     ├── swift/                 ← Swift bindings
     │   ├── build-swift.sh     ← Build script

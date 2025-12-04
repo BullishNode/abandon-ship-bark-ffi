@@ -5,11 +5,12 @@ import 'package:flutter_app/core/frameworks/get_it/injection_container.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_bloc.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_event.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_state.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_summary_vm.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 class ReceiveScreen extends StatelessWidget {
-  final List<WalletSummary> wallets;
+  final List<WalletSummaryVM> wallets;
 
   const ReceiveScreen({super.key, required this.wallets});
 
@@ -23,7 +24,7 @@ class ReceiveScreen extends StatelessWidget {
 }
 
 class ReceiveView extends StatefulWidget {
-  final List<WalletSummary> wallets;
+  final List<WalletSummaryVM> wallets;
 
   const ReceiveView({super.key, required this.wallets});
 

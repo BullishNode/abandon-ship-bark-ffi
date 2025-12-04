@@ -1,15 +1,15 @@
 import 'package:equatable/equatable.dart';
 
-/// VTXO (Virtual Transaction Output) value object
-/// TODO: abstract to a base class named Coins with subtypes for different types of coins like VTXOs, UTXOs, etc.
-class VtxoVO extends Equatable {
+/// VTXO view model for UI display
+// TODO: abstract to a base class named Coins with subtypes for different types of coins like VTXOs, UTXOs, etc.
+class VtxoVM extends Equatable {
   final String id;
   final int amountSats;
   final int expiryHeight;
   final String kind;
   final String state;
 
-  const VtxoVO({
+  const VtxoVM({
     required this.id,
     required this.amountSats,
     required this.expiryHeight,
@@ -17,7 +17,6 @@ class VtxoVO extends Equatable {
     required this.state,
   });
 
-  /// Amount in BTC
   String get amountBtc => (amountSats / 100000000).toStringAsFixed(8);
 
   @override

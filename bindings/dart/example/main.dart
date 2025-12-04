@@ -21,7 +21,13 @@ Future<void> example() async {
   final config = Config(
     "https://ark.signet.2nd.dev",
     "https://esplora.signet.2nd.dev",
+    null,
+    null,
+    null,
+    null,
     Network.signet,
+    null,
+    null,
     null,
     null,
     null,

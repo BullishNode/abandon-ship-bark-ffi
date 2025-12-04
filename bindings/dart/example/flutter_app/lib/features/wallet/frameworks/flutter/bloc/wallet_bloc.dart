@@ -4,11 +4,16 @@ import 'package:flutter_app/features/wallet/application/usecases/create_bark_wal
 import 'package:flutter_app/features/wallet/application/usecases/generate_payment_request.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_all_wallets.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_balance.dart';
+import 'package:flutter_app/features/wallet/application/usecases/get_wallet_transactions.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_vtxos.dart';
 import 'package:flutter_app/features/wallet/application/usecases/sync_wallet.dart';
 import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_event.dart'
     as events;
 import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_state.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/transaction_vm.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/vtxo_vm.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_balance_vm.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_summary_vm.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 /// BLoC for managing wallets
@@ -20,6 +25,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
   final GeneratePaymentRequest _generatePaymentRequest;
   final SyncWallet _syncWallet;
   final GetWalletVtxos _getWalletVtxos;
+  final GetWalletTransactions _getWalletTransactions;
 
   WalletBloc({
     required GetAllWallets getAllWallets,
@@ -28,12 +34,14 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
     required GeneratePaymentRequest generatePaymentRequest,
     required SyncWallet syncWallet,
     required GetWalletVtxos getWalletVtxos,
+    required GetWalletTransactions getWalletTransactions,
   }) : _getAllWallets = getAllWallets,
        _createBarkWallet = createBarkWallet,
        _getWalletBalance = getWalletBalance,
        _generatePaymentRequest = generatePaymentRequest,
        _syncWallet = syncWallet,
        _getWalletVtxos = getWalletVtxos,
+       _getWalletTransactions = getWalletTransactions,
        super(const WalletInitial()) {
     on<events.LoadWallets>(_onLoadWallets);
     on<events.CreateWallet>(_onCreateWallet);
@@ -42,6 +50,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
     on<events.GeneratePaymentRequest>(_onGeneratePaymentRequest);
     on<events.SyncWallet>(_onSyncWallet);
     on<events.LoadVtxos>(_onLoadVtxos);
+    on<events.LoadTransactions>(_onLoadTransactions);
   }
 
   Future<void> _onLoadWallets(
@@ -55,7 +64,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
     result.fold((failure) => emit(WalletError(failure.message)), (wallets) {
       final walletSummaries = wallets
           .map(
-            (w) => WalletSummary(
+            (w) => WalletSummaryVM(
               id: w.id,
               name: w.name,
               network: w.network,
@@ -66,12 +75,13 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
 
       emit(WalletsLoaded(wallets: walletSummaries));
 
-      // Automatically sync wallets and load VTXOs after loading
+      // Automatically sync wallets and load VTXOs and transactions after loading
       add(events.SyncWallet());
 
-      // Load VTXOs for all wallets
+      // Load VTXOs and transactions for all wallets
       for (final wallet in walletSummaries) {
         add(events.LoadVtxos(wallet.id));
+        add(events.LoadTransactions(wallet.id));
       }
     });
   }
@@ -127,10 +137,10 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
         // Only update if we're still in a WalletsLoaded state
         final currentState = state;
         if (currentState is WalletsLoaded) {
-          final updatedBalances = Map<int, WalletBalance>.from(
+          final updatedBalances = Map<int, WalletBalanceVM>.from(
             currentState.balances,
           );
-          updatedBalances[event.walletId] = WalletBalance(
+          updatedBalances[event.walletId] = WalletBalanceVM(
             walletId: event.walletId,
             spendableSats: balance.spendableSats,
             pendingInRoundSats: balance.pendingInRoundSats,
@@ -203,9 +213,10 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
           'Failed to sync wallet ${wallet.id}: ${failure.message}',
         ),
         (_) {
-          // After successful sync, reload balance and VTXOs
+          // After successful sync, reload balance, VTXOs, and transactions
           add(events.LoadWalletBalance(wallet.id));
           add(events.LoadVtxos(wallet.id));
+          add(events.LoadTransactions(wallet.id));
         },
       );
     });
@@ -239,10 +250,10 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
         // Only update if we're still in a WalletsLoaded state
         final currentState = state;
         if (currentState is WalletsLoaded) {
-          final updatedVtxos = Map<int, List<Vtxo>>.from(currentState.vtxos);
+          final updatedVtxos = Map<int, List<VtxoVM>>.from(currentState.vtxos);
           updatedVtxos[event.walletId] = vtxoResponses
               .map(
-                (v) => Vtxo(
+                (v) => VtxoVM(
                   id: v.id,
                   amountSats: v.amountSats,
                   expiryHeight: v.expiryHeight,
@@ -253,6 +264,57 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
               .toList();
 
           emit(currentState.copyWith(vtxos: updatedVtxos));
+        }
+      },
+    );
+  }
+
+  Future<void> _onLoadTransactions(
+    events.LoadTransactions event,
+    Emitter<WalletState> emit,
+  ) async {
+    // Get the current WalletsLoaded state
+    if (state is! WalletsLoaded) {
+      return;
+    }
+
+    state as WalletsLoaded;
+
+    // Load transactions in the background without changing state
+    final result = await _getWalletTransactions(
+      GetWalletTransactionsQuery(walletId: event.walletId),
+    );
+
+    result.fold(
+      (failure) {
+        debugPrint(
+          'Failed to load transactions for wallet ${event.walletId}: ${failure.message}',
+        );
+      },
+      (transactionResponses) {
+        // Only update if we're still in a WalletsLoaded state
+        final currentState = state;
+        if (currentState is WalletsLoaded) {
+          final updatedTransactions = Map<int, List<TransactionVM>>.from(
+            currentState.transactions,
+          );
+          updatedTransactions[event.walletId] = transactionResponses
+              .map(
+                (tx) => TransactionVM(
+                  id: tx.id,
+                  status: tx.status,
+                  subsystemName: tx.subsystemName,
+                  subsystemKind: tx.subsystemKind,
+                  intendedBalanceSats: tx.intendedBalanceSats,
+                  effectiveBalanceSats: tx.effectiveBalanceSats,
+                  offchainFeeSats: tx.offchainFeeSats,
+                  createdAt: tx.createdAt,
+                  completedAt: tx.completedAt,
+                ),
+              )
+              .toList();
+
+          emit(currentState.copyWith(transactions: updatedTransactions));
         }
       },
     );

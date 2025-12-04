@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter_app/core/application/error/failures.dart';
 import 'package:flutter_app/features/wallet/domain/entities/wallet_entity.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/bark_balance_vo.dart';
+import 'package:flutter_app/features/wallet/domain/value_objects/transaction_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/vtxo_vo.dart';
 
 /// Port for Bark wallet
@@ -19,6 +20,11 @@ abstract class WalletPort {
 
   /// Get all VTXOs for a wallet
   Future<Either<Failure, List<VtxoVO>>> getVtxos({
+    required WalletEntity wallet,
+  });
+
+  /// Get all transactions for a wallet
+  Future<Either<Failure, List<TransactionVO>>> getTransactions({
     required WalletEntity wallet,
   });
 

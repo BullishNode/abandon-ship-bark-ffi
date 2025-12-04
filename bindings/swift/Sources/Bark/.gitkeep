@@ -1,4 +1,4 @@
 # This directory will contain the generated Swift bindings
-# Generated files: bark_ffi.swift (from uniffi-bindgen)
+# Generated files: bark.swift (from uniffi-bindgen)
 #
 # Run ./build-swift.sh to generate the bindings

@@ -73,7 +73,7 @@ cargo run --bin uniffi-bindgen -- generate \
 
 # Fix modulemap to use framework module
 echo "🔧 Fixing modulemap..."
-sed -i '' 's/^module BarkFFI {/framework module BarkFFI {/' "$BUILD_DIR/swift/BarkFFI.modulemap"
+sed -i '' 's/^module barkFFI {/framework module barkFFI {/' "$BUILD_DIR/swift/barkFFI.modulemap"
 
 # Create framework structure for each platform
 echo "📦 Creating framework structures..."
@@ -83,8 +83,8 @@ IOS_DEVICE_FRAMEWORK="$BUILD_DIR/ios-device/BarkFFI.framework"
 mkdir -p "$IOS_DEVICE_FRAMEWORK/Headers"
 mkdir -p "$IOS_DEVICE_FRAMEWORK/Modules"
 cp "$PROJECT_ROOT/target/aarch64-apple-ios/release/libbark_ffi.a" "$IOS_DEVICE_FRAMEWORK/BarkFFI"
-cp "$BUILD_DIR/swift/BarkFFI.h" "$IOS_DEVICE_FRAMEWORK/Headers/"
-cp "$BUILD_DIR/swift/BarkFFI.modulemap" "$IOS_DEVICE_FRAMEWORK/Modules/module.modulemap"
+cp "$BUILD_DIR/swift/barkFFI.h" "$IOS_DEVICE_FRAMEWORK/Headers/"
+cp "$BUILD_DIR/swift/barkFFI.modulemap" "$IOS_DEVICE_FRAMEWORK/Modules/module.modulemap"
 cp "$SCRIPT_DIR/resources/Info-iOS.plist" "$IOS_DEVICE_FRAMEWORK/Info.plist"
 
 # iOS simulator framework
@@ -92,8 +92,8 @@ IOS_SIM_FRAMEWORK="$BUILD_DIR/ios-simulator-framework/BarkFFI.framework"
 mkdir -p "$IOS_SIM_FRAMEWORK/Headers"
 mkdir -p "$IOS_SIM_FRAMEWORK/Modules"
 cp "$BUILD_DIR/ios-simulator/libbark_ffi.a" "$IOS_SIM_FRAMEWORK/BarkFFI"
-cp "$BUILD_DIR/swift/BarkFFI.h" "$IOS_SIM_FRAMEWORK/Headers/"
-cp "$BUILD_DIR/swift/BarkFFI.modulemap" "$IOS_SIM_FRAMEWORK/Modules/module.modulemap"
+cp "$BUILD_DIR/swift/barkFFI.h" "$IOS_SIM_FRAMEWORK/Headers/"
+cp "$BUILD_DIR/swift/barkFFI.modulemap" "$IOS_SIM_FRAMEWORK/Modules/module.modulemap"
 cp "$SCRIPT_DIR/resources/Info-iOSSimulator.plist" "$IOS_SIM_FRAMEWORK/Info.plist"
 
 # macOS framework
@@ -102,8 +102,8 @@ mkdir -p "$MACOS_FRAMEWORK/Headers"
 mkdir -p "$MACOS_FRAMEWORK/Modules"
 mkdir -p "$MACOS_FRAMEWORK/Resources"
 cp "$BUILD_DIR/macos/libbark_ffi.dylib" "$MACOS_FRAMEWORK/BarkFFI"
-cp "$BUILD_DIR/swift/BarkFFI.h" "$MACOS_FRAMEWORK/Headers/"
-cp "$BUILD_DIR/swift/BarkFFI.modulemap" "$MACOS_FRAMEWORK/Modules/module.modulemap"
+cp "$BUILD_DIR/swift/barkFFI.h" "$MACOS_FRAMEWORK/Headers/"
+cp "$BUILD_DIR/swift/barkFFI.modulemap" "$MACOS_FRAMEWORK/Modules/module.modulemap"
 cp "$SCRIPT_DIR/resources/Info-macOS.plist" "$MACOS_FRAMEWORK/Resources/Info.plist"
 
 # Create XCFramework
@@ -118,7 +118,7 @@ xcodebuild -create-xcframework \
 echo "📝 Copying Swift source files..."
 SOURCES_DIR="$SCRIPT_DIR/Sources/Bark"
 mkdir -p "$SOURCES_DIR"
-cp "$BUILD_DIR/swift/BarkFFI.swift" "$SOURCES_DIR/"
+cp "$BUILD_DIR/swift/bark.swift" "$SOURCES_DIR/"
 
 # Note: Package.swift must be at repository root for SPM to work
 echo "ℹ️  Note: Ensure Package.swift is at repository root (not in bindings/swift/)"

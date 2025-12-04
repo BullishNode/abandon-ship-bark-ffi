@@ -1,5 +1,6 @@
 use bark::WalletVtxo as BarkWalletVtxo;
 use bark::{Balance as BarkBalance, WalletProperties as BarkWalletProperties};
+use bark_bitcoin_ext::AmountExt;
 use bitcoin::Network as BtcNetwork;
 
 // ============================================================================
@@ -45,10 +46,16 @@ impl From<BtcNetwork> for Network {
 pub struct Config {
     pub server_address: String,
     pub esplora_address: Option<String>,
+    pub bitcoind_address: Option<String>,
+    pub bitcoind_cookiefile: Option<String>,
+    pub bitcoind_user: Option<String>,
+    pub bitcoind_pass: Option<String>,
     pub network: Network,
     pub vtxo_refresh_expiry_threshold: Option<u32>,
     pub vtxo_exit_margin: Option<u16>,
     pub htlc_recv_claim_delta: Option<u16>,
+    pub fallback_fee_rate: Option<u64>,
+    pub round_tx_required_confirmations: Option<u32>,
 }
 
 impl From<Config> for bark::Config {
@@ -58,6 +65,10 @@ impl From<Config> for bark::Config {
 
         cfg.server_address = c.server_address;
         cfg.esplora_address = c.esplora_address;
+        cfg.bitcoind_address = c.bitcoind_address;
+        cfg.bitcoind_cookiefile = c.bitcoind_cookiefile.map(std::path::PathBuf::from);
+        cfg.bitcoind_user = c.bitcoind_user;
+        cfg.bitcoind_pass = c.bitcoind_pass;
 
         if let Some(threshold) = c.vtxo_refresh_expiry_threshold {
             cfg.vtxo_refresh_expiry_threshold = threshold;
@@ -67,6 +78,12 @@ impl From<Config> for bark::Config {
         }
         if let Some(delta) = c.htlc_recv_claim_delta {
             cfg.htlc_recv_claim_delta = delta;
+        }
+        if let Some(rate) = c.fallback_fee_rate {
+            cfg.fallback_fee_rate = Some(bitcoin::FeeRate::from_sat_per_kwu(rate));
+        }
+        if let Some(confs) = c.round_tx_required_confirmations {
+            cfg.round_tx_required_confirmations = confs;
         }
 
         cfg
@@ -173,4 +190,164 @@ pub struct LightningPaymentResult {
 #[derive(Clone, Debug)]
 pub struct OffboardResult {
     pub round_id: String,
+}
+
+// ============================================================================
+// AddressWithIndex
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct AddressWithIndex {
+    pub address: String,
+    pub index: u32,
+}
+
+// ============================================================================
+// LightningReceiveStatus
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct LightningReceiveStatus {
+    pub payment_hash: String,
+    pub invoice: String,
+    pub amount_sats: u64,
+    pub has_htlc_vtxos: bool,
+    pub preimage_revealed: bool,
+}
+
+impl From<bark::persist::models::LightningReceive> for LightningReceiveStatus {
+    fn from(r: bark::persist::models::LightningReceive) -> Self {
+        use bitcoin::hex::DisplayHex;
+        Self {
+            payment_hash: r.payment_hash.as_hex().to_string(),
+            invoice: r.invoice.to_string(),
+            amount_sats: r
+                .invoice
+                .amount_milli_satoshis()
+                .map(|a| bitcoin::Amount::from_msat_floor(a).to_sat())
+                .unwrap_or(0),
+            has_htlc_vtxos: r.htlc_vtxos.is_some(),
+            preimage_revealed: r.preimage_revealed_at.is_some(),
+        }
+    }
+}
+
+// ============================================================================
+// LightningSendStatus
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct LightningSendStatus {
+    pub invoice: String,
+    pub amount_sats: u64,
+    pub htlc_vtxo_count: u32,
+}
+
+impl From<bark::persist::models::PendingLightningSend> for LightningSendStatus {
+    fn from(s: bark::persist::models::PendingLightningSend) -> Self {
+        Self {
+            invoice: s.invoice.to_string(),
+            amount_sats: s.amount.to_sat(),
+            htlc_vtxo_count: s.htlc_vtxos.len() as u32,
+        }
+    }
+}
+
+// ============================================================================
+// Movement
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct Movement {
+    pub id: u32,
+    pub status: String,
+    pub subsystem_name: String,
+    pub subsystem_kind: String,
+    pub metadata_json: String,
+    pub intended_balance_sats: i64,
+    pub effective_balance_sats: i64,
+    pub offchain_fee_sats: u64,
+    pub sent_to_addresses: Vec<String>,
+    pub received_on_addresses: Vec<String>,
+    pub input_vtxo_ids: Vec<String>,
+    pub output_vtxo_ids: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+}
+
+impl From<bark::movement::Movement> for Movement {
+    fn from(m: bark::movement::Movement) -> Self {
+        Self {
+            id: m.id.0,
+            status: m.status.to_string(),
+            subsystem_name: m.subsystem.name.clone(),
+            subsystem_kind: m.subsystem.kind.clone(),
+            metadata_json: serde_json::to_string(&m.metadata).unwrap_or_else(|_| "{}".to_string()),
+            intended_balance_sats: m.intended_balance.to_sat(),
+            effective_balance_sats: m.effective_balance.to_sat(),
+            offchain_fee_sats: m.offchain_fee.to_sat(),
+            sent_to_addresses: m.sent_to.iter().map(|d| d.destination.clone()).collect(),
+            received_on_addresses: m
+                .received_on
+                .iter()
+                .map(|d| d.destination.clone())
+                .collect(),
+            input_vtxo_ids: m.input_vtxos.iter().map(|v| v.to_string()).collect(),
+            output_vtxo_ids: m.output_vtxos.iter().map(|v| v.to_string()).collect(),
+            created_at: m.time.created_at.to_rfc3339(),
+            updated_at: m.time.updated_at.to_rfc3339(),
+            completed_at: m.time.completed_at.map(|t| t.to_rfc3339()),
+        }
+    }
+}
+
+// ============================================================================
+// ArkInfo
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct ArkInfo {
+    pub network: Network,
+    pub server_pubkey: String,
+    pub round_interval_secs: u64,
+    pub nb_round_nonces: u32,
+    pub vtxo_exit_delta: u32,
+    pub vtxo_expiry_delta: u32,
+    pub htlc_send_expiry_delta: u32,
+    pub htlc_expiry_delta: u32,
+    pub max_vtxo_amount_sats: Option<u64>,
+    pub required_board_confirmations: u32,
+    pub max_user_invoice_cltv_delta: u16,
+    pub min_board_amount_sats: u64,
+    pub offboard_feerate_sat_per_vb: u64,
+    pub ln_receive_anti_dos_required: bool,
+}
+
+impl From<&bark::ark::ArkInfo> for ArkInfo {
+    fn from(info: &bark::ark::ArkInfo) -> Self {
+        use bitcoin::hex::DisplayHex;
+        Self {
+            network: match info.network {
+                BtcNetwork::Bitcoin => Network::Bitcoin,
+                BtcNetwork::Testnet => Network::Testnet,
+                BtcNetwork::Signet => Network::Signet,
+                BtcNetwork::Regtest => Network::Regtest,
+                _ => Network::Testnet,
+            },
+            server_pubkey: info.server_pubkey.serialize().as_hex().to_string(),
+            round_interval_secs: info.round_interval.as_secs(),
+            nb_round_nonces: info.nb_round_nonces as u32,
+            vtxo_exit_delta: info.vtxo_exit_delta as u32,
+            vtxo_expiry_delta: info.vtxo_expiry_delta as u32,
+            htlc_send_expiry_delta: info.htlc_send_expiry_delta as u32,
+            htlc_expiry_delta: info.htlc_expiry_delta as u32,
+            max_vtxo_amount_sats: info.max_vtxo_amount.map(|a| a.to_sat()),
+            required_board_confirmations: info.required_board_confirmations as u32,
+            max_user_invoice_cltv_delta: info.max_user_invoice_cltv_delta,
+            min_board_amount_sats: info.min_board_amount.to_sat(),
+            offboard_feerate_sat_per_vb: info.offboard_feerate.to_sat_per_vb_ceil(),
+            ln_receive_anti_dos_required: info.ln_receive_anti_dos_required,
+        }
+    }
 }

@@ -19,10 +19,16 @@ do {
     let config = Config(
         serverAddress: "https://ark.signet.2nd.dev",
         esploraAddress: "https://esplora.signet.2nd.dev",
+        bitcoindAddress: nil,
+        bitcoindCookiefile: nil,
+        bitcoindUser: nil,
+        bitcoindPass: nil,
         network: .signet,
         vtxoRefreshExpiryThreshold: nil,
         vtxoExitMargin: nil,
-        htlcRecvClaimDelta: nil
+        htlcRecvClaimDelta: nil,
+        fallbackFeeRate: nil,
+        roundTxRequiredConfirmations: nil
     )
 
     print("🔨 Creating wallet...")

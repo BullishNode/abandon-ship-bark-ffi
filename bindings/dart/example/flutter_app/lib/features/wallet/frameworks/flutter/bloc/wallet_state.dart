@@ -1,67 +1,8 @@
 import 'package:equatable/equatable.dart';
-
-/// Wallet summary for UI display
-class WalletSummary extends Equatable {
-  final int id;
-  final String name;
-  final String network;
-  final DateTime createdAt;
-
-  const WalletSummary({
-    required this.id,
-    required this.name,
-    required this.network,
-    required this.createdAt,
-  });
-
-  @override
-  List<Object> get props => [id, name, network, createdAt];
-}
-
-/// Wallet balance for UI display
-class WalletBalance extends Equatable {
-  final int walletId;
-  final int spendableSats;
-  final int pendingInRoundSats;
-  final int pendingExitSats;
-  final int pendingLightningSendSats;
-  final int pendingLightningReceiveTotalSats;
-  final int pendingLightningReceiveClaimableSats;
-  final int pendingBoardSats;
-
-  const WalletBalance({
-    required this.walletId,
-    required this.spendableSats,
-    required this.pendingInRoundSats,
-    required this.pendingExitSats,
-    required this.pendingLightningSendSats,
-    required this.pendingLightningReceiveTotalSats,
-    required this.pendingLightningReceiveClaimableSats,
-    required this.pendingBoardSats,
-  });
-
-  int get totalSats =>
-      spendableSats +
-      pendingInRoundSats +
-      pendingExitSats +
-      pendingLightningSendSats +
-      pendingLightningReceiveTotalSats +
-      pendingBoardSats;
-
-  String get totalBtc => (totalSats / 100000000).toStringAsFixed(8);
-
-  @override
-  List<Object> get props => [
-    walletId,
-    spendableSats,
-    pendingInRoundSats,
-    pendingExitSats,
-    pendingLightningSendSats,
-    pendingLightningReceiveTotalSats,
-    pendingLightningReceiveClaimableSats,
-    pendingBoardSats,
-  ];
-}
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/transaction_vm.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/vtxo_vm.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_balance_vm.dart';
+import 'package:flutter_app/features/wallet/frameworks/flutter/view_models/wallet_summary_vm.dart';
 
 /// Base class for wallet states
 abstract class WalletState extends Equatable {
@@ -81,52 +22,34 @@ class WalletLoading extends WalletState {
   const WalletLoading();
 }
 
-/// VTXO for UI display
-class Vtxo extends Equatable {
-  final String id;
-  final int amountSats;
-  final int expiryHeight;
-  final String kind;
-  final String state;
-
-  const Vtxo({
-    required this.id,
-    required this.amountSats,
-    required this.expiryHeight,
-    required this.kind,
-    required this.state,
-  });
-
-  String get amountBtc => (amountSats / 100000000).toStringAsFixed(8);
-
-  @override
-  List<Object> get props => [id, amountSats, expiryHeight, kind, state];
-}
-
 /// Wallets loaded state
 class WalletsLoaded extends WalletState {
-  final List<WalletSummary> wallets;
-  final Map<int, WalletBalance> balances;
-  final Map<int, List<Vtxo>> vtxos;
+  final List<WalletSummaryVM> wallets;
+  final Map<int, WalletBalanceVM> balances;
+  final Map<int, List<VtxoVM>> vtxos;
+  final Map<int, List<TransactionVM>> transactions;
 
   const WalletsLoaded({
     required this.wallets,
     this.balances = const {},
     this.vtxos = const {},
+    this.transactions = const {},
   });
 
   @override
-  List<Object> get props => [wallets, balances, vtxos];
+  List<Object> get props => [wallets, balances, vtxos, transactions];
 
   WalletsLoaded copyWith({
-    List<WalletSummary>? wallets,
-    Map<int, WalletBalance>? balances,
-    Map<int, List<Vtxo>>? vtxos,
+    List<WalletSummaryVM>? wallets,
+    Map<int, WalletBalanceVM>? balances,
+    Map<int, List<VtxoVM>>? vtxos,
+    Map<int, List<TransactionVM>>? transactions,
   }) {
     return WalletsLoaded(
       wallets: wallets ?? this.wallets,
       balances: balances ?? this.balances,
       vtxos: vtxos ?? this.vtxos,
+      transactions: transactions ?? this.transactions,
     );
   }
 }

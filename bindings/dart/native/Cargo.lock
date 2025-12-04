@@ -272,6 +272,7 @@ dependencies = [
  "lightning-invoice",
  "lnurl-rs",
  "once_cell",
+ "serde_json",
  "thiserror",
  "tokio",
  "uniffi",

@@ -1,8 +1,9 @@
 import 'package:equatable/equatable.dart';
 
-/// Bark wallet balance value object (no ID, immutable)
-/// TODO: abstract to a base class named Balance with subtypes for different types of balances like BarkBalance, BitcoinBalance, etc.
-class BarkBalanceVO extends Equatable {
+/// Wallet balance view model for UI display
+/// TODO: abstract to a base class with subtypes for different types of wallet balances
+class WalletBalanceVM extends Equatable {
+  final int walletId;
   final int spendableSats;
   final int pendingInRoundSats;
   final int pendingExitSats;
@@ -11,7 +12,8 @@ class BarkBalanceVO extends Equatable {
   final int pendingLightningReceiveClaimableSats;
   final int pendingBoardSats;
 
-  const BarkBalanceVO({
+  const WalletBalanceVM({
+    required this.walletId,
     required this.spendableSats,
     required this.pendingInRoundSats,
     required this.pendingExitSats,
@@ -21,7 +23,6 @@ class BarkBalanceVO extends Equatable {
     required this.pendingBoardSats,
   });
 
-  /// Total balance in satoshis (all pending + spendable)
   int get totalSats =>
       spendableSats +
       pendingInRoundSats +
@@ -30,11 +31,11 @@ class BarkBalanceVO extends Equatable {
       pendingLightningReceiveTotalSats +
       pendingBoardSats;
 
-  /// Total balance in BTC
   String get totalBtc => (totalSats / 100000000).toStringAsFixed(8);
 
   @override
   List<Object> get props => [
+    walletId,
     spendableSats,
     pendingInRoundSats,
     pendingExitSats,
