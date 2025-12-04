@@ -30,9 +30,6 @@ class BarkBalanceVO extends Equatable {
       pendingLightningReceiveTotalSats +
       pendingBoardSats;
 
-  /// Total balance in BTC
-  String get totalBtc => (totalSats / 100000000).toStringAsFixed(8);
-
   @override
   List<Object> get props => [
     spendableSats,

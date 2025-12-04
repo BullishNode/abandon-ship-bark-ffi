@@ -31,8 +31,6 @@ class WalletBalanceVM extends Equatable {
       pendingLightningReceiveTotalSats +
       pendingBoardSats;
 
-  String get totalBtc => (totalSats / 100000000).toStringAsFixed(8);
-
   @override
   List<Object> get props => [
     walletId,

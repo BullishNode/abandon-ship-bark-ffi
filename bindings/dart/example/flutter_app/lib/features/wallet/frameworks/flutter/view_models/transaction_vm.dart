@@ -25,11 +25,6 @@ class TransactionVM extends Equatable {
     this.completedAt,
   });
 
-  String get intendedBalanceBtc =>
-      (intendedBalanceSats / 100000000).toStringAsFixed(8);
-  String get effectiveBalanceBtc =>
-      (effectiveBalanceSats / 100000000).toStringAsFixed(8);
-
   @override
   List<Object?> get props => [
     id,
