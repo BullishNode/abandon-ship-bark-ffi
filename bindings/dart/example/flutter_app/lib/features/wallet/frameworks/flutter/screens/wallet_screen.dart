@@ -150,7 +150,9 @@ class _WalletViewState extends State<WalletView>
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Text(
-                                    'Total Value',
+                                    hasWallets && state.wallets.isNotEmpty
+                                        ? state.wallets.first.name
+                                        : 'Total Value',
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
@@ -163,14 +165,39 @@ class _WalletViewState extends State<WalletView>
                                   const SizedBox(height: 8),
                                   Text(
                                     totalBalance != null
-                                        ? '₿ ${totalBalance.totalBtc}'
-                                        : '₿ 0.00000000',
+                                        ? '₿ ${totalBalance.totalSats}'
+                                        : '₿ 0',
                                     style: TextStyle(
                                       fontSize: 42,
                                       fontWeight: FontWeight.bold,
                                       color: AppColors.bitcoin,
                                       height: 1.1,
                                     ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ActionChip(
+                                    label: Text(
+                                      'sats',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark
+                                            ? AppColors.gray400
+                                            : AppColors.gray600,
+                                      ),
+                                    ),
+                                    backgroundColor: isDark
+                                        ? AppColors.gray800
+                                        : AppColors.gray100,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    onPressed: () {
+                                      // TODO: Toggle denomination (sats/BTC)
+                                    },
                                   ),
                                 ],
                               ),
@@ -222,7 +249,10 @@ class _WalletViewState extends State<WalletView>
                                             ),
                                       // Transactions tab
                                       hasWallets
-                                          ? _buildTransactionsTab(context, state)
+                                          ? _buildTransactionsTab(
+                                              context,
+                                              state,
+                                            )
                                           : NoWalletCard(
                                               onNewPressed: () =>
                                                   _showCreateWalletDialog(
@@ -404,7 +434,7 @@ class _WalletViewState extends State<WalletView>
               ),
               // Amount
               Text(
-                '₿ ${vtxo.amountBtc}',
+                '₿ ${vtxo.amountSats}',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -532,7 +562,7 @@ class _WalletViewState extends State<WalletView>
               ),
               // Amount
               Text(
-                '${isPositive ? '+' : ''}₿ ${transaction.effectiveBalanceBtc}',
+                '${isPositive ? '+' : ''}₿ ${transaction.effectiveBalanceSats}',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,

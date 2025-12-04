@@ -25,8 +25,6 @@ class VtxoResponse {
     required this.kind,
     required this.state,
   });
-
-  String get amountBtc => (amountSats / 100000000).toStringAsFixed(8);
 }
 
 /// Use case for getting wallet VTXOs

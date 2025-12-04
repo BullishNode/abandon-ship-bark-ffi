@@ -17,8 +17,6 @@ class VtxoVM extends Equatable {
     required this.state,
   });
 
-  String get amountBtc => (amountSats / 100000000).toStringAsFixed(8);
-
   @override
   List<Object> get props => [id, amountSats, expiryHeight, kind, state];
 }

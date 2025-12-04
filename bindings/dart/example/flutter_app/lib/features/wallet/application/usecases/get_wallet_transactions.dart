@@ -33,11 +33,6 @@ class TransactionResponse {
     required this.createdAt,
     this.completedAt,
   });
-
-  String get intendedBalanceBtc =>
-      (intendedBalanceSats / 100000000).toStringAsFixed(8);
-  String get effectiveBalanceBtc =>
-      (effectiveBalanceSats / 100000000).toStringAsFixed(8);
 }
 
 /// Use case for getting wallet transactions

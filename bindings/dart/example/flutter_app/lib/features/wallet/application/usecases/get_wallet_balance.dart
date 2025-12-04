@@ -29,16 +29,6 @@ class WalletBalanceResponse {
     required this.pendingLightningReceiveClaimableSats,
     required this.pendingBoardSats,
   });
-
-  int get totalSats =>
-      spendableSats +
-      pendingInRoundSats +
-      pendingExitSats +
-      pendingLightningSendSats +
-      pendingLightningReceiveTotalSats +
-      pendingBoardSats;
-
-  String get totalBtc => (totalSats / 100000000).toStringAsFixed(8);
 }
 
 /// Use case for getting wallet balance
