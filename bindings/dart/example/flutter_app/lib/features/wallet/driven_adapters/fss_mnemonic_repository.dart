@@ -1,5 +1,6 @@
 import 'package:flutter_app/features/wallet/application/ports/mnemonic_repository_port.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:bark/bark.dart' as bark;
 
 /// Adapter implementing MnemonicRepositoryPort using FlutterSecureStorage
 class FssMnemonicRepository implements MnemonicRepositoryPort {
@@ -13,10 +14,7 @@ class FssMnemonicRepository implements MnemonicRepositoryPort {
 
   @override
   Future<String> generateMnemonic() {
-    // For simplicity, using a fixed mnemonic here; replace with real random
-    //  generation in production code
-    final mnemonic =
-        'often cigar lens release accuse next truck license sausage tool rough parent';
+    final mnemonic = bark.BarkUtils.generateMnemonic();
     return Future.value(mnemonic);
   }
 

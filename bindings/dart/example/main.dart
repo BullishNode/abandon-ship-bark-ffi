@@ -17,6 +17,9 @@ Future<void> example() async {
   // DO NOT SEND REAL FUNDS TO THIS MNEMONIC
   final mnemonic =
       "input define cigar dizzy void east height sunny orient clean favorite cram";
+  // To generate a new random mnemonic in a real application,
+  // use the following line instead:
+  // final mnemonic = BarkUtils.generateMnemonic();
 
   final config = Config(
     "https://ark.signet.2nd.dev",
