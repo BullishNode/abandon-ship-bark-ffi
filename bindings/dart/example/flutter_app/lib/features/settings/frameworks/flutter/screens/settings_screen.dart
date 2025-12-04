@@ -93,8 +93,8 @@ class SettingsView extends StatelessWidget {
               const SizedBox(height: 24),
 
               // Display section
-              _SectionHeader(title: 'Display', isDark: isDark),
-              _HideBalanceTile(hideBalance: state.hideBalance, isDark: isDark),
+              //_SectionHeader(title: 'Display', isDark: isDark),
+              //_HideBalanceTile(hideBalance: state.hideBalance, isDark: isDark),
             ],
           );
         }
@@ -176,6 +176,7 @@ class _NetworkTile extends StatelessWidget {
 
   void _showNetworkPicker(BuildContext context) {
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       builder: (sheetContext) {
         return Container(
@@ -194,25 +195,47 @@ class _NetworkTile extends StatelessWidget {
                   ),
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Text(
+                  'Only Signet is supported at this time',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? AppColors.gray400 : AppColors.gray600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
               ...availableNetworks.map((network) {
                 final isSelected = network == currentNetwork;
+                final isSignet = network.toLowerCase() == 'signet';
                 return ListTile(
+                  enabled: isSignet,
                   title: Text(
                     network.toUpperCase(),
                     style: TextStyle(
                       fontWeight: isSelected
                           ? FontWeight.w600
                           : FontWeight.normal,
-                      color: isDark ? AppColors.white : AppColors.black,
+                      color: isSignet
+                          ? (isDark ? AppColors.white : AppColors.black)
+                          : (isDark ? AppColors.gray700 : AppColors.gray400),
                     ),
                   ),
                   trailing: isSelected
                       ? const Icon(Icons.check, color: AppColors.bitcoin)
                       : null,
-                  onTap: () {
-                    context.read<SettingsBloc>().add(ChangeNetwork(network));
-                    Navigator.pop(sheetContext);
-                  },
+                  onTap: isSignet
+                      ? () {
+                          context.read<SettingsBloc>().add(
+                            ChangeNetwork(network),
+                          );
+                          Navigator.pop(sheetContext);
+                        }
+                      : null,
                 );
               }),
             ],
