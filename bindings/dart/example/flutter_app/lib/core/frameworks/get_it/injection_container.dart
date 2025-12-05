@@ -24,9 +24,11 @@ import 'package:flutter_app/features/wallet/application/services/wallet_service.
 import 'package:flutter_app/features/wallet/application/usecases/create_bark_wallet.dart';
 import 'package:flutter_app/features/wallet/application/usecases/generate_payment_request.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_all_wallets.dart';
+import 'package:flutter_app/features/wallet/application/usecases/get_wallet_backup.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_balance.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_transactions.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_vtxos.dart';
+import 'package:flutter_app/features/wallet/application/usecases/send_arkoor_payment.dart';
 import 'package:flutter_app/features/wallet/application/usecases/sync_wallet.dart';
 import 'package:flutter_app/features/wallet/application/ports/mnemonic_repository_port.dart';
 import 'package:flutter_app/features/wallet/driven_adapters/wallets/bark_wallet.dart';
@@ -36,7 +38,7 @@ import 'package:flutter_app/features/wallet/driven_adapters/facade_bitcoin_netwo
     as wallet_facade;
 import 'package:flutter_app/features/wallet/driven_adapters/facade_esplora_endpoint_port.dart';
 import 'package:flutter_app/features/wallet/driven_adapters/fss_mnemonic_repository.dart';
-import 'package:flutter_app/features/wallet/frameworks/flutter/bloc/wallet_bloc.dart';
+import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -104,7 +106,9 @@ Future<void> _initDrivenAdapters() async {
     () => FssMnemonicRepository(sl()),
   );
 
-  sl.registerLazySingleton<BarkWallet>(() => BarkWallet());
+  sl.registerLazySingleton<BarkWallet>(
+    () => BarkWallet(database: sl(), secureStorage: sl()),
+  );
 
   sl.registerLazySingleton<WalletPortRegistry>(
     () => WalletPortRegistry(barkwallet: sl()),
@@ -146,6 +150,8 @@ Future<void> _initUseCases() async {
   sl.registerLazySingleton(() => SyncWallet(sl()));
   sl.registerLazySingleton(() => GetWalletVtxos(sl()));
   sl.registerLazySingleton(() => GetWalletTransactions(sl()));
+  sl.registerLazySingleton(() => GetWalletBackup(sl()));
+  sl.registerLazySingleton(() => SendArkoorPayment(walletService: sl()));
 }
 
 // Facades (Driving adapters exposing use cases)
@@ -183,6 +189,8 @@ Future<void> _initDrivingAdapters() async {
       syncWallet: sl(),
       getWalletVtxos: sl(),
       getWalletTransactions: sl(),
+      getWalletBackup: sl(),
+      sendArkoorPayment: sl(),
     ),
   );
 }

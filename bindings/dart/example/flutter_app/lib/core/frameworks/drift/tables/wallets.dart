@@ -12,6 +12,7 @@ class Wallets extends Table {
   TextColumn get type => text()();
 
   /// Bitcoin network (mainnet, testnet3, testnet4, signet) - stored as string
+  /// TODO: Use enum instead of text
   TextColumn get network => text()();
 
   /// Creation timestamp

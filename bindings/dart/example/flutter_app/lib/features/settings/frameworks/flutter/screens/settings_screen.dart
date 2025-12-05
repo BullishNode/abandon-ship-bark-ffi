@@ -93,8 +93,8 @@ class SettingsView extends StatelessWidget {
               const SizedBox(height: 24),
 
               // Display section
-              _SectionHeader(title: 'Display', isDark: isDark),
-              _HideBalanceTile(hideBalance: state.hideBalance, isDark: isDark),
+              //_SectionHeader(title: 'Display', isDark: isDark),
+              //_HideBalanceTile(hideBalance: state.hideBalance, isDark: isDark),
             ],
           );
         }
@@ -176,46 +176,71 @@ class _NetworkTile extends StatelessWidget {
 
   void _showNetworkPicker(BuildContext context) {
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       builder: (sheetContext) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Select Network',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.white : AppColors.black,
-                  ),
-                ),
-              ),
-              ...availableNetworks.map((network) {
-                final isSelected = network == currentNetwork;
-                return ListTile(
-                  title: Text(
-                    network.toUpperCase(),
+        return SafeArea(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Select Network',
                     style: TextStyle(
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
                       color: isDark ? AppColors.white : AppColors.black,
                     ),
                   ),
-                  trailing: isSelected
-                      ? const Icon(Icons.check, color: AppColors.bitcoin)
-                      : null,
-                  onTap: () {
-                    context.read<SettingsBloc>().add(ChangeNetwork(network));
-                    Navigator.pop(sheetContext);
-                  },
-                );
-              }),
-            ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Text(
+                    'Only Signet is supported at this time',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? AppColors.gray400 : AppColors.gray600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                ...availableNetworks.map((network) {
+                  final isSelected = network == currentNetwork;
+                  final isSignet = network.toLowerCase() == 'signet';
+                  return ListTile(
+                    enabled: isSignet,
+                    title: Text(
+                      network.toUpperCase(),
+                      style: TextStyle(
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                        color: isSignet
+                            ? (isDark ? AppColors.white : AppColors.black)
+                            : (isDark ? AppColors.gray700 : AppColors.gray400),
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? const Icon(Icons.check, color: AppColors.bitcoin)
+                        : null,
+                    onTap: isSignet
+                        ? () {
+                            context.read<SettingsBloc>().add(
+                              ChangeNetwork(network),
+                            );
+                            Navigator.pop(sheetContext);
+                          }
+                        : null,
+                  );
+                }),
+              ],
+            ),
           ),
         );
       },
@@ -240,15 +265,35 @@ class _EsploraEndpointsTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
-        title: Text(
-          'Esplora Endpoints',
-          style: TextStyle(
-            fontWeight: FontWeight.w500,
-            color: isDark ? AppColors.white : AppColors.black,
-          ),
+        title: Row(
+          children: [
+            Text(
+              'Esplora Endpoints',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: isDark ? AppColors.white : AppColors.black,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.gray800 : AppColors.gray200,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'Coming soon',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.gray400 : AppColors.gray600,
+                ),
+              ),
+            ),
+          ],
         ),
         subtitle: Text(
-          'Manage Esplora server endpoints',
+          'Manage your own Esplora server endpoints',
           style: TextStyle(
             fontSize: 13,
             color: isDark ? AppColors.gray400 : AppColors.gray600,
@@ -258,9 +303,8 @@ class _EsploraEndpointsTile extends StatelessWidget {
           Icons.chevron_right,
           color: isDark ? AppColors.gray600 : AppColors.gray400,
         ),
-        onTap: () {
-          // TODO: Navigate to Esplora endpoints screen
-        },
+        enabled: false,
+        onTap: null,
       ),
     );
   }

@@ -294,7 +294,7 @@ impl Wallet {
         &self,
         ark_address: String,
         amount_sats: u64,
-    ) -> Result<(), BarkError> {
+    ) -> Result<String, BarkError> {
         TOKIO_RT.block_on(async {
             let addr: ark_lib::Address =
                 ark_address.parse().map_err(|e| BarkError::InvalidAddress {
@@ -303,8 +303,13 @@ impl Wallet {
 
             let amount = bitcoin::Amount::from_sat(amount_sats);
 
-            self.inner.send_arkoor_payment(&addr, amount).await?;
-            Ok(())
+            let vtxos = self.inner.send_arkoor_payment(&addr, amount).await?;
+            Ok(vtxos
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("Payment succeeded but returned no vtxos"))?
+                .point()
+                .txid
+                .to_string())
         })
     }
 

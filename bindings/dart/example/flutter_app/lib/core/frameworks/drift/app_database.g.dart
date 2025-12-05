@@ -216,6 +216,7 @@ class Wallet extends DataClass implements Insertable<Wallet> {
   final String type;
 
   /// Bitcoin network (mainnet, testnet3, testnet4, signet) - stored as string
+  /// TODO: Use enum instead of text
   final String network;
 
   /// Creation timestamp
@@ -484,6 +485,17 @@ class $BarkWalletsTable extends BarkWallets
       'REFERENCES wallets (id) ON DELETE CASCADE',
     ),
   );
+  static const VerificationMeta _networkMeta = const VerificationMeta(
+    'network',
+  );
+  @override
+  late final GeneratedColumn<String> network = GeneratedColumn<String>(
+    'network',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _fingerprintMeta = const VerificationMeta(
     'fingerprint',
   );
@@ -552,6 +564,7 @@ class $BarkWalletsTable extends BarkWallets
   @override
   List<GeneratedColumn> get $columns => [
     walletId,
+    network,
     fingerprint,
     dbPath,
     asp,
@@ -576,6 +589,14 @@ class $BarkWalletsTable extends BarkWallets
         _walletIdMeta,
         walletId.isAcceptableOrUnknown(data['wallet_id']!, _walletIdMeta),
       );
+    }
+    if (data.containsKey('network')) {
+      context.handle(
+        _networkMeta,
+        network.isAcceptableOrUnknown(data['network']!, _networkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_networkMeta);
     }
     if (data.containsKey('fingerprint')) {
       context.handle(
@@ -644,6 +665,10 @@ class $BarkWalletsTable extends BarkWallets
         DriftSqlType.int,
         data['${effectivePrefix}wallet_id'],
       )!,
+      network: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}network'],
+      )!,
       fingerprint: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}fingerprint'],
@@ -681,6 +706,10 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
   /// Foreign key to Wallets table
   final int walletId;
 
+  /// Bitcoin network (mainnet, testnet3, testnet4, signet) - stored as string
+  /// TODO: Use enum instead of text
+  final String network;
+
   /// Master key fingerprint (hex string)
   final String fingerprint;
 
@@ -700,6 +729,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
   final int? htlcRecvClaimDelta;
   const BarkWallet({
     required this.walletId,
+    required this.network,
     required this.fingerprint,
     required this.dbPath,
     required this.asp,
@@ -711,6 +741,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['wallet_id'] = Variable<int>(walletId);
+    map['network'] = Variable<String>(network);
     map['fingerprint'] = Variable<String>(fingerprint);
     map['db_path'] = Variable<String>(dbPath);
     map['asp'] = Variable<String>(asp);
@@ -731,6 +762,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
   BarkWalletsCompanion toCompanion(bool nullToAbsent) {
     return BarkWalletsCompanion(
       walletId: Value(walletId),
+      network: Value(network),
       fingerprint: Value(fingerprint),
       dbPath: Value(dbPath),
       asp: Value(asp),
@@ -754,6 +786,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return BarkWallet(
       walletId: serializer.fromJson<int>(json['walletId']),
+      network: serializer.fromJson<String>(json['network']),
       fingerprint: serializer.fromJson<String>(json['fingerprint']),
       dbPath: serializer.fromJson<String>(json['dbPath']),
       asp: serializer.fromJson<String>(json['asp']),
@@ -769,6 +802,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'walletId': serializer.toJson<int>(walletId),
+      'network': serializer.toJson<String>(network),
       'fingerprint': serializer.toJson<String>(fingerprint),
       'dbPath': serializer.toJson<String>(dbPath),
       'asp': serializer.toJson<String>(asp),
@@ -782,6 +816,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
 
   BarkWallet copyWith({
     int? walletId,
+    String? network,
     String? fingerprint,
     String? dbPath,
     String? asp,
@@ -790,6 +825,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
     Value<int?> htlcRecvClaimDelta = const Value.absent(),
   }) => BarkWallet(
     walletId: walletId ?? this.walletId,
+    network: network ?? this.network,
     fingerprint: fingerprint ?? this.fingerprint,
     dbPath: dbPath ?? this.dbPath,
     asp: asp ?? this.asp,
@@ -806,6 +842,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
   BarkWallet copyWithCompanion(BarkWalletsCompanion data) {
     return BarkWallet(
       walletId: data.walletId.present ? data.walletId.value : this.walletId,
+      network: data.network.present ? data.network.value : this.network,
       fingerprint: data.fingerprint.present
           ? data.fingerprint.value
           : this.fingerprint,
@@ -827,6 +864,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
   String toString() {
     return (StringBuffer('BarkWallet(')
           ..write('walletId: $walletId, ')
+          ..write('network: $network, ')
           ..write('fingerprint: $fingerprint, ')
           ..write('dbPath: $dbPath, ')
           ..write('asp: $asp, ')
@@ -840,6 +878,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
   @override
   int get hashCode => Object.hash(
     walletId,
+    network,
     fingerprint,
     dbPath,
     asp,
@@ -852,6 +891,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
       identical(this, other) ||
       (other is BarkWallet &&
           other.walletId == this.walletId &&
+          other.network == this.network &&
           other.fingerprint == this.fingerprint &&
           other.dbPath == this.dbPath &&
           other.asp == this.asp &&
@@ -862,6 +902,7 @@ class BarkWallet extends DataClass implements Insertable<BarkWallet> {
 
 class BarkWalletsCompanion extends UpdateCompanion<BarkWallet> {
   final Value<int> walletId;
+  final Value<String> network;
   final Value<String> fingerprint;
   final Value<String> dbPath;
   final Value<String> asp;
@@ -870,6 +911,7 @@ class BarkWalletsCompanion extends UpdateCompanion<BarkWallet> {
   final Value<int?> htlcRecvClaimDelta;
   const BarkWalletsCompanion({
     this.walletId = const Value.absent(),
+    this.network = const Value.absent(),
     this.fingerprint = const Value.absent(),
     this.dbPath = const Value.absent(),
     this.asp = const Value.absent(),
@@ -879,17 +921,20 @@ class BarkWalletsCompanion extends UpdateCompanion<BarkWallet> {
   });
   BarkWalletsCompanion.insert({
     this.walletId = const Value.absent(),
+    required String network,
     required String fingerprint,
     required String dbPath,
     required String asp,
     this.vtxoRefreshExpiryThreshold = const Value.absent(),
     this.vtxoExitMargin = const Value.absent(),
     this.htlcRecvClaimDelta = const Value.absent(),
-  }) : fingerprint = Value(fingerprint),
+  }) : network = Value(network),
+       fingerprint = Value(fingerprint),
        dbPath = Value(dbPath),
        asp = Value(asp);
   static Insertable<BarkWallet> custom({
     Expression<int>? walletId,
+    Expression<String>? network,
     Expression<String>? fingerprint,
     Expression<String>? dbPath,
     Expression<String>? asp,
@@ -899,6 +944,7 @@ class BarkWalletsCompanion extends UpdateCompanion<BarkWallet> {
   }) {
     return RawValuesInsertable({
       if (walletId != null) 'wallet_id': walletId,
+      if (network != null) 'network': network,
       if (fingerprint != null) 'fingerprint': fingerprint,
       if (dbPath != null) 'db_path': dbPath,
       if (asp != null) 'asp': asp,
@@ -912,6 +958,7 @@ class BarkWalletsCompanion extends UpdateCompanion<BarkWallet> {
 
   BarkWalletsCompanion copyWith({
     Value<int>? walletId,
+    Value<String>? network,
     Value<String>? fingerprint,
     Value<String>? dbPath,
     Value<String>? asp,
@@ -921,6 +968,7 @@ class BarkWalletsCompanion extends UpdateCompanion<BarkWallet> {
   }) {
     return BarkWalletsCompanion(
       walletId: walletId ?? this.walletId,
+      network: network ?? this.network,
       fingerprint: fingerprint ?? this.fingerprint,
       dbPath: dbPath ?? this.dbPath,
       asp: asp ?? this.asp,
@@ -936,6 +984,9 @@ class BarkWalletsCompanion extends UpdateCompanion<BarkWallet> {
     final map = <String, Expression>{};
     if (walletId.present) {
       map['wallet_id'] = Variable<int>(walletId.value);
+    }
+    if (network.present) {
+      map['network'] = Variable<String>(network.value);
     }
     if (fingerprint.present) {
       map['fingerprint'] = Variable<String>(fingerprint.value);
@@ -964,6 +1015,7 @@ class BarkWalletsCompanion extends UpdateCompanion<BarkWallet> {
   String toString() {
     return (StringBuffer('BarkWalletsCompanion(')
           ..write('walletId: $walletId, ')
+          ..write('network: $network, ')
           ..write('fingerprint: $fingerprint, ')
           ..write('dbPath: $dbPath, ')
           ..write('asp: $asp, ')
@@ -1688,6 +1740,7 @@ typedef $$WalletsTableProcessedTableManager =
 typedef $$BarkWalletsTableCreateCompanionBuilder =
     BarkWalletsCompanion Function({
       Value<int> walletId,
+      required String network,
       required String fingerprint,
       required String dbPath,
       required String asp,
@@ -1698,6 +1751,7 @@ typedef $$BarkWalletsTableCreateCompanionBuilder =
 typedef $$BarkWalletsTableUpdateCompanionBuilder =
     BarkWalletsCompanion Function({
       Value<int> walletId,
+      Value<String> network,
       Value<String> fingerprint,
       Value<String> dbPath,
       Value<String> asp,
@@ -1739,6 +1793,11 @@ class $$BarkWalletsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnFilters<String> get network => $composableBuilder(
+    column: $table.network,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get fingerprint => $composableBuilder(
     column: $table.fingerprint,
     builder: (column) => ColumnFilters(column),
@@ -1802,6 +1861,11 @@ class $$BarkWalletsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<String> get network => $composableBuilder(
+    column: $table.network,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get fingerprint => $composableBuilder(
     column: $table.fingerprint,
     builder: (column) => ColumnOrderings(column),
@@ -1865,6 +1929,9 @@ class $$BarkWalletsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumn<String> get network =>
+      $composableBuilder(column: $table.network, builder: (column) => column);
+
   GeneratedColumn<String> get fingerprint => $composableBuilder(
     column: $table.fingerprint,
     builder: (column) => column,
@@ -1944,6 +2011,7 @@ class $$BarkWalletsTableTableManager
           updateCompanionCallback:
               ({
                 Value<int> walletId = const Value.absent(),
+                Value<String> network = const Value.absent(),
                 Value<String> fingerprint = const Value.absent(),
                 Value<String> dbPath = const Value.absent(),
                 Value<String> asp = const Value.absent(),
@@ -1952,6 +2020,7 @@ class $$BarkWalletsTableTableManager
                 Value<int?> htlcRecvClaimDelta = const Value.absent(),
               }) => BarkWalletsCompanion(
                 walletId: walletId,
+                network: network,
                 fingerprint: fingerprint,
                 dbPath: dbPath,
                 asp: asp,
@@ -1962,6 +2031,7 @@ class $$BarkWalletsTableTableManager
           createCompanionCallback:
               ({
                 Value<int> walletId = const Value.absent(),
+                required String network,
                 required String fingerprint,
                 required String dbPath,
                 required String asp,
@@ -1970,6 +2040,7 @@ class $$BarkWalletsTableTableManager
                 Value<int?> htlcRecvClaimDelta = const Value.absent(),
               }) => BarkWalletsCompanion.insert(
                 walletId: walletId,
+                network: network,
                 fingerprint: fingerprint,
                 dbPath: dbPath,
                 asp: asp,

@@ -1,10 +1,9 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter_app/core/application/error/failures.dart';
 import 'package:flutter_app/core/application/usecases/usecase.dart';
-import 'package:flutter_app/features/wallet/application/dtos/bark_wallet_dto.dart';
+import 'package:flutter_app/features/wallet/application/dtos/wallet_dto.dart';
 import 'package:flutter_app/features/wallet/application/ports/bitcoin_network_port.dart';
 import 'package:flutter_app/features/wallet/application/services/wallet_service.dart';
-import 'package:flutter_app/features/wallet/domain/entities/wallet_config.dart';
 
 /// Command for creating a Bark wallet
 class CreateBarkWalletCommand {
@@ -27,7 +26,7 @@ class CreateBarkWalletCommand {
 
 /// Response DTO for created Bark wallet
 class CreateBarkWalletResponse {
-  final BarkWalletDto wallet;
+  final WalletDto wallet;
 
   const CreateBarkWalletResponse({required this.wallet});
 }
@@ -70,24 +69,13 @@ class CreateBarkWallet
         return await walletResult.fold((failure) => Left(failure), (
           wallet,
         ) async {
-          final config = wallet.config;
-          if (config is! BarkWalletConfig) {
-            return const Left(
-              ServiceFailure(message: 'Invalid wallet configuration type'),
-            );
-          }
           return Right(
             CreateBarkWalletResponse(
-              wallet: BarkWalletDto(
+              wallet: WalletDto(
                 id: wallet.id,
                 name: wallet.name,
                 network: wallet.network,
                 description: wallet.description,
-                fingerprint: config.fingerprint,
-                asp: config.asp,
-                vtxoRefreshExpiryThreshold: config.vtxoRefreshExpiryThreshold,
-                vtxoExitMargin: config.vtxoExitMargin,
-                htlcRecvClaimDelta: config.htlcRecvClaimDelta,
               ),
             ),
           );

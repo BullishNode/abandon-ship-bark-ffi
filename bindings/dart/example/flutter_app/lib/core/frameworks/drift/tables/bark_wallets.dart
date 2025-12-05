@@ -7,6 +7,10 @@ class BarkWallets extends Table {
   IntColumn get walletId =>
       integer().references(Wallets, #id, onDelete: KeyAction.cascade)();
 
+  /// Bitcoin network (mainnet, testnet3, testnet4, signet) - stored as string
+  /// TODO: Use enum instead of text
+  TextColumn get network => text()();
+
   /// Master key fingerprint (hex string)
   TextColumn get fingerprint => text().withLength(min: 8, max: 8)();
 
