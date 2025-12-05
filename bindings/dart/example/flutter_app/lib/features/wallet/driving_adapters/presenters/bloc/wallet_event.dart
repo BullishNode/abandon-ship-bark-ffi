@@ -112,3 +112,19 @@ class GetBackup extends WalletEvent {
   @override
   List<Object> get props => [walletId];
 }
+
+/// Event to send Arkoor payment
+class SendArkoorPayment extends WalletEvent {
+  final int walletId;
+  final String arkAddress;
+  final int amountSats;
+
+  const SendArkoorPayment({
+    required this.walletId,
+    required this.arkAddress,
+    required this.amountSats,
+  });
+
+  @override
+  List<Object> get props => [walletId, arkAddress, amountSats];
+}

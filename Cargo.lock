@@ -76,7 +76,7 @@ dependencies = [
 [[package]]
 name = "ark-lib"
 version = "0.1.0-beta.4"
-source = "git+https://gitlab.com/ark-bitcoin/bark#7f625dffd598c23127f69590294ae7c397458d23"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=7f625dffd598c23127f69590294ae7c397458d23#7f625dffd598c23127f69590294ae7c397458d23"
 dependencies = [
  "bark-bitcoin-ext",
  "bitcoin",
@@ -243,7 +243,7 @@ dependencies = [
 [[package]]
 name = "bark-bitcoin-ext"
 version = "0.1.0-beta.4"
-source = "git+https://gitlab.com/ark-bitcoin/bark#7f625dffd598c23127f69590294ae7c397458d23"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=7f625dffd598c23127f69590294ae7c397458d23#7f625dffd598c23127f69590294ae7c397458d23"
 dependencies = [
  "async-trait",
  "bdk_bitcoind_rpc",
@@ -272,6 +272,7 @@ dependencies = [
  "lightning-invoice",
  "lnurl-rs",
  "once_cell",
+ "rusqlite",
  "serde_json",
  "thiserror",
  "tokio",
@@ -282,7 +283,7 @@ dependencies = [
 [[package]]
 name = "bark-server-rpc"
 version = "0.1.0-beta.4"
-source = "git+https://gitlab.com/ark-bitcoin/bark#7f625dffd598c23127f69590294ae7c397458d23"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=7f625dffd598c23127f69590294ae7c397458d23#7f625dffd598c23127f69590294ae7c397458d23"
 dependencies = [
  "ark-lib",
  "bitcoin",
@@ -299,7 +300,7 @@ dependencies = [
 [[package]]
 name = "bark-wallet"
 version = "0.1.0-beta.4"
-source = "git+https://gitlab.com/ark-bitcoin/bark#7f625dffd598c23127f69590294ae7c397458d23"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=7f625dffd598c23127f69590294ae7c397458d23#7f625dffd598c23127f69590294ae7c397458d23"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -1616,6 +1617,7 @@ version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c10584274047cb335c23d3e61bcef8e323adae7c5c8c760540f73610177fc3f"
 dependencies = [
+ "cc",
  "pkg-config",
  "vcpkg",
 ]

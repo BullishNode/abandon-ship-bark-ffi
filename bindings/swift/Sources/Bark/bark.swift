@@ -644,7 +644,7 @@ public protocol WalletProtocol: AnyObject, Sendable {
      */
     func refreshVtxos(vtxoIds: [String]) throws  -> String?
     
-    func sendArkoorPayment(arkAddress: String, amountSats: UInt64) throws 
+    func sendArkoorPayment(arkAddress: String, amountSats: UInt64) throws  -> String
     
     /**
      * Send an onchain payment during a round
@@ -982,13 +982,14 @@ open func refreshVtxos(vtxoIds: [String])throws  -> String?  {
 })
 }
     
-open func sendArkoorPayment(arkAddress: String, amountSats: UInt64)throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+open func sendArkoorPayment(arkAddress: String, amountSats: UInt64)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_send_arkoor_payment(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(arkAddress),
         FfiConverterUInt64.lower(amountSats),$0
     )
-}
+})
 }
     
     /**
@@ -2932,7 +2933,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_method_wallet_refresh_vtxos() != 720) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_wallet_send_arkoor_payment() != 24856) {
+    if (uniffi_bark_ffi_checksum_method_wallet_send_arkoor_payment() != 8472) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_send_round_onchain_payment() != 21156) {

@@ -3,6 +3,7 @@ import 'package:flutter_app/core/application/error/failures.dart';
 import 'package:flutter_app/features/wallet/domain/entities/wallet_config_entity.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/bark_balance_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/new_wallet_config_vo.dart';
+import 'package:flutter_app/features/wallet/domain/value_objects/send_payment_request_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/transaction_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/vtxo_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/wallet_backup_vo.dart';
@@ -51,5 +52,11 @@ abstract class WalletPort {
   /// Get wallet backup data
   Future<Either<Failure, WalletBackupVO>> getBackup({
     required WalletConfigEntity config,
+  });
+
+  /// Confirm and send payment
+  Future<Either<Failure, String>> confirmPayment({
+    required WalletConfigEntity config,
+    required SendPaymentRequestVO request,
   });
 }

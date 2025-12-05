@@ -105,7 +105,7 @@ print('Pending exit: ${balance.pendingExitSats} sats');
 
 ```dart
 // Generate Ark address
-final arkAddress = wallet.newAddress();
+final arkAddress = await wallet.newAddress();
 print('Send funds to: $arkAddress');
 
 // Or create a Lightning invoice

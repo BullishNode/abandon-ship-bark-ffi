@@ -349,7 +349,12 @@ class _WalletViewState extends State<WalletView>
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: hasWallets ? () {} : null,
+                          onPressed: hasWallets
+                              ? () => context.pushNamed(
+                                  WalletRoute.send.name,
+                                  extra: state.wallets,
+                                )
+                              : null,
                           icon: const Icon(Icons.arrow_upward, size: 20),
                           label: const Text('Send'),
                           style: ElevatedButton.styleFrom(

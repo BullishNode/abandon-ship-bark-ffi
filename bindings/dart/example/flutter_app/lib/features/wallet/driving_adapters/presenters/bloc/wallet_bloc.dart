@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_app/core/application/usecases/usecase.dart';
+import 'package:flutter_app/features/wallet/application/dtos/send_payment_dto.dart';
 import 'package:flutter_app/features/wallet/application/dtos/wallet_backup_dto.dart';
 import 'package:flutter_app/features/wallet/application/usecases/create_bark_wallet.dart';
 import 'package:flutter_app/features/wallet/application/usecases/generate_payment_request.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_app/features/wallet/application/usecases/get_wallet_back
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_balance.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_transactions.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_vtxos.dart';
+import 'package:flutter_app/features/wallet/application/usecases/send_arkoor_payment.dart';
 import 'package:flutter_app/features/wallet/application/usecases/sync_wallet.dart';
 import 'package:flutter_app/features/wallet/driving_adapters/presenters/bloc/wallet_event.dart'
     as events;
@@ -30,6 +32,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
   final GetWalletVtxos _getWalletVtxos;
   final GetWalletTransactions _getWalletTransactions;
   final GetWalletBackup _getWalletBackup;
+  final SendArkoorPayment _sendArkoorPayment;
 
   WalletBloc({
     required GetAllWallets getAllWallets,
@@ -40,6 +43,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
     required GetWalletVtxos getWalletVtxos,
     required GetWalletTransactions getWalletTransactions,
     required GetWalletBackup getWalletBackup,
+    required SendArkoorPayment sendArkoorPayment,
   }) : _getAllWallets = getAllWallets,
        _createBarkWallet = createBarkWallet,
        _getWalletBalance = getWalletBalance,
@@ -48,6 +52,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
        _getWalletVtxos = getWalletVtxos,
        _getWalletTransactions = getWalletTransactions,
        _getWalletBackup = getWalletBackup,
+       _sendArkoorPayment = sendArkoorPayment,
        super(const WalletInitial()) {
     on<events.LoadWallets>(_onLoadWallets);
     on<events.CreateWallet>(_onCreateWallet);
@@ -58,6 +63,7 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
     on<events.LoadVtxos>(_onLoadVtxos);
     on<events.LoadTransactions>(_onLoadTransactions);
     on<events.GetBackup>(_onGetBackup);
+    on<events.SendArkoorPayment>(_onSendArkoorPayment);
   }
 
   Future<void> _onLoadWallets(
@@ -357,6 +363,37 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
           walletId: event.walletId,
           backup: backupVM,
         ));
+      },
+    );
+  }
+
+  Future<void> _onSendArkoorPayment(
+    events.SendArkoorPayment event,
+    Emitter<WalletState> emit,
+  ) async {
+    emit(SendingPayment(event.walletId));
+
+    final result = await _sendArkoorPayment(
+      SendArkoorPaymentCommand(
+        walletId: event.walletId,
+        arkAddress: event.arkAddress,
+        amountSats: event.amountSats,
+      ),
+    );
+
+    result.fold(
+      (failure) => emit(WalletError(failure.message)),
+      (response) {
+        final dto = response.result;
+        if (dto is ArkoorSendPaymentDto) {
+          emit(PaymentSent(
+            walletId: event.walletId,
+            txid: dto.txid,
+            amountSats: dto.amountSats,
+          ));
+        } else {
+          emit(WalletError('Unsupported payment result type'));
+        }
       },
     );
   }

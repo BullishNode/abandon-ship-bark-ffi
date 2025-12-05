@@ -6,6 +6,7 @@ import 'package:flutter_app/features/wallet/application/ports/mnemonic_repositor
 import 'package:flutter_app/features/wallet/domain/entities/wallet_entity.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/bark_balance_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/new_wallet_config_vo.dart';
+import 'package:flutter_app/features/wallet/domain/value_objects/send_payment_request_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/transaction_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/vtxo_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/wallet_backup_vo.dart';
@@ -275,6 +276,40 @@ class WalletService {
       });
     } catch (e) {
       return Left(ServiceFailure(message: 'Failed to get wallet backup: $e'));
+    }
+  }
+
+  Future<Either<Failure, String>> confirmPayment({
+    required int walletId,
+    required SendPaymentRequestVO request,
+  }) async {
+    try {
+      final walletResult = await _walletsRepository.getWalletById(walletId);
+
+      return await walletResult.fold((failure) => Left(failure), (
+        wallet,
+      ) async {
+        final walletPort = _walletPortRegistry.getPort(wallet.type);
+        final configResult = await walletPort.loadWalletConfig(
+          walletId: walletId,
+        );
+        return await configResult.fold((failure) => Left(failure), (
+          config,
+        ) async {
+          // Get Esplora endpoint for the network
+          final esploraResult = await _esploraEndpointPort
+              .getEndpointUrlForNetwork(config.network);
+
+          return await esploraResult.fold((failure) => Left(failure), (
+            esploraAddress,
+          ) async {
+            config.setEsploraAddresses([esploraAddress]);
+            return await walletPort.confirmPayment(config: config, request: request);
+          });
+        });
+      });
+    } catch (e) {
+      return Left(ServiceFailure(message: 'Failed to confirm payment: $e'));
     }
   }
 }

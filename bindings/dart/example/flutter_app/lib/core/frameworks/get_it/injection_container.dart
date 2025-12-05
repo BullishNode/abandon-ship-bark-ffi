@@ -28,6 +28,7 @@ import 'package:flutter_app/features/wallet/application/usecases/get_wallet_back
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_balance.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_transactions.dart';
 import 'package:flutter_app/features/wallet/application/usecases/get_wallet_vtxos.dart';
+import 'package:flutter_app/features/wallet/application/usecases/send_arkoor_payment.dart';
 import 'package:flutter_app/features/wallet/application/usecases/sync_wallet.dart';
 import 'package:flutter_app/features/wallet/application/ports/mnemonic_repository_port.dart';
 import 'package:flutter_app/features/wallet/driven_adapters/wallets/bark_wallet.dart';
@@ -150,6 +151,7 @@ Future<void> _initUseCases() async {
   sl.registerLazySingleton(() => GetWalletVtxos(sl()));
   sl.registerLazySingleton(() => GetWalletTransactions(sl()));
   sl.registerLazySingleton(() => GetWalletBackup(sl()));
+  sl.registerLazySingleton(() => SendArkoorPayment(walletService: sl()));
 }
 
 // Facades (Driving adapters exposing use cases)
@@ -188,6 +190,7 @@ Future<void> _initDrivingAdapters() async {
       getWalletVtxos: sl(),
       getWalletTransactions: sl(),
       getWalletBackup: sl(),
+      sendArkoorPayment: sl(),
     ),
   );
 }

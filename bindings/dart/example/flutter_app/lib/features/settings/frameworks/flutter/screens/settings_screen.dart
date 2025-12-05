@@ -179,66 +179,68 @@ class _NetworkTile extends StatelessWidget {
       useRootNavigator: true,
       context: context,
       builder: (sheetContext) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Select Network',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.white : AppColors.black,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Text(
-                  'Only Signet is supported at this time',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDark ? AppColors.gray400 : AppColors.gray600,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              ...availableNetworks.map((network) {
-                final isSelected = network == currentNetwork;
-                final isSignet = network.toLowerCase() == 'signet';
-                return ListTile(
-                  enabled: isSignet,
-                  title: Text(
-                    network.toUpperCase(),
+        return SafeArea(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Select Network',
                     style: TextStyle(
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                      color: isSignet
-                          ? (isDark ? AppColors.white : AppColors.black)
-                          : (isDark ? AppColors.gray700 : AppColors.gray400),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? AppColors.white : AppColors.black,
                     ),
                   ),
-                  trailing: isSelected
-                      ? const Icon(Icons.check, color: AppColors.bitcoin)
-                      : null,
-                  onTap: isSignet
-                      ? () {
-                          context.read<SettingsBloc>().add(
-                            ChangeNetwork(network),
-                          );
-                          Navigator.pop(sheetContext);
-                        }
-                      : null,
-                );
-              }),
-            ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Text(
+                    'Only Signet is supported at this time',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? AppColors.gray400 : AppColors.gray600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                ...availableNetworks.map((network) {
+                  final isSelected = network == currentNetwork;
+                  final isSignet = network.toLowerCase() == 'signet';
+                  return ListTile(
+                    enabled: isSignet,
+                    title: Text(
+                      network.toUpperCase(),
+                      style: TextStyle(
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                        color: isSignet
+                            ? (isDark ? AppColors.white : AppColors.black)
+                            : (isDark ? AppColors.gray700 : AppColors.gray400),
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? const Icon(Icons.check, color: AppColors.bitcoin)
+                        : null,
+                    onTap: isSignet
+                        ? () {
+                            context.read<SettingsBloc>().add(
+                              ChangeNetwork(network),
+                            );
+                            Navigator.pop(sheetContext);
+                          }
+                        : null,
+                  );
+                }),
+              ],
+            ),
           ),
         );
       },

@@ -367,7 +367,7 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     [Throws=BarkError]
-    void send_arkoor_payment(string ark_address, u64 amount_sats);
+    string send_arkoor_payment(string ark_address, u64 amount_sats);
 
     // ------------------------------------------------------------------------
     // Extended Address Management

@@ -50,7 +50,7 @@ Future<void> example() async {
     wallet = await Wallet.open(mnemonic, config, dataDir.path);
   }
 
-  final address = wallet.newAddress();
+  final address = await wallet.newAddress();
   print("📬 New Ark address: $address");
 
   final props = wallet.properties();

@@ -10,6 +10,7 @@ import 'package:flutter_app/features/wallet/application/ports/wallet_port.dart';
 import 'package:flutter_app/features/wallet/domain/entities/wallet_config_entity.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/bark_balance_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/new_wallet_config_vo.dart';
+import 'package:flutter_app/features/wallet/domain/value_objects/send_payment_request_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/transaction_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/vtxo_vo.dart';
 import 'package:flutter_app/features/wallet/domain/value_objects/wallet_backup_vo.dart';
@@ -257,6 +258,26 @@ class BarkWallet implements WalletPort {
         ServiceFailure(message: 'Failed to retrieve wallet backup: $e'),
       );
     }
+  }
+
+  @override
+  Future<Either<Failure, String>> confirmPayment({
+    required WalletConfigEntity config,
+    required SendPaymentRequestVO request,
+  }) async {
+    return _executeWithEsploraRetry<String>(
+      config: config,
+      operation: (barkWallet) async {
+        switch (request) {
+          case ArkoorSendPaymentRequestVO():
+            final txid = await barkWallet.sendArkoorPayment(
+              request.arkAddress,
+              request.amountSats,
+            );
+            return txid;
+        }
+      },
+    );
   }
 
   Future<Either<Failure, BarkWalletConfigEntity>> _configureWallet({

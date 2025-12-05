@@ -138,3 +138,29 @@ class BackupLoaded extends WalletState {
   @override
   List<Object> get props => [walletId, backup];
 }
+
+/// Sending payment state
+class SendingPayment extends WalletState {
+  final int walletId;
+
+  const SendingPayment(this.walletId);
+
+  @override
+  List<Object> get props => [walletId];
+}
+
+/// Payment sent successfully
+class PaymentSent extends WalletState {
+  final int walletId;
+  final String txid;
+  final int amountSats;
+
+  const PaymentSent({
+    required this.walletId,
+    required this.txid,
+    required this.amountSats,
+  });
+
+  @override
+  List<Object> get props => [walletId, txid, amountSats];
+}

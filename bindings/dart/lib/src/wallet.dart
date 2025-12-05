@@ -124,8 +124,8 @@ class Wallet {
   // ------------------------------------------------------------------------
 
   /// Generate a new Ark address for receiving payments.
-  String newAddress() {
-    return _inner.newAddress();
+  Future<String> newAddress() {
+    return Isolate.run(() => _inner.newAddress());
   }
 
   // ------------------------------------------------------------------------
@@ -242,7 +242,7 @@ class Wallet {
   /// Parameters:
   /// - `arkAddress`: The recipient's Ark address
   /// - `amountSats`: The amount to send in satoshis
-  Future<void> sendArkoorPayment(String arkAddress, int amountSats) async {
+  Future<String> sendArkoorPayment(String arkAddress, int amountSats) async {
     return Isolate.run(() => _inner.sendArkoorPayment(arkAddress, amountSats));
   }
 
