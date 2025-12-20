@@ -1,0 +1,21 @@
+# JitPack configuration for building Bark Kotlin bindings
+# See: https://jitpack.io/docs/BUILDING/
+
+jdk:
+  - openjdk17
+
+before_install:
+  # Install Rust toolchain
+  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  - source $HOME/.cargo/env
+  # Add Android and JVM targets
+  - rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+  - rustup target add x86_64-unknown-linux-gnu
+  # Navigate to Kotlin bindings directory
+  - cd bindings/kotlin
+
+install:
+  # Run the build script to compile Rust for both Android and JVM, generate bindings
+  - ./build-kotlin.sh
+  # Build both modules (already done by build-kotlin.sh, but explicit for JitPack)
+  - ./gradlew :bark-android:assembleRelease :bark-jvm:jar

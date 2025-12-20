@@ -2346,23 +2346,23 @@ public enum BarkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
 
     
     
-    case Network(message: String
+    case Network(errorMessage: String
     )
-    case Database(message: String
+    case Database(errorMessage: String
     )
-    case InvalidMnemonic(message: String
+    case InvalidMnemonic(errorMessage: String
     )
-    case InvalidAddress(message: String
+    case InvalidAddress(errorMessage: String
     )
-    case InvalidInvoice(message: String
+    case InvalidInvoice(errorMessage: String
     )
-    case InsufficientFunds(message: String
+    case InsufficientFunds(errorMessage: String
     )
-    case NotFound(message: String
+    case NotFound(errorMessage: String
     )
-    case ServerConnection(message: String
+    case ServerConnection(errorMessage: String
     )
-    case Internal(message: String
+    case Internal(errorMessage: String
     )
 
     
@@ -2392,31 +2392,31 @@ public struct FfiConverterTypeBarkError: FfiConverterRustBuffer {
 
         
         case 1: return .Network(
-            message: try FfiConverterString.read(from: &buf)
+            errorMessage: try FfiConverterString.read(from: &buf)
             )
         case 2: return .Database(
-            message: try FfiConverterString.read(from: &buf)
+            errorMessage: try FfiConverterString.read(from: &buf)
             )
         case 3: return .InvalidMnemonic(
-            message: try FfiConverterString.read(from: &buf)
+            errorMessage: try FfiConverterString.read(from: &buf)
             )
         case 4: return .InvalidAddress(
-            message: try FfiConverterString.read(from: &buf)
+            errorMessage: try FfiConverterString.read(from: &buf)
             )
         case 5: return .InvalidInvoice(
-            message: try FfiConverterString.read(from: &buf)
+            errorMessage: try FfiConverterString.read(from: &buf)
             )
         case 6: return .InsufficientFunds(
-            message: try FfiConverterString.read(from: &buf)
+            errorMessage: try FfiConverterString.read(from: &buf)
             )
         case 7: return .NotFound(
-            message: try FfiConverterString.read(from: &buf)
+            errorMessage: try FfiConverterString.read(from: &buf)
             )
         case 8: return .ServerConnection(
-            message: try FfiConverterString.read(from: &buf)
+            errorMessage: try FfiConverterString.read(from: &buf)
             )
         case 9: return .Internal(
-            message: try FfiConverterString.read(from: &buf)
+            errorMessage: try FfiConverterString.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -2430,49 +2430,49 @@ public struct FfiConverterTypeBarkError: FfiConverterRustBuffer {
 
         
         
-        case let .Network(message):
+        case let .Network(errorMessage):
             writeInt(&buf, Int32(1))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .Database(message):
+        case let .Database(errorMessage):
             writeInt(&buf, Int32(2))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .InvalidMnemonic(message):
+        case let .InvalidMnemonic(errorMessage):
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .InvalidAddress(message):
+        case let .InvalidAddress(errorMessage):
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .InvalidInvoice(message):
+        case let .InvalidInvoice(errorMessage):
             writeInt(&buf, Int32(5))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .InsufficientFunds(message):
+        case let .InsufficientFunds(errorMessage):
             writeInt(&buf, Int32(6))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .NotFound(message):
+        case let .NotFound(errorMessage):
             writeInt(&buf, Int32(7))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .ServerConnection(message):
+        case let .ServerConnection(errorMessage):
             writeInt(&buf, Int32(8))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .Internal(message):
+        case let .Internal(errorMessage):
             writeInt(&buf, Int32(9))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(errorMessage, into: &buf)
             
         }
     }

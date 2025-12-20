@@ -8,7 +8,7 @@ use crate::error::BarkError;
 /// Generate a new 12-word BIP39 mnemonic
 pub fn generate_mnemonic() -> Result<String, BarkError> {
     let mnemonic = Mnemonic::generate(12).map_err(|e| BarkError::Internal {
-        message: format!("Failed to generate mnemonic: {}", e),
+        error_message: format!("Failed to generate mnemonic: {}", e),
     })?;
     Ok(mnemonic.to_string())
 }

@@ -25,15 +25,15 @@ enum Network {
 /// Error types that can occur when using the Bark wallet
 [Error]
 interface BarkError {
-    Network(string message);
-    Database(string message);
-    InvalidMnemonic(string message);
-    InvalidAddress(string message);
-    InvalidInvoice(string message);
-    InsufficientFunds(string message);
-    NotFound(string message);
-    ServerConnection(string message);
-    Internal(string message);
+    Network(string error_message);
+    Database(string error_message);
+    InvalidMnemonic(string error_message);
+    InvalidAddress(string error_message);
+    InvalidInvoice(string error_message);
+    InsufficientFunds(string error_message);
+    NotFound(string error_message);
+    ServerConnection(string error_message);
+    Internal(string error_message);
 };
 
 // ============================================================================

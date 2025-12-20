@@ -41,7 +41,7 @@ impl Wallet {
 
         let mnemonic =
             Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
-                message: e.to_string(),
+                error_message: e.to_string(),
             })?;
 
         let datadir = PathBuf::from(datadir);
@@ -74,7 +74,7 @@ impl Wallet {
 
         let mnemonic =
             Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
-                message: e.to_string(),
+                error_message: e.to_string(),
             })?;
 
         let datadir = PathBuf::from(datadir);
@@ -189,7 +189,7 @@ impl Wallet {
             let addr = bitcoin_address
                 .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
                 .map_err(|e| BarkError::InvalidAddress {
-                    message: e.to_string(),
+                    error_message: e.to_string(),
                 })?
                 .assume_checked();
 
@@ -214,7 +214,7 @@ impl Wallet {
         TOKIO_RT.block_on(async {
             let invoice: Bolt11Invoice =
                 invoice.parse().map_err(|e| BarkError::InvalidInvoice {
-                    message: format!("invalid invoice: {}", e),
+                    error_message: format!("invalid invoice: {}", e),
                 })?;
 
             let amount = amount_sats.map(bitcoin::Amount::from_sat);
@@ -243,7 +243,7 @@ impl Wallet {
                 lightning_address
                     .parse()
                     .map_err(|e| BarkError::InvalidAddress {
-                        message: format!("invalid lightning address: {}", e),
+                        error_message: format!("invalid lightning address: {}", e),
                     })?;
 
             let amount = bitcoin::Amount::from_sat(amount_sats);
@@ -298,7 +298,7 @@ impl Wallet {
         TOKIO_RT.block_on(async {
             let addr: ark_lib::Address =
                 ark_address.parse().map_err(|e| BarkError::InvalidAddress {
-                    message: format!("invalid ark address: {}", e),
+                    error_message: format!("invalid ark address: {}", e),
                 })?;
 
             let amount = bitcoin::Amount::from_sat(amount_sats);
@@ -357,7 +357,7 @@ impl Wallet {
     /// Get a specific VTXO by ID
     pub fn get_vtxo_by_id(&self, vtxo_id: String) -> Result<Vtxo, BarkError> {
         let id = vtxo_id.parse().map_err(|e| BarkError::InvalidAddress {
-            message: format!("invalid vtxo id: {}", e),
+            error_message: format!("invalid vtxo id: {}", e),
         })?;
         Ok(self.inner.get_vtxo_by_id(id)?.into())
     }
@@ -422,7 +422,7 @@ impl Wallet {
             let addr = bitcoin_address
                 .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
                 .map_err(|e| BarkError::InvalidAddress {
-                    message: e.to_string(),
+                    error_message: e.to_string(),
                 })?
                 .assume_checked();
 
@@ -431,7 +431,7 @@ impl Wallet {
                 .map(|id| {
                     id.parse::<ark_lib::VtxoId>()
                         .map_err(|e| BarkError::InvalidAddress {
-                            message: format!("invalid vtxo id: {}", e),
+                            error_message: format!("invalid vtxo id: {}", e),
                         })
                 })
                 .collect();
@@ -453,7 +453,7 @@ impl Wallet {
                 .map(|id| {
                     id.parse::<ark_lib::VtxoId>()
                         .map_err(|e| BarkError::InvalidAddress {
-                            message: format!("invalid vtxo id: {}", e),
+                            error_message: format!("invalid vtxo id: {}", e),
                         })
                 })
                 .collect();
@@ -514,7 +514,7 @@ impl Wallet {
             let addr = address
                 .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
                 .map_err(|e| BarkError::InvalidAddress {
-                    message: e.to_string(),
+                    error_message: e.to_string(),
                 })?
                 .assume_checked();
 
