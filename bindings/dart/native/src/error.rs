@@ -3,46 +3,46 @@ use thiserror::Error;
 /// Error types that can occur when using the Bark wallet FFI
 #[derive(Debug, Error)]
 pub enum BarkError {
-    #[error("Network error: {message}")]
-    Network { message: String },
+    #[error("Network error: {error_message}")]
+    Network { error_message: String },
 
-    #[error("Database error: {message}")]
-    Database { message: String },
+    #[error("Database error: {error_message}")]
+    Database { error_message: String },
 
-    #[error("Invalid mnemonic: {message}")]
-    InvalidMnemonic { message: String },
+    #[error("Invalid mnemonic: {error_message}")]
+    InvalidMnemonic { error_message: String },
 
-    #[error("Invalid address: {message}")]
-    InvalidAddress { message: String },
+    #[error("Invalid address: {error_message}")]
+    InvalidAddress { error_message: String },
 
-    #[error("Invalid invoice: {message}")]
-    InvalidInvoice { message: String },
+    #[error("Invalid invoice: {error_message}")]
+    InvalidInvoice { error_message: String },
 
-    #[error("Insufficient funds: {message}")]
-    InsufficientFunds { message: String },
+    #[error("Insufficient funds: {error_message}")]
+    InsufficientFunds { error_message: String },
 
-    #[error("Not found: {message}")]
-    NotFound { message: String },
+    #[error("Not found: {error_message}")]
+    NotFound { error_message: String },
 
-    #[error("Server connection error: {message}")]
-    ServerConnection { message: String },
+    #[error("Server connection error: {error_message}")]
+    ServerConnection { error_message: String },
 
-    #[error("Internal error: {message}")]
-    Internal { message: String },
+    #[error("Internal error: {error_message}")]
+    Internal { error_message: String },
 }
 
 impl BarkError {
     pub fn message(&self) -> String {
         match self {
-            BarkError::Network { message } => message.clone(),
-            BarkError::Database { message } => message.clone(),
-            BarkError::InvalidMnemonic { message } => message.clone(),
-            BarkError::InvalidAddress { message } => message.clone(),
-            BarkError::InvalidInvoice { message } => message.clone(),
-            BarkError::InsufficientFunds { message } => message.clone(),
-            BarkError::NotFound { message } => message.clone(),
-            BarkError::ServerConnection { message } => message.clone(),
-            BarkError::Internal { message } => message.clone(),
+            BarkError::Network { error_message } => error_message.clone(),
+            BarkError::Database { error_message } => error_message.clone(),
+            BarkError::InvalidMnemonic { error_message } => error_message.clone(),
+            BarkError::InvalidAddress { error_message } => error_message.clone(),
+            BarkError::InvalidInvoice { error_message } => error_message.clone(),
+            BarkError::InsufficientFunds { error_message } => error_message.clone(),
+            BarkError::NotFound { error_message } => error_message.clone(),
+            BarkError::ServerConnection { error_message } => error_message.clone(),
+            BarkError::Internal { error_message } => error_message.clone(),
         }
     }
 }
@@ -53,29 +53,29 @@ impl From<anyhow::Error> for BarkError {
 
         // Try to categorize based on error message content
         if msg.contains("mnemonic") || msg.contains("Mnemonic") {
-            BarkError::InvalidMnemonic { message: msg }
+            BarkError::InvalidMnemonic { error_message: msg }
         } else if msg.contains("address") && msg.contains("invalid") {
-            BarkError::InvalidAddress { message: msg }
+            BarkError::InvalidAddress { error_message: msg }
         } else if msg.contains("invoice") && (msg.contains("invalid") || msg.contains("parse")) {
-            BarkError::InvalidInvoice { message: msg }
+            BarkError::InvalidInvoice { error_message: msg }
         } else if msg.contains("insufficient")
             || msg.contains("balance")
             || msg.contains("not enough")
         {
-            BarkError::InsufficientFunds { message: msg }
+            BarkError::InsufficientFunds { error_message: msg }
         } else if msg.contains("not found")
             || msg.contains("doesn't exist")
             || msg.contains("cannot find")
         {
-            BarkError::NotFound { message: msg }
+            BarkError::NotFound { error_message: msg }
         } else if msg.contains("server") || msg.contains("connection") || msg.contains("connect") {
-            BarkError::ServerConnection { message: msg }
+            BarkError::ServerConnection { error_message: msg }
         } else if msg.contains("network") || msg.contains("Network") {
-            BarkError::Network { message: msg }
+            BarkError::Network { error_message: msg }
         } else if msg.contains("database") || msg.contains("sqlite") || msg.contains("SQL") {
-            BarkError::Database { message: msg }
+            BarkError::Database { error_message: msg }
         } else {
-            BarkError::Internal { message: msg }
+            BarkError::Internal { error_message: msg }
         }
     }
 }

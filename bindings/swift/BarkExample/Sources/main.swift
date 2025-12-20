@@ -59,15 +59,15 @@ do {
 } catch let error as BarkError {
     print("❌ Bark Error:")
     switch error {
-    case .Network(let message): print("   Network: \(message)")
-    case .Database(let message): print("   Database: \(message)")
-    case .InvalidMnemonic(let message): print("   Invalid mnemonic: \(message)")
-    case .InvalidAddress(let message): print("   Invalid address: \(message)")
-    case .InvalidInvoice(let message): print("   Invalid invoice: \(message)")
-    case .InsufficientFunds(let message): print("   Insufficient funds: \(message)")
-    case .NotFound(let message): print("   Not found: \(message)")
-    case .ServerConnection(let message): print("   Server connection: \(message)")
-    case .Internal(let message): print("   Internal: \(message)")
+    case .Network(let errorMessage): print("   Network: \(errorMessage)")
+    case .Database(let errorMessage): print("   Database: \(errorMessage)")
+    case .InvalidMnemonic(let errorMessage): print("   Invalid mnemonic: \(errorMessage)")
+    case .InvalidAddress(let errorMessage): print("   Invalid address: \(errorMessage)")
+    case .InvalidInvoice(let errorMessage): print("   Invalid invoice: \(errorMessage)")
+    case .InsufficientFunds(let errorMessage): print("   Insufficient funds: \(errorMessage)")
+    case .NotFound(let errorMessage): print("   Not found: \(errorMessage)")
+    case .ServerConnection(let errorMessage): print("   Server connection: \(errorMessage)")
+    case .Internal(let errorMessage): print("   Internal: \(errorMessage)")
     }
 } catch {
     print("❌ Error: \(error)")
