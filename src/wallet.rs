@@ -1,8 +1,7 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Context;
-use bark::{SqliteClient, Wallet as InnerWallet};
+use bark::Wallet as InnerWallet;
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;
 use lightning_invoice::Bolt11Invoice;
@@ -44,13 +43,9 @@ impl Wallet {
                 error_message: e.to_string(),
             })?;
 
-        let datadir = PathBuf::from(datadir);
-        let db_path = datadir.join("bark.sqlite");
-
-        let db = Arc::new(
-            SqliteClient::open(&db_path)
-                .with_context(|| format!("opening sqlite at {}", db_path.display()))?,
-        );
+        // Use shared database cache
+        let db = crate::db::get_or_open_db(&datadir)
+            .with_context(|| format!("opening sqlite in {}", datadir))?;
 
         let inner = InnerWallet::create(&mnemonic, network, cfg, db, force_rescan)
             .await
@@ -77,13 +72,9 @@ impl Wallet {
                 error_message: e.to_string(),
             })?;
 
-        let datadir = PathBuf::from(datadir);
-        let db_path = datadir.join("bark.sqlite");
-
-        let db = Arc::new(
-            SqliteClient::open(&db_path)
-                .with_context(|| format!("opening sqlite at {}", db_path.display()))?,
-        );
+        // Use shared database cache
+        let db = crate::db::get_or_open_db(&datadir)
+            .with_context(|| format!("opening sqlite in {}", datadir))?;
 
         let inner = InnerWallet::open(&mnemonic, db, cfg)
             .await
@@ -97,6 +88,88 @@ impl Wallet {
         }
 
         Ok(inner)
+    }
+
+    /// Create a new Bark wallet WITH onchain capabilities
+    pub fn create_with_onchain(
+        mnemonic: String,
+        config: Config,
+        datadir: String,
+        onchain_wallet: Arc<crate::OnchainWallet>,
+        force_rescan: bool,
+    ) -> Result<Self, BarkError> {
+        TOKIO_RT.block_on(async {
+            let network: BtcNetwork = config.network.into();
+            let cfg: bark::Config = config.into();
+
+            let mnemonic = Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
+                error_message: e.to_string(),
+            })?;
+
+            // Use shared database cache
+            let db = crate::db::get_or_open_db(&datadir)
+                .with_context(|| format!("opening sqlite in {}", datadir))?;
+
+            // Get reference to onchain wallet
+            let onchain_inner = onchain_wallet.inner().lock().await;
+
+            eprintln!("[CREATE] Creating Bark wallet with onchain capabilities...");
+
+            let inner = InnerWallet::create_with_onchain(
+                &mnemonic,
+                network,
+                cfg,
+                db,
+                &*onchain_inner,
+                force_rescan,
+            )
+            .await
+            .map_err(BarkError::from)?;
+
+            eprintln!("[CREATE] ✅ Bark wallet with onchain created successfully");
+
+            Ok(Self { inner })
+        })
+    }
+
+    /// Open an existing Bark wallet WITH onchain capabilities
+    pub fn open_with_onchain(
+        mnemonic: String,
+        config: Config,
+        datadir: String,
+        onchain_wallet: Arc<crate::OnchainWallet>,
+    ) -> Result<Self, BarkError> {
+        TOKIO_RT.block_on(async {
+            let cfg: bark::Config = config.into();
+
+            let mnemonic = Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
+                error_message: e.to_string(),
+            })?;
+
+            // Use shared database cache
+            let db = crate::db::get_or_open_db(&datadir)
+                .with_context(|| format!("opening sqlite in {}", datadir))?;
+
+            // Get reference to onchain wallet
+            let onchain_inner = onchain_wallet.inner().lock().await;
+
+            eprintln!("[OPEN] Opening Bark wallet with onchain capabilities...");
+
+            let inner = InnerWallet::open_with_onchain(&mnemonic, db, &*onchain_inner, cfg)
+                .await
+                .map_err(BarkError::from)?;
+
+            // Check if server connection was established
+            if inner.ark_info().await.ok().flatten().is_some() {
+                eprintln!("[OPEN] ✅ Server connection established");
+            } else {
+                eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark operations will not work!");
+            }
+
+            eprintln!("[OPEN] ✅ Bark wallet with onchain opened successfully");
+
+            Ok(Self { inner })
+        })
     }
 
     // ------------------------------------------------------------------------
@@ -113,6 +186,10 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Lightweight sync with Ark server and blockchain
+    ///
+    /// Note: Bark's upstream `sync()` returns `()` and handles all errors
+    /// internally with warn!() logging. This wrapper cannot surface sync
+    /// failures to callers - they are logged internally by Bark.
     pub fn sync(&self) -> Result<(), BarkError> {
         TOKIO_RT.block_on(async {
             eprintln!("[SYNC] Starting sync...");
@@ -559,5 +636,192 @@ impl Wallet {
             fallback_fee_rate: cfg.fallback_fee_rate.map(|r| r.to_sat_per_kwu()),
             round_tx_required_confirmations: Some(cfg.round_tx_required_confirmations),
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // Boarding (requires onchain wallet)
+    // ------------------------------------------------------------------------
+
+    /// Board a specific amount from onchain wallet into Ark
+    ///
+    /// Creates a board transaction that moves funds from the onchain wallet
+    /// into the Ark. The board transaction must confirm on-chain and be
+    /// registered with the Ark server before the funds become spendable.
+    ///
+    /// # Arguments
+    ///
+    /// * `onchain_wallet` - The onchain wallet to fund the board from
+    /// * `amount_sats` - Amount to board in satoshis
+    ///
+    /// Returns information about the pending board transaction
+    pub fn board_amount(
+        &self,
+        onchain_wallet: Arc<crate::OnchainWallet>,
+        amount_sats: u64,
+    ) -> Result<crate::PendingBoard, BarkError> {
+        TOKIO_RT.block_on(async {
+            let mut onchain = onchain_wallet.inner().lock().await;
+            let amount = bitcoin::Amount::from_sat(amount_sats);
+
+            eprintln!("[BOARD] Boarding {} sats into Ark...", amount_sats);
+
+            let pb = self
+                .inner
+                .board_amount(&mut *onchain, amount)
+                .await
+                .map_err(|e| BarkError::Internal {
+                    error_message: format!("Board failed: {}", e),
+                })?;
+
+            let txid = pb.funding_tx.compute_txid();
+            let vtxo_id = pb.vtxos.first().map(|v| v.to_string()).unwrap_or_default();
+
+            eprintln!(
+                "[BOARD] ✅ Board transaction created: {} (VTXO ID: {})",
+                txid, vtxo_id
+            );
+
+            Ok(pb.into())
+        })
+    }
+
+    /// Board all funds from onchain wallet into Ark
+    ///
+    /// Creates a board transaction that moves all available funds from the
+    /// onchain wallet into the Ark. The board transaction must confirm
+    /// on-chain and be registered with the Ark server before the funds
+    /// become spendable.
+    ///
+    /// # Arguments
+    ///
+    /// * `onchain_wallet` - The onchain wallet to drain funds from
+    ///
+    /// Returns information about the pending board transaction
+    pub fn board_all(
+        &self,
+        onchain_wallet: Arc<crate::OnchainWallet>,
+    ) -> Result<crate::PendingBoard, BarkError> {
+        TOKIO_RT.block_on(async {
+            let mut onchain = onchain_wallet.inner().lock().await;
+
+            eprintln!("[BOARD] Boarding ALL funds into Ark...");
+
+            let pb = self
+                .inner
+                .board_all(&mut *onchain)
+                .await
+                .map_err(|e| BarkError::Internal {
+                    error_message: format!("Board all failed: {}", e),
+                })?;
+
+            let txid = pb.funding_tx.compute_txid();
+            let vtxo_id = pb.vtxos.first().map(|v| v.to_string()).unwrap_or_default();
+
+            eprintln!(
+                "[BOARD] ✅ Board transaction created: {} (VTXO ID: {}, amount: {} sats)",
+                txid,
+                vtxo_id,
+                pb.amount.to_sat()
+            );
+
+            Ok(pb.into())
+        })
+    }
+
+    /// Sync pending board transactions
+    ///
+    /// Checks if pending board transactions have sufficient confirmations
+    /// and attempts to register them with the Ark server. Once registered,
+    /// the boarded VTXOs become spendable.
+    ///
+    /// Call this periodically after creating board transactions.
+    pub fn sync_pending_boards(&self) -> Result<(), BarkError> {
+        TOKIO_RT.block_on(async {
+            eprintln!("[BOARD] Syncing pending boards...");
+
+            self.inner
+                .sync_pending_boards()
+                .await
+                .map_err(|e| BarkError::Internal {
+                    error_message: format!("Sync pending boards failed: {}", e),
+                })?;
+
+            eprintln!("[BOARD] ✅ Pending boards synced");
+
+            Ok(())
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    // Unilateral Exits (requires onchain wallet)
+    // ------------------------------------------------------------------------
+
+    /// Start unilateral exit for the entire wallet
+    ///
+    /// Initiates the emergency exit process for all eligible VTXOs in the
+    /// wallet. This does NOT complete the exit - you must call `sync_exits`
+    /// periodically to progress the exit state machine.
+    ///
+    /// # Arguments
+    ///
+    /// * `onchain_wallet` - The onchain wallet for building exit transactions
+    ///
+    /// Recommended to call `maintenance()` or `sync()` before starting exits.
+    pub fn start_exit_for_entire_wallet(
+        &self,
+        onchain_wallet: Arc<crate::OnchainWallet>,
+    ) -> Result<(), BarkError> {
+        TOKIO_RT.block_on(async {
+            let onchain = onchain_wallet.inner().lock().await;
+
+            eprintln!("[EXIT] Starting unilateral exit for entire wallet...");
+
+            self.inner
+                .exit
+                .write()
+                .await
+                .start_exit_for_entire_wallet(&*onchain)
+                .await
+                .map_err(|e| BarkError::Internal {
+                    error_message: format!("Start exit failed: {}", e),
+                })?;
+
+            eprintln!("[EXIT] ✅ Exit initiated - call sync_exits() periodically to progress");
+
+            Ok(())
+        })
+    }
+
+    /// Sync exit state
+    ///
+    /// Checks the status of pending unilateral exits and updates their state.
+    /// Call this periodically after starting exits to monitor progress.
+    ///
+    /// This does NOT progress exits (broadcast transactions, fee bump, etc.).
+    /// For that, the onchain wallet must implement progress_exits separately.
+    ///
+    /// # Arguments
+    ///
+    /// * `onchain_wallet` - The onchain wallet for checking transaction state
+    pub fn sync_exits(
+        &self,
+        onchain_wallet: Arc<crate::OnchainWallet>,
+    ) -> Result<(), BarkError> {
+        TOKIO_RT.block_on(async {
+            let mut onchain = onchain_wallet.inner().lock().await;
+
+            eprintln!("[EXIT] Syncing exits...");
+
+            self.inner
+                .sync_exits(&mut *onchain)
+                .await
+                .map_err(|e| BarkError::Internal {
+                    error_message: format!("Sync exits failed: {}", e),
+                })?;
+
+            eprintln!("[EXIT] ✅ Exits synced");
+
+            Ok(())
+        })
     }
 }

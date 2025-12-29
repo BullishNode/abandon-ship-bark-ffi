@@ -1,5 +1,6 @@
 use bark::WalletVtxo as BarkWalletVtxo;
 use bark::{Balance as BarkBalance, WalletProperties as BarkWalletProperties};
+use bark::persist::models::PendingBoard as BarkPendingBoard;
 use bark_bitcoin_ext::AmountExt;
 use bitcoin::Network as BtcNetwork;
 
@@ -119,8 +120,7 @@ pub struct Balance {
     pub pending_in_round_sats: u64,
     pub pending_exit_sats: u64,
     pub pending_lightning_send_sats: u64,
-    pub pending_lightning_receive_total_sats: u64,
-    pub pending_lightning_receive_claimable_sats: u64,
+    pub claimable_lightning_receive_sats: u64,
     pub pending_board_sats: u64,
 }
 
@@ -131,8 +131,9 @@ impl From<BarkBalance> for Balance {
             pending_in_round_sats: b.pending_in_round.to_sat(),
             pending_exit_sats: b.pending_exit.unwrap_or_default().to_sat(),
             pending_lightning_send_sats: b.pending_lightning_send.to_sat(),
-            pending_lightning_receive_total_sats: b.claimable_lightning_receive.to_sat(),
-            pending_lightning_receive_claimable_sats: b.claimable_lightning_receive.to_sat(),
+            // Note: Bark's Balance only has claimable_lightning_receive field.
+            // There is no separate "total pending receive" field in upstream.
+            claimable_lightning_receive_sats: b.claimable_lightning_receive.to_sat(),
             pending_board_sats: b.pending_board.to_sat(),
         }
     }
@@ -298,6 +299,48 @@ impl From<bark::movement::Movement> for Movement {
             created_at: m.time.created_at.to_rfc3339(),
             updated_at: m.time.updated_at.to_rfc3339(),
             completed_at: m.time.completed_at.map(|t| t.to_rfc3339()),
+        }
+    }
+}
+
+// ============================================================================
+// OnchainBalance
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct OnchainBalance {
+    pub confirmed_sats: u64,
+    pub pending_sats: u64,
+    pub total_sats: u64,
+}
+
+impl From<bark::onchain::bdk_wallet::Balance> for OnchainBalance {
+    fn from(b: bark::onchain::bdk_wallet::Balance) -> Self {
+        Self {
+            confirmed_sats: b.confirmed.to_sat(),
+            pending_sats: b.untrusted_pending.to_sat() + b.trusted_pending.to_sat(),
+            total_sats: b.total().to_sat(),
+        }
+    }
+}
+
+// ============================================================================
+// PendingBoard
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct PendingBoard {
+    pub vtxo_id: String,
+    pub amount_sats: u64,
+    pub txid: String,
+}
+
+impl From<BarkPendingBoard> for PendingBoard {
+    fn from(pb: BarkPendingBoard) -> Self {
+        Self {
+            vtxo_id: pb.vtxos.first().map(|v| v.to_string()).unwrap_or_default(),
+            amount_sats: pb.amount.to_sat(),
+            txid: pb.funding_tx.compute_txid().to_string(),
         }
     }
 }

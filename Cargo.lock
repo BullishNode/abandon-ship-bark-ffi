@@ -309,6 +309,7 @@ dependencies = [
  "bdk_bitcoind_rpc",
  "bdk_core",
  "bdk_esplora",
+ "bdk_wallet",
  "bip39",
  "bitcoin",
  "chrono",
@@ -388,6 +389,7 @@ dependencies = [
  "bdk_core",
  "bitcoin",
  "miniscript",
+ "rusqlite",
  "serde",
 ]
 
