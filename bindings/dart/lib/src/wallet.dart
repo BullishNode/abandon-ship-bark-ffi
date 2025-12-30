@@ -98,16 +98,16 @@ class Wallet {
     OnchainWallet onchainWallet,
     bool forceRescan,
   ) async {
+    // IMPORTANT: This method does NOT run in an isolate because it may invoke
+    // callbacks if using a custom onchain wallet. Callbacks cannot cross isolate boundaries.
     try {
-      final inner = await Isolate.run(() {
-        return ffi.Wallet.createWithOnchain(
-          mnemonic,
-          config,
-          datadir,
-          onchainWallet.ffi,
-          forceRescan,
-        );
-      });
+      final inner = ffi.Wallet.createWithOnchain(
+        mnemonic,
+        config,
+        datadir,
+        onchainWallet.ffi,
+        forceRescan,
+      );
       return Wallet._(inner);
     } on ffi.BarkException catch (e) {
       assert(() {
@@ -134,15 +134,15 @@ class Wallet {
     String datadir,
     OnchainWallet onchainWallet,
   ) async {
+    // IMPORTANT: This method does NOT run in an isolate because it may invoke
+    // callbacks if using a custom onchain wallet. Callbacks cannot cross isolate boundaries.
     try {
-      final inner = await Isolate.run(() {
-        return ffi.Wallet.openWithOnchain(
-          mnemonic,
-          config,
-          datadir,
-          onchainWallet.ffi,
-        );
-      });
+      final inner = ffi.Wallet.openWithOnchain(
+        mnemonic,
+        config,
+        datadir,
+        onchainWallet.ffi,
+      );
       return Wallet._(inner);
     } on ffi.BarkException catch (e) {
       assert(() {

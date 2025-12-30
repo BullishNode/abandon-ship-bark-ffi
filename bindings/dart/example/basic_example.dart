@@ -52,10 +52,20 @@ Future<void> basicExample() async {
   print("  Spendable: ${balance.spendableSats} sats");
   print("  Pending board: ${balance.pendingBoardSats} sats");
 
-  final vtxos = wallet.vtxos();
-  print("\nVTXOs: ${vtxos.length}");
-  for (var vtxo in vtxos) {
+  final uVtxos = wallet.vtxos();
+  print("\n Unspent VTXOs: ${uVtxos.length}");
+  for (var vtxo in uVtxos) {
     print("  ${vtxo.id}: ${vtxo.amountSats} sats (${vtxo.state})");
+  }
+
+  final allVtxos = wallet.allVtxos();
+  print("\n All VTXOs: ${allVtxos.length}");
+  for (final vtxo in allVtxos) {
+    print("VTXO ${vtxo.id}:");
+    print("  Amount: ${vtxo.amountSats} sats");
+    print("  Expiry: block ${vtxo.expiryHeight}");
+    print("  Kind: ${vtxo.kind}");
+    print("  State: ${vtxo.state}");
   }
 
   try {

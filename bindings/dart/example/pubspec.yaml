@@ -13,4 +13,4 @@ dependencies:
   bdk_dart:
     git:
       url: https://github.com/kumulynja/bdk-dart.git
-      ref: update-to-2.3.0-alpha.0
+      ref: bark-ffi-dep

@@ -49,7 +49,7 @@ class BdkCustomWallet implements CustomOnchainWalletCallbacks {
       changeDescriptor,
       bdkNetwork,
       bdk.Persister.newInMemory(),
-      0,
+      25,
     );
 
     final esploraClient = bdk.EsploraClient(esploraUrl, null);
@@ -180,7 +180,152 @@ class BdkCustomWallet implements CustomOnchainWalletCallbacks {
 
   @override
   String makeSignedP2aCpfp(CpfpParams params) {
-    throw Exception("TODO: Implement CPFP");
+    // Parse the P2A transaction from hex
+    final txBytes = Uint8List.fromList([
+      for (var i = 0; i < params.txHex.length; i += 2)
+        int.parse(params.txHex.substring(i, i + 2), radix: 16),
+    ]);
+    final p2aTx = bdk.Transaction(txBytes);
+
+    // Extract the fee anchor output (P2A output)
+    final feeAnchor = _extractFeeAnchor(p2aTx);
+    if (feeAnchor == null) {
+      throw Exception("No fee anchor found in transaction");
+    }
+
+    // Get change address for drain output
+    final changeAddr = _wallet.revealNextAddress(bdk.KeychainKind.external_);
+
+    // Calculate P2A transaction weight
+    final p2aWeight = p2aTx.weight();
+
+    // Iterative loop to calculate correct fees (matching Rust implementation)
+    var spendWeight = 0;
+    var feeNeeded = p2aWeight * params.effectiveFeeRateSatPerVb;
+
+    const maxIterations = 100;
+    for (var i = 0; i < maxIterations; i++) {
+      try {
+        final txBuilder = bdk.TxBuilder()
+            .onlyWitnessUtxo()
+            .excludeUnconfirmed()
+            .version(3) // For 1p1c package relay
+            .addForeignUtxo(
+              feeAnchor.outpoint,
+              feeAnchor.input,
+              1, // FEE_ANCHOR_SPEND_WEIGHT = 1 WU
+            )
+            .drainTo(changeAddr.address.scriptPubkey())
+            .feeAbsolute(bdk.Amount.fromSat(feeNeeded));
+
+        var psbt = txBuilder.finish(_wallet);
+
+        // Sign the PSBT
+        final finalized = _wallet.sign(psbt, null);
+        if (!finalized) {
+          throw Exception("Failed to finalize PSBT");
+        }
+
+        final tx = psbt.extractTx();
+        final txWeight = tx.weight();
+        final totalWeight = txWeight + p2aWeight;
+
+        // Check if weight changed - if so, recalculate fees
+        if (txWeight != spendWeight) {
+          _wallet.cancelTx(tx);
+          spendWeight = txWeight;
+
+          // Recalculate fee based on total package weight
+          if (params.feesType == "Effective") {
+            feeNeeded = totalWeight * params.effectiveFeeRateSatPerVb;
+          } else if (params.feesType == "Rbf") {
+            // RBF fee calculation
+            final minTxRelayFee = 1; // 1 sat/vb
+            final currentPackageFee = params.currentPackageFeeSats ?? 0;
+
+            final minPackageFee =
+                currentPackageFee +
+                (p2aWeight * minTxRelayFee) +
+                (txWeight * minTxRelayFee);
+
+            final desiredFee = totalWeight * params.effectiveFeeRateSatPerVb;
+
+            feeNeeded = desiredFee < minPackageFee ? minPackageFee : desiredFee;
+          }
+          continue; // Try again with new fee
+        }
+
+        // Success! Return hex-encoded transaction
+        final txBytes = tx.serialize();
+        return txBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      } catch (e) {
+        if (i == maxIterations - 1) {
+          rethrow;
+        }
+        // Continue loop on error
+      }
+    }
+
+    throw Exception("Reached max iterations (100) in CPFP calculation");
+  }
+
+  ({bdk.OutPoint outpoint, bdk.Input input})? _extractFeeAnchor(
+    bdk.Transaction tx,
+  ) {
+    // P2A script is OP_1 followed by 0x4e73 (Bitcoin's standard P2A script)
+    final p2aScriptBytes = Uint8List.fromList([0x51, 0x02, 0x4e, 0x73]);
+
+    final outputs = tx.output();
+    for (var i = 0; i < outputs.length; i++) {
+      final output = outputs[i];
+      final scriptBytes = output.scriptPubkey.toBytes();
+
+      // Check if this is the P2A fee anchor
+      if (scriptBytes.length == p2aScriptBytes.length) {
+        var isP2A = true;
+        for (var j = 0; j < scriptBytes.length; j++) {
+          if (scriptBytes[j] != p2aScriptBytes[j]) {
+            isP2A = false;
+            break;
+          }
+        }
+
+        if (isP2A) {
+          // Found the P2A fee anchor
+          final outpoint = bdk.OutPoint(tx.computeTxid(), i);
+
+          // Create PSBT input for the fee anchor (matching Rust implementation)
+          // witness_utxo = Some(output), final_script_witness = Some(Witness::new())
+          final input = bdk.Input(
+            null, // nonWitnessUtxo
+            output, // witnessUtxo
+            {}, // partialSigs
+            null, // sighashType
+            null, // redeemScript
+            null, // witnessScript
+            {}, // bip32Derivation
+            null, // finalScriptSig
+            [], // finalScriptWitness (empty witness)
+            {}, // ripemd160Preimages
+            {}, // sha256Preimages
+            {}, // hash160Preimages
+            {}, // hash256Preimages
+            null, // tapKeySig
+            {}, // tapScriptSigs
+            {}, // tapScripts
+            {}, // tapKeyOrigins
+            null, // tapInternalKey
+            null, // tapMerkleRoot
+            {}, // proprietary
+            {}, // unknown
+          );
+
+          return (outpoint: outpoint, input: input);
+        }
+      }
+    }
+
+    return null;
   }
 
   @override
@@ -270,6 +415,9 @@ Future<void> customOnchainExample() async {
   final props = wallet.properties();
   print("Bark wallet fingerprint: ${props.fingerprint}");
 
+  // Test boarding with custom onchain wallet
+  print("\n--- Testing Boarding ---");
+
   if (balance.totalSats > 0) {
     print("\nBoarding ${balance.totalSats} sats...");
     try {
@@ -283,5 +431,45 @@ Future<void> customOnchainExample() async {
     }
   } else {
     print("\nNo onchain funds. Send sats to: $address");
+  }
+
+  // Test unilateral exit with custom onchain wallet
+  print("\n--- Testing Unilateral Exit ---");
+
+  await wallet.sync();
+  final barkBalance = wallet.balance();
+
+  if (barkBalance.spendableSats > 0) {
+    print("Spendable balance: ${barkBalance.spendableSats} sats");
+    print("Starting unilateral exit for entire wallet...");
+
+    try {
+      await wallet.startExitForEntireWallet(onchainWallet);
+      print("Exit initiated successfully");
+
+      // Sync exits to progress the exit state machine
+      await wallet.syncExits(onchainWallet);
+      print("Exit status synced");
+
+      final updatedBalance = wallet.balance();
+      print("Pending exit: ${updatedBalance.pendingExitSats} sats");
+    } catch (e) {
+      print("Exit failed: $e");
+    }
+  } else if (barkBalance.pendingExitSats > 0) {
+    print("Pending exit: ${barkBalance.pendingExitSats} sats");
+    print("Syncing exit status...");
+
+    try {
+      await wallet.syncExits(onchainWallet);
+      print("Exit status synced");
+
+      final updatedBalance = wallet.balance();
+      print("Updated pending exit: ${updatedBalance.pendingExitSats} sats");
+    } catch (e) {
+      print("Exit sync failed: $e");
+    }
+  } else {
+    print("No balance to exit");
   }
 }
