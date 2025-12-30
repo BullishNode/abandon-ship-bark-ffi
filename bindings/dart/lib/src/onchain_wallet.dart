@@ -66,7 +66,9 @@ class OnchainWallet {
   ///
   /// final onchain = OnchainWallet.custom(MyWallet());
   /// ```
-  factory OnchainWallet.custom(generated.CustomOnchainWalletCallbacks callbacks) {
+  factory OnchainWallet.custom(
+    generated.CustomOnchainWalletCallbacks callbacks,
+  ) {
     return OnchainWallet._(generated.OnchainWallet.custom(callbacks));
   }
 

@@ -81,6 +81,78 @@ class Wallet {
     }
   }
 
+  /// Create a new Bark wallet with onchain capabilities.
+  ///
+  /// This enables full Ark functionality including boarding and unilateral exits.
+  ///
+  /// Parameters:
+  /// - `mnemonic`: BIP39 mnemonic for wallet recovery
+  /// - `config`: Wallet configuration
+  /// - `datadir`: Directory for wallet database
+  /// - `onchainWallet`: Onchain wallet for boarding and exits
+  /// - `forceRescan`: Force wallet rescan
+  static Future<Wallet> createWithOnchain(
+    String mnemonic,
+    ffi.Config config,
+    String datadir,
+    OnchainWallet onchainWallet,
+    bool forceRescan,
+  ) async {
+    try {
+      final inner = await Isolate.run(() {
+        return ffi.Wallet.createWithOnchain(
+          mnemonic,
+          config,
+          datadir,
+          onchainWallet.ffi,
+          forceRescan,
+        );
+      });
+      return Wallet._(inner);
+    } on ffi.BarkException catch (e) {
+      assert(() {
+        print('BarkException in Wallet.createWithOnchain: ${e.message}');
+        return true;
+      }());
+      rethrow;
+    }
+  }
+
+  /// Open an existing Bark wallet with onchain capabilities.
+  ///
+  /// Similar to [open] but also loads unilateral exit state using the
+  /// provided onchain wallet.
+  ///
+  /// Parameters:
+  /// - `mnemonic`: BIP39 mnemonic for wallet recovery
+  /// - `config`: Wallet configuration
+  /// - `datadir`: Directory for wallet database
+  /// - `onchainWallet`: Onchain wallet for boarding and exits
+  static Future<Wallet> openWithOnchain(
+    String mnemonic,
+    ffi.Config config,
+    String datadir,
+    OnchainWallet onchainWallet,
+  ) async {
+    try {
+      final inner = await Isolate.run(() {
+        return ffi.Wallet.openWithOnchain(
+          mnemonic,
+          config,
+          datadir,
+          onchainWallet.ffi,
+        );
+      });
+      return Wallet._(inner);
+    } on ffi.BarkException catch (e) {
+      assert(() {
+        print('BarkException in Wallet.openWithOnchain: ${e.message}');
+        return true;
+      }());
+      rethrow;
+    }
+  }
+
   // ------------------------------------------------------------------------
   // Wallet Properties
   // ------------------------------------------------------------------------
@@ -166,13 +238,14 @@ class Wallet {
   /// Returns a [ffi.PendingBoard] with the boarding transaction details.
   ///
   /// Note: You must call [syncPendingBoards] after this to complete the boarding.
+  ///
+  /// IMPORTANT: This method does NOT run in an isolate because it may invoke
+  /// callbacks if using a custom onchain wallet. Callbacks cannot cross isolate boundaries.
   Future<ffi.PendingBoard> boardAmount(
     OnchainWallet onchainWallet,
     int amountSats,
   ) async {
-    return Isolate.run(
-      () => _inner.boardAmount(onchainWallet.ffi, amountSats),
-    );
+    return _inner.boardAmount(onchainWallet.ffi, amountSats);
   }
 
   /// Board all funds from onchain wallet into Ark
@@ -185,8 +258,11 @@ class Wallet {
   /// Returns a [ffi.PendingBoard] with the boarding transaction details.
   ///
   /// Note: You must call [syncPendingBoards] after this to complete the boarding.
+  ///
+  /// IMPORTANT: This method does NOT run in an isolate because it may invoke
+  /// callbacks if using a custom onchain wallet. Callbacks cannot cross isolate boundaries.
   Future<ffi.PendingBoard> boardAll(OnchainWallet onchainWallet) async {
-    return Isolate.run(() => _inner.boardAll(onchainWallet.ffi));
+    return _inner.boardAll(onchainWallet.ffi);
   }
 
   /// Sync pending board transactions
@@ -383,10 +459,11 @@ class Wallet {
   /// - `onchainWallet`: The onchain wallet to receive the exited funds
   ///
   /// Note: You must call [syncExits] after this to track the exit progress.
+  ///
+  /// IMPORTANT: This method does NOT run in an isolate because it may invoke
+  /// callbacks if using a custom onchain wallet. Callbacks cannot cross isolate boundaries.
   Future<void> startExitForEntireWallet(OnchainWallet onchainWallet) async {
-    return Isolate.run(
-      () => _inner.startExitForEntireWallet(onchainWallet.ffi),
-    );
+    return _inner.startExitForEntireWallet(onchainWallet.ffi);
   }
 
   /// Sync exit state
@@ -397,8 +474,11 @@ class Wallet {
   ///
   /// Parameters:
   /// - `onchainWallet`: The onchain wallet used for the exit
+  ///
+  /// IMPORTANT: This method does NOT run in an isolate because it may invoke
+  /// callbacks if using a custom onchain wallet. Callbacks cannot cross isolate boundaries.
   Future<void> syncExits(OnchainWallet onchainWallet) async {
-    return Isolate.run(() => _inner.syncExits(onchainWallet.ffi));
+    return _inner.syncExits(onchainWallet.ffi);
   }
 
   // ------------------------------------------------------------------------
