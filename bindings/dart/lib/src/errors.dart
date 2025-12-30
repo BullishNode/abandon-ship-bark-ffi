@@ -5,15 +5,16 @@ extension BarkExceptionMessage on BarkException {
   /// Get the error message from any BarkException variant
   String get message {
     return switch (this) {
-      NetworkBarkException(:final message) => message,
-      DatabaseBarkException(:final message) => message,
-      InvalidMnemonicBarkException(:final message) => message,
-      InvalidAddressBarkException(:final message) => message,
-      InvalidInvoiceBarkException(:final message) => message,
-      InsufficientFundsBarkException(:final message) => message,
-      NotFoundBarkException(:final message) => message,
-      ServerConnectionBarkException(:final message) => message,
-      InternalBarkException(:final message) => message,
+      NetworkBarkException(:final errorMessage) => errorMessage,
+      DatabaseBarkException(:final errorMessage) => errorMessage,
+      InvalidMnemonicBarkException(:final errorMessage) => errorMessage,
+      InvalidAddressBarkException(:final errorMessage) => errorMessage,
+      InvalidInvoiceBarkException(:final errorMessage) => errorMessage,
+      InsufficientFundsBarkException(:final errorMessage) => errorMessage,
+      NotFoundBarkException(:final errorMessage) => errorMessage,
+      ServerConnectionBarkException(:final errorMessage) => errorMessage,
+      InternalBarkException(:final errorMessage) => errorMessage,
+      OnchainWalletRequiredBarkException(:final errorMessage) => errorMessage,
       _ => 'An unknown Bark error occurred.',
     };
   }

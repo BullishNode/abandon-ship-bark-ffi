@@ -34,6 +34,7 @@ interface BarkError {
     NotFound(string error_message);
     ServerConnection(string error_message);
     Internal(string error_message);
+    OnchainWalletRequired(string error_message);
 };
 
 // ============================================================================
@@ -347,7 +348,7 @@ dictionary CpfpParams {
 /// Callback interface for custom onchain wallet implementations
 ///
 /// Implement this interface in Dart/Swift/Kotlin to provide your own wallet.
-callback interface OnchainWalletCallbacks {
+callback interface CustomOnchainWalletCallbacks {
     /// Get the wallet balance in satoshis
     [Throws=BarkError]
     u64 get_balance();
@@ -436,19 +437,26 @@ callback interface OnchainWalletCallbacks {
 // Onchain Wallet Interface
 // ============================================================================
 
-/// BDK-based onchain Bitcoin wallet for boarding and exits
+/// Onchain Bitcoin wallet for boarding and exits
+///
+/// Supports two implementations:
+/// - Default: BDK-based wallet (built-in)
+/// - Custom: Your own wallet implementation via callbacks
 interface OnchainWallet {
-    /// Create or load an onchain wallet using BDK
-    /// Uses the same chain source configuration as the Bark wallet (esplora_address or bitcoind_*)
-    [Throws=BarkError, Name=new]
+    /// Create or load an onchain wallet using a default BDK implementation shipped with Bark
+    ///
+    /// The wallet uses BDK for onchain operations
+    /// and the same chain source configuration as the Bark wallet (esplora_address or bitcoind_*).
+    [Throws=BarkError, Name=default]
     constructor(string mnemonic, Config config, string datadir);
 
-    /// Create an onchain wallet from custom callbacks
+    /// Create an onchain wallet using a custom implementation
     ///
-    /// This allows using your own wallet implementation (e.g., from Dart/Swift/Kotlin)
-    /// instead of the built-in BDK wallet.
-    [Throws=BarkError, Name=from_callbacks]
-    constructor(OnchainWalletCallbacks callbacks);
+    /// Use this when you have an existing wallet implementation in your language
+    /// (Dart/Swift/Kotlin) and want to integrate it with Bark for boarding and exits.
+    /// Your implementation must handle all wallet operations via the callbacks interface.
+    [Throws=BarkError, Name=custom]
+    constructor(CustomOnchainWalletCallbacks callbacks);
 
     /// Sync the onchain wallet with the blockchain
     /// Returns the amount synced in satoshis

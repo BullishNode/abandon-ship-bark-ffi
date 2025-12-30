@@ -19,10 +19,10 @@ use bark_bitcoin_ext::BlockRef;
 use crate::error::BarkError;
 use crate::types::{BlockRef as FfiBlockRef, CpfpParams, Destination, OutPoint as FfiOutPoint};
 
-/// Callback interface for onchain wallet operations
+/// Callback interface for custom onchain wallet implementations
 ///
 /// Foreign languages implement this trait to provide their own wallet functionality.
-pub trait OnchainWalletCallbacks: Send + Sync {
+pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// Get the wallet balance in satoshis
     fn get_balance(&self) -> Result<u64, BarkError>;
 
@@ -108,11 +108,11 @@ pub trait OnchainWalletCallbacks: Send + Sync {
 
 /// Rust adapter that implements Bark traits using callback interface
 pub struct CallbackWalletAdapter {
-    callbacks: Box<dyn OnchainWalletCallbacks>,
+    callbacks: Box<dyn CustomOnchainWalletCallbacks>,
 }
 
 impl CallbackWalletAdapter {
-    pub fn new(callbacks: Box<dyn OnchainWalletCallbacks>) -> Self {
+    pub fn new(callbacks: Box<dyn CustomOnchainWalletCallbacks>) -> Self {
         Self { callbacks }
     }
 }
@@ -123,7 +123,7 @@ impl GetBalance for CallbackWalletAdapter {
         match self.callbacks.get_balance() {
             Ok(sats) => Amount::from_sat(sats),
             Err(e) => {
-                eprintln!("[ERROR] OnchainWalletCallbacks::get_balance failed: {}", e.message());
+                eprintln!("[ERROR] CustomOnchainWalletCallbacks::get_balance failed: {}", e.message());
                 eprintln!("[ERROR] Returning 0 balance - this may cause unexpected behavior!");
                 eprintln!("[ERROR] Please fix the wallet implementation to ensure get_balance never fails");
                 Amount::ZERO

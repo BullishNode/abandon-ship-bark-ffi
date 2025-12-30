@@ -1,6 +1,7 @@
 import 'dart:isolate';
 import 'package:bark/src/generated/bark.dart' as ffi;
 import 'package:bark/src/errors.dart';
+import 'package:bark/src/onchain_wallet.dart' show OnchainWallet;
 
 /// The central entry point for using Bark as an Ark wallet.
 ///
@@ -147,6 +148,55 @@ class Wallet {
   /// a unilateral exit at any time.
   List<ffi.Vtxo> vtxos() {
     return _inner.vtxos();
+  }
+
+  // ------------------------------------------------------------------------
+  // Boarding (requires onchain wallet)
+  // ------------------------------------------------------------------------
+
+  /// Board a specific amount from onchain wallet into Ark
+  ///
+  /// Moves Bitcoin from your onchain wallet into Ark, allowing you to use
+  /// Ark features like instant payments and Lightning support.
+  ///
+  /// Parameters:
+  /// - `onchainWallet`: The onchain wallet to board from
+  /// - `amountSats`: Amount to board in satoshis
+  ///
+  /// Returns a [ffi.PendingBoard] with the boarding transaction details.
+  ///
+  /// Note: You must call [syncPendingBoards] after this to complete the boarding.
+  Future<ffi.PendingBoard> boardAmount(
+    OnchainWallet onchainWallet,
+    int amountSats,
+  ) async {
+    return Isolate.run(
+      () => _inner.boardAmount(onchainWallet.ffi, amountSats),
+    );
+  }
+
+  /// Board all funds from onchain wallet into Ark
+  ///
+  /// Moves all available Bitcoin from your onchain wallet into Ark.
+  ///
+  /// Parameters:
+  /// - `onchainWallet`: The onchain wallet to board from
+  ///
+  /// Returns a [ffi.PendingBoard] with the boarding transaction details.
+  ///
+  /// Note: You must call [syncPendingBoards] after this to complete the boarding.
+  Future<ffi.PendingBoard> boardAll(OnchainWallet onchainWallet) async {
+    return Isolate.run(() => _inner.boardAll(onchainWallet.ffi));
+  }
+
+  /// Sync pending board transactions
+  ///
+  /// Checks the status of pending boarding transactions and updates the
+  /// wallet state when they are confirmed onchain.
+  ///
+  /// Call this periodically after boarding to track progress.
+  Future<void> syncPendingBoards() async {
+    return Isolate.run(() => _inner.syncPendingBoards());
   }
 
   // ------------------------------------------------------------------------
@@ -317,6 +367,38 @@ class Wallet {
     String bitcoinAddress,
   ) async {
     return Isolate.run(() => _inner.offboardVtxos(vtxoIds, bitcoinAddress));
+  }
+
+  // ------------------------------------------------------------------------
+  // Unilateral Exits (requires onchain wallet)
+  // ------------------------------------------------------------------------
+
+  /// Start unilateral exit for the entire wallet
+  ///
+  /// Initiates a trustless exit from Ark without requiring server cooperation.
+  /// This broadcasts exit transactions to the Bitcoin network, allowing you
+  /// to recover your funds even if the Ark server is offline or uncooperative.
+  ///
+  /// Parameters:
+  /// - `onchainWallet`: The onchain wallet to receive the exited funds
+  ///
+  /// Note: You must call [syncExits] after this to track the exit progress.
+  Future<void> startExitForEntireWallet(OnchainWallet onchainWallet) async {
+    return Isolate.run(
+      () => _inner.startExitForEntireWallet(onchainWallet.ffi),
+    );
+  }
+
+  /// Sync exit state
+  ///
+  /// Updates the status of pending unilateral exits by checking the blockchain.
+  /// Call this periodically after starting an exit to track progress and
+  /// complete the exit process.
+  ///
+  /// Parameters:
+  /// - `onchainWallet`: The onchain wallet used for the exit
+  Future<void> syncExits(OnchainWallet onchainWallet) async {
+    return Isolate.run(() => _inner.syncExits(onchainWallet.ffi));
   }
 
   // ------------------------------------------------------------------------

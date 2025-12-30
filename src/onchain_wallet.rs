@@ -5,7 +5,7 @@ use bark::onchain::{ChainSource, ChainSourceSpec, OnchainWallet as BarkOnchainWa
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;
 
-use crate::callback_wallet::CallbackWalletAdapter;
+use crate::custom_onchain_wallet::CallbackWalletAdapter;
 use crate::error::BarkError;
 use crate::runtime::TOKIO_RT;
 use crate::types::{Config, OnchainBalance};
@@ -27,14 +27,14 @@ pub struct OnchainWallet {
 }
 
 impl OnchainWallet {
-    /// Create or load an onchain wallet
+    /// Create or load an onchain wallet using BDK
     ///
     /// # Arguments
     ///
     /// * `mnemonic` - BIP39 mnemonic phrase
     /// * `config` - Wallet configuration (includes network and chain source settings)
     /// * `datadir` - Directory for wallet data (shares database with Bark wallet)
-    pub fn new(
+    pub fn default(
         mnemonic: String,
         config: Config,
         datadir: String,
@@ -105,9 +105,9 @@ impl OnchainWallet {
     ///
     /// # Arguments
     ///
-    /// * `callbacks` - Implementation of OnchainWalletCallbacks trait
-    pub fn from_callbacks(
-        callbacks: Box<dyn crate::callback_wallet::OnchainWalletCallbacks>,
+    /// * `callbacks` - Implementation of CustomOnchainWalletCallbacks trait
+    pub fn custom(
+        callbacks: Box<dyn crate::custom_onchain_wallet::CustomOnchainWalletCallbacks>,
     ) -> Result<Self, BarkError> {
         eprintln!("[ONCHAIN] Creating callback-based onchain wallet");
 

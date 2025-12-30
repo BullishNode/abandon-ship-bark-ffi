@@ -706,8 +706,8 @@ impl Wallet {
                         error_message: format!("Board failed: {}", e),
                     })?
             } else {
-                return Err(BarkError::Internal {
-                    error_message: "Invalid onchain wallet state".to_string(),
+                return Err(BarkError::OnchainWalletRequired {
+                    error_message: "Boarding requires a valid onchain wallet. Create one with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
                 });
             };
 
@@ -759,8 +759,8 @@ impl Wallet {
                         error_message: format!("Board all failed: {}", e),
                     })?
             } else {
-                return Err(BarkError::Internal {
-                    error_message: "Invalid onchain wallet state".to_string(),
+                return Err(BarkError::OnchainWalletRequired {
+                    error_message: "Boarding requires a valid onchain wallet. Create one with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
                 });
             };
 
@@ -847,8 +847,8 @@ impl Wallet {
                         error_message: format!("Start exit failed: {}", e),
                     })?;
             } else {
-                return Err(BarkError::Internal {
-                    error_message: "Invalid onchain wallet state".to_string(),
+                return Err(BarkError::OnchainWalletRequired {
+                    error_message: "Unilateral exit requires a valid onchain wallet. Create one with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
                 });
             }
 
@@ -893,8 +893,8 @@ impl Wallet {
                         error_message: format!("Sync exits failed: {}", e),
                     })?;
             } else {
-                return Err(BarkError::Internal {
-                    error_message: "Invalid onchain wallet state".to_string(),
+                return Err(BarkError::OnchainWalletRequired {
+                    error_message: "Syncing exits requires a valid onchain wallet. Create one with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
                 });
             }
 

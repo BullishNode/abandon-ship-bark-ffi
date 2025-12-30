@@ -555,7 +555,11 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 /**
- * BDK-based onchain Bitcoin wallet for boarding and exits
+ * Onchain Bitcoin wallet for boarding and exits
+ *
+ * Supports two implementations:
+ * - Default: BDK-based wallet (built-in)
+ * - Custom: Your own wallet implementation via callbacks
  */
 public protocol OnchainWalletProtocol: AnyObject, Sendable {
     
@@ -583,7 +587,11 @@ public protocol OnchainWalletProtocol: AnyObject, Sendable {
     
 }
 /**
- * BDK-based onchain Bitcoin wallet for boarding and exits
+ * Onchain Bitcoin wallet for boarding and exits
+ *
+ * Supports two implementations:
+ * - Default: BDK-based wallet (built-in)
+ * - Custom: Your own wallet implementation via callbacks
  */
 open class OnchainWallet: OnchainWalletProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -624,21 +632,7 @@ open class OnchainWallet: OnchainWalletProtocol, @unchecked Sendable {
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_bark_ffi_fn_clone_onchainwallet(self.handle, $0) }
     }
-    /**
-     * Create or load an onchain wallet using BDK
-     * Uses the same chain source configuration as the Bark wallet (esplora_address or bitcoind_*)
-     */
-public convenience init(mnemonic: String, config: Config, datadir: String)throws  {
-    let handle =
-        try rustCallWithError(FfiConverterTypeBarkError_lift) {
-    uniffi_bark_ffi_fn_constructor_onchainwallet_new(
-        FfiConverterString.lower(mnemonic),
-        FfiConverterTypeConfig_lower(config),
-        FfiConverterString.lower(datadir),$0
-    )
-}
-    self.init(unsafeFromHandle: handle)
-}
+    // No primary constructor declared for this class.
 
     deinit {
         try! rustCall { uniffi_bark_ffi_fn_free_onchainwallet(handle, $0) }
@@ -646,15 +640,32 @@ public convenience init(mnemonic: String, config: Config, datadir: String)throws
 
     
     /**
-     * Create an onchain wallet from custom callbacks
+     * Create an onchain wallet using a custom implementation
      *
-     * This allows using your own wallet implementation (e.g., from Dart/Swift/Kotlin)
-     * instead of the built-in BDK wallet.
+     * Use this when you have an existing wallet implementation in your language
+     * (Dart/Swift/Kotlin) and want to integrate it with Bark for boarding and exits.
+     * Your implementation must handle all wallet operations via the callbacks interface.
      */
-public static func fromCallbacks(callbacks: OnchainWalletCallbacks)throws  -> OnchainWallet  {
+public static func custom(callbacks: CustomOnchainWalletCallbacks)throws  -> OnchainWallet  {
     return try  FfiConverterTypeOnchainWallet_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
-    uniffi_bark_ffi_fn_constructor_onchainwallet_from_callbacks(
-        FfiConverterCallbackInterfaceOnchainWalletCallbacks_lower(callbacks),$0
+    uniffi_bark_ffi_fn_constructor_onchainwallet_custom(
+        FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks_lower(callbacks),$0
+    )
+})
+}
+    
+    /**
+     * Create or load an onchain wallet using a default BDK implementation shipped with Bark
+     *
+     * The wallet uses BDK for onchain operations
+     * and the same chain source configuration as the Bark wallet (esplora_address or bitcoind_*).
+     */
+public static func `default`(mnemonic: String, config: Config, datadir: String)throws  -> OnchainWallet  {
+    return try  FfiConverterTypeOnchainWallet_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_constructor_onchainwallet_default(
+        FfiConverterString.lower(mnemonic),
+        FfiConverterTypeConfig_lower(config),
+        FfiConverterString.lower(datadir),$0
     )
 })
 }
@@ -3097,6 +3108,8 @@ public enum BarkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     )
     case Internal(errorMessage: String
     )
+    case OnchainWalletRequired(errorMessage: String
+    )
 
     
 
@@ -3149,6 +3162,9 @@ public struct FfiConverterTypeBarkError: FfiConverterRustBuffer {
             errorMessage: try FfiConverterString.read(from: &buf)
             )
         case 9: return .Internal(
+            errorMessage: try FfiConverterString.read(from: &buf)
+            )
+        case 10: return .OnchainWalletRequired(
             errorMessage: try FfiConverterString.read(from: &buf)
             )
 
@@ -3205,6 +3221,11 @@ public struct FfiConverterTypeBarkError: FfiConverterRustBuffer {
         
         case let .Internal(errorMessage):
             writeInt(&buf, Int32(9))
+            FfiConverterString.write(errorMessage, into: &buf)
+            
+        
+        case let .OnchainWalletRequired(errorMessage):
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(errorMessage, into: &buf)
             
         }
@@ -3316,7 +3337,7 @@ public func FfiConverterTypeNetwork_lower(_ value: Network) -> RustBuffer {
  *
  * Implement this interface in Dart/Swift/Kotlin to provide your own wallet.
  */
-public protocol OnchainWalletCallbacks: AnyObject, Sendable {
+public protocol CustomOnchainWalletCallbacks: AnyObject, Sendable {
     
     /**
      * Get the wallet balance in satoshis
@@ -3414,26 +3435,26 @@ public protocol OnchainWalletCallbacks: AnyObject, Sendable {
 
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
-fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
+fileprivate struct UniffiCallbackInterfaceCustomOnchainWalletCallbacks {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
     // This creates 1-element array, since this seems to be the only way to construct a const
     // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceOnchainWalletCallbacks] = [UniffiVTableCallbackInterfaceOnchainWalletCallbacks(
+    static let vtable: [UniffiVTableCallbackInterfaceCustomOnchainWalletCallbacks] = [UniffiVTableCallbackInterfaceCustomOnchainWalletCallbacks(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
-                try FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.remove(handle: uniffiHandle)
+                try FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.remove(handle: uniffiHandle)
             } catch {
-                print("Uniffi callback interface OnchainWalletCallbacks: handle missing in uniffiFree")
+                print("Uniffi callback interface CustomOnchainWalletCallbacks: handle missing in uniffiFree")
             }
         },
         uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
             do {
-                return try FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.clone(handle: uniffiHandle)
+                return try FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.clone(handle: uniffiHandle)
             } catch {
-                fatalError("Uniffi callback interface OnchainWalletCallbacks: handle missing in uniffiClone")
+                fatalError("Uniffi callback interface CustomOnchainWalletCallbacks: handle missing in uniffiClone")
             }
         },
         getBalance: { (
@@ -3443,7 +3464,7 @@ fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
         ) in
             let makeCall = {
                 () throws -> UInt64 in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try uniffiObj.getBalance(
@@ -3468,7 +3489,7 @@ fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
         ) in
             let makeCall = {
                 () throws -> String in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try uniffiObj.prepareTx(
@@ -3495,7 +3516,7 @@ fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
         ) in
             let makeCall = {
                 () throws -> String in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try uniffiObj.prepareDrainTx(
@@ -3521,7 +3542,7 @@ fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
         ) in
             let makeCall = {
                 () throws -> String in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try uniffiObj.finishTx(
@@ -3546,7 +3567,7 @@ fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
         ) in
             let makeCall = {
                 () throws -> String? in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try uniffiObj.getWalletTx(
@@ -3571,7 +3592,7 @@ fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
         ) in
             let makeCall = {
                 () throws -> BlockRef? in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try uniffiObj.getWalletTxConfirmedBlock(
@@ -3596,7 +3617,7 @@ fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
         ) in
             let makeCall = {
                 () throws -> String? in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try uniffiObj.getSpendingTx(
@@ -3621,7 +3642,7 @@ fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
         ) in
             let makeCall = {
                 () throws -> String in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try uniffiObj.makeSignedP2aCpfp(
@@ -3646,7 +3667,7 @@ fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
         ) in
             let makeCall = {
                 () throws -> () in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try uniffiObj.storeSignedP2aCpfp(
@@ -3666,23 +3687,23 @@ fileprivate struct UniffiCallbackInterfaceOnchainWalletCallbacks {
     )]
 }
 
-private func uniffiCallbackInitOnchainWalletCallbacks() {
-    uniffi_bark_ffi_fn_init_callback_vtable_onchainwalletcallbacks(UniffiCallbackInterfaceOnchainWalletCallbacks.vtable)
+private func uniffiCallbackInitCustomOnchainWalletCallbacks() {
+    uniffi_bark_ffi_fn_init_callback_vtable_customonchainwalletcallbacks(UniffiCallbackInterfaceCustomOnchainWalletCallbacks.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterCallbackInterfaceOnchainWalletCallbacks {
-    fileprivate static let handleMap = UniffiHandleMap<OnchainWalletCallbacks>()
+fileprivate struct FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks {
+    fileprivate static let handleMap = UniffiHandleMap<CustomOnchainWalletCallbacks>()
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-extension FfiConverterCallbackInterfaceOnchainWalletCallbacks : FfiConverter {
-    typealias SwiftType = OnchainWalletCallbacks
+extension FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks : FfiConverter {
+    typealias SwiftType = CustomOnchainWalletCallbacks
     typealias FfiType = UInt64
 
 #if swift(>=5.8)
@@ -3719,15 +3740,15 @@ extension FfiConverterCallbackInterfaceOnchainWalletCallbacks : FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterCallbackInterfaceOnchainWalletCallbacks_lift(_ handle: UInt64) throws -> OnchainWalletCallbacks {
-    return try FfiConverterCallbackInterfaceOnchainWalletCallbacks.lift(handle)
+public func FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks_lift(_ handle: UInt64) throws -> CustomOnchainWalletCallbacks {
+    return try FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterCallbackInterfaceOnchainWalletCallbacks_lower(_ v: OnchainWalletCallbacks) -> UInt64 {
-    return FfiConverterCallbackInterfaceOnchainWalletCallbacks.lower(v)
+public func FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks_lower(_ v: CustomOnchainWalletCallbacks) -> UInt64 {
+    return FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.lower(v)
 }
 
 #if swift(>=5.8)
@@ -4182,10 +4203,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_method_wallet_vtxos() != 16778) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_constructor_onchainwallet_from_callbacks() != 16436) {
+    if (uniffi_bark_ffi_checksum_constructor_onchainwallet_custom() != 33851) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_constructor_onchainwallet_new() != 61288) {
+    if (uniffi_bark_ffi_checksum_constructor_onchainwallet_default() != 27781) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_constructor_wallet_create() != 28953) {
@@ -4200,35 +4221,35 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_constructor_wallet_open_with_onchain() != 2455) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_onchainwalletcallbacks_get_balance() != 29954) {
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_get_balance() != 17287) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_onchainwalletcallbacks_prepare_tx() != 51616) {
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_prepare_tx() != 44054) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_onchainwalletcallbacks_prepare_drain_tx() != 36152) {
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_prepare_drain_tx() != 7162) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_onchainwalletcallbacks_finish_tx() != 40684) {
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_finish_tx() != 60386) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_onchainwalletcallbacks_get_wallet_tx() != 56384) {
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_get_wallet_tx() != 24800) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_onchainwalletcallbacks_get_wallet_tx_confirmed_block() != 25047) {
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_get_wallet_tx_confirmed_block() != 908) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_onchainwalletcallbacks_get_spending_tx() != 43959) {
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_get_spending_tx() != 62027) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_onchainwalletcallbacks_make_signed_p2a_cpfp() != 41252) {
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_make_signed_p2a_cpfp() != 51567) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_onchainwalletcallbacks_store_signed_p2a_cpfp() != 33538) {
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_store_signed_p2a_cpfp() != 35734) {
         return InitializationResult.apiChecksumMismatch
     }
 
-    uniffiCallbackInitOnchainWalletCallbacks()
+    uniffiCallbackInitCustomOnchainWalletCallbacks()
     return InitializationResult.ok
 }()
 
