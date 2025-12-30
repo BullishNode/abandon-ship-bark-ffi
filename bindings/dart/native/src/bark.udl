@@ -34,6 +34,7 @@ interface BarkError {
     NotFound(string error_message);
     ServerConnection(string error_message);
     Internal(string error_message);
+    OnchainWalletRequired(string error_message);
 };
 
 // ============================================================================
@@ -99,11 +100,10 @@ dictionary Balance {
     /// Coins pending as Lightning sends
     u64 pending_lightning_send_sats;
 
-    /// Total pending Lightning receives (all invoices)
-    u64 pending_lightning_receive_total_sats;
-
     /// Claimable pending Lightning receives
-    u64 pending_lightning_receive_claimable_sats;
+    /// Note: Bark only tracks claimable receives, not total pending.
+    /// The upstream Balance struct only provides claimable_lightning_receive.
+    u64 claimable_lightning_receive_sats;
 
     /// Coins pending board confirmations
     u64 pending_board_sats;
@@ -238,6 +238,30 @@ dictionary Movement {
     string? completed_at;
 };
 
+/// Onchain Bitcoin wallet balance
+dictionary OnchainBalance {
+    /// Confirmed balance in sats
+    u64 confirmed_sats;
+
+    /// Pending balance (trusted + untrusted) in sats
+    u64 pending_sats;
+
+    /// Total balance in sats
+    u64 total_sats;
+};
+
+/// Pending board transaction information
+dictionary PendingBoard {
+    /// VTXO ID that will be created once board is registered
+    string vtxo_id;
+
+    /// Amount being boarded in sats
+    u64 amount_sats;
+
+    /// On-chain transaction ID
+    string txid;
+};
+
 /// Ark server configuration information
 dictionary ArkInfo {
     /// The bitcoin network the server operates on
@@ -284,6 +308,176 @@ dictionary ArkInfo {
 };
 
 // ============================================================================
+// Onchain Wallet Callback Types
+// ============================================================================
+
+/// A Bitcoin transaction output destination
+dictionary Destination {
+    string address;
+    u64 amount_sats;
+};
+
+/// A Bitcoin transaction outpoint (reference to a previous output)
+dictionary OutPoint {
+    string txid;
+    u32 vout;
+};
+
+/// Reference to a block in the blockchain
+dictionary BlockRef {
+    u32 height;
+    string hash;
+};
+
+/// Parameters for creating a CPFP (Child Pays For Parent) transaction
+dictionary CpfpParams {
+    /// Parent transaction to fee-bump (hex-encoded)
+    string tx_hex;
+    /// Fee strategy: "Effective" for normal fee, "Rbf" for replace-by-fee
+    string fees_type;
+    /// Target effective fee rate in sat/vB
+    u64 effective_fee_rate_sat_per_vb;
+    /// Current package fee in sats (only required for RBF)
+    u64? current_package_fee_sats;
+};
+
+// ============================================================================
+// Onchain Wallet Callback Interface
+// ============================================================================
+
+/// Callback interface for custom onchain wallet implementations
+///
+/// Implement this interface in Dart/Swift/Kotlin to provide your own wallet.
+callback interface CustomOnchainWalletCallbacks {
+    /// Get the wallet balance in satoshis
+    [Throws=BarkError]
+    u64 get_balance();
+
+    /// Prepare a transaction to send to given destinations
+    ///
+    /// # Arguments
+    /// * `destinations` - List of destinations with addresses and amounts
+    /// * `fee_rate_sat_per_vb` - Fee rate in sats per vbyte
+    ///
+    /// # Returns
+    /// Base64-encoded PSBT
+    [Throws=BarkError]
+    string prepare_tx(sequence<Destination> destinations, u64 fee_rate_sat_per_vb);
+
+    /// Prepare a transaction that drains the wallet to a single address
+    ///
+    /// # Arguments
+    /// * `address` - Bitcoin address to drain to
+    /// * `fee_rate_sat_per_vb` - Fee rate in sats per vbyte
+    ///
+    /// # Returns
+    /// Base64-encoded PSBT
+    [Throws=BarkError]
+    string prepare_drain_tx(string address, u64 fee_rate_sat_per_vb);
+
+    /// Sign and finalize a PSBT
+    ///
+    /// # Arguments
+    /// * `psbt_base64` - Base64-encoded PSBT
+    ///
+    /// # Returns
+    /// Hex-encoded signed transaction
+    [Throws=BarkError]
+    string finish_tx(string psbt_base64);
+
+    /// Get a wallet transaction by txid
+    ///
+    /// # Arguments
+    /// * `txid` - Transaction ID as hex string
+    ///
+    /// # Returns
+    /// Hex-encoded transaction, or null if not found
+    [Throws=BarkError]
+    string? get_wallet_tx(string txid);
+
+    /// Get the block hash where a transaction was confirmed
+    ///
+    /// # Arguments
+    /// * `txid` - Transaction ID as hex string
+    ///
+    /// # Returns
+    /// Block reference with height and hash, or null if unconfirmed
+    [Throws=BarkError]
+    BlockRef? get_wallet_tx_confirmed_block(string txid);
+
+    /// Find transaction that spends a given output
+    ///
+    /// # Arguments
+    /// * `outpoint` - Transaction outpoint to check
+    ///
+    /// # Returns
+    /// Hex-encoded spending transaction, or null if unspent
+    [Throws=BarkError]
+    string? get_spending_tx(OutPoint outpoint);
+
+    /// Create a signed P2A CPFP transaction
+    ///
+    /// # Arguments
+    /// * `params` - CPFP transaction parameters
+    ///
+    /// # Returns
+    /// Hex-encoded signed CPFP transaction
+    [Throws=BarkError]
+    string make_signed_p2a_cpfp(CpfpParams params);
+
+    /// Store a signed P2A CPFP transaction in the wallet
+    ///
+    /// # Arguments
+    /// * `tx_hex` - Hex-encoded transaction
+    [Throws=BarkError]
+    void store_signed_p2a_cpfp(string tx_hex);
+};
+
+// ============================================================================
+// Onchain Wallet Interface
+// ============================================================================
+
+/// Onchain Bitcoin wallet for boarding and exits
+///
+/// Supports two implementations:
+/// - Default: BDK-based wallet (built-in)
+/// - Custom: Your own wallet implementation via callbacks
+interface OnchainWallet {
+    /// Create or load an onchain wallet using a default BDK implementation shipped with Bark
+    ///
+    /// The wallet uses BDK for onchain operations
+    /// and the same chain source configuration as the Bark wallet (esplora_address or bitcoind_*).
+    [Throws=BarkError, Name=default]
+    constructor(string mnemonic, Config config, string datadir);
+
+    /// Create an onchain wallet using a custom implementation
+    ///
+    /// Use this when you have an existing wallet implementation in your language
+    /// (Dart/Swift/Kotlin) and want to integrate it with Bark for boarding and exits.
+    /// Your implementation must handle all wallet operations via the callbacks interface.
+    [Throws=BarkError, Name=custom]
+    constructor(CustomOnchainWalletCallbacks callbacks);
+
+    /// Sync the onchain wallet with the blockchain
+    /// Returns the amount synced in satoshis
+    [Throws=BarkError]
+    u64 sync();
+
+    /// Get the onchain wallet balance
+    [Throws=BarkError]
+    OnchainBalance balance();
+
+    /// Generate a new Bitcoin address
+    [Throws=BarkError]
+    string new_address();
+
+    /// Send Bitcoin to an address
+    /// Returns the transaction ID
+    [Throws=BarkError]
+    string send(string address, u64 amount_sats, u64 fee_rate_sat_per_vb);
+};
+
+// ============================================================================
 // Main Wallet Interface
 // ============================================================================
 
@@ -297,6 +491,25 @@ interface Wallet {
     [Throws=BarkError, Name=open]
     constructor(string mnemonic, Config config, string datadir);
 
+    /// Create a new Bark wallet WITH onchain capabilities
+    [Throws=BarkError, Name=create_with_onchain]
+    constructor(
+        string mnemonic,
+        Config config,
+        string datadir,
+        OnchainWallet onchain_wallet,
+        boolean force_rescan
+    );
+
+    /// Open an existing Bark wallet WITH onchain capabilities
+    [Throws=BarkError, Name=open_with_onchain]
+    constructor(
+        string mnemonic,
+        Config config,
+        string datadir,
+        OnchainWallet onchain_wallet
+    );
+
     // ------------------------------------------------------------------------
     // Wallet Properties
     // ------------------------------------------------------------------------
@@ -308,6 +521,9 @@ interface Wallet {
     // Synchronization & Maintenance
     // ------------------------------------------------------------------------
 
+    /// Lightweight sync with Ark server and blockchain
+    /// Note: Bark's sync() handles errors internally with logging.
+    /// The Throws annotation is for forward compatibility only.
     [Throws=BarkError]
     void sync();
 
@@ -466,4 +682,32 @@ interface Wallet {
 
     /// Get wallet config
     Config config();
+
+    // ------------------------------------------------------------------------
+    // Boarding (requires onchain wallet)
+    // ------------------------------------------------------------------------
+
+    /// Board a specific amount from onchain wallet into Ark
+    [Throws=BarkError]
+    PendingBoard board_amount(OnchainWallet onchain_wallet, u64 amount_sats);
+
+    /// Board all funds from onchain wallet into Ark
+    [Throws=BarkError]
+    PendingBoard board_all(OnchainWallet onchain_wallet);
+
+    /// Sync pending board transactions
+    [Throws=BarkError]
+    void sync_pending_boards();
+
+    // ------------------------------------------------------------------------
+    // Unilateral Exits (requires onchain wallet)
+    // ------------------------------------------------------------------------
+
+    /// Start unilateral exit for the entire wallet
+    [Throws=BarkError]
+    void start_exit_for_entire_wallet(OnchainWallet onchain_wallet);
+
+    /// Sync exit state
+    [Throws=BarkError]
+    void sync_exits(OnchainWallet onchain_wallet);
 };

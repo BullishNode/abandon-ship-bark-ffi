@@ -1,5 +1,6 @@
 use bark::WalletVtxo as BarkWalletVtxo;
 use bark::{Balance as BarkBalance, WalletProperties as BarkWalletProperties};
+use bark::persist::models::PendingBoard as BarkPendingBoard;
 use bark_bitcoin_ext::AmountExt;
 use bitcoin::Network as BtcNetwork;
 
@@ -119,8 +120,7 @@ pub struct Balance {
     pub pending_in_round_sats: u64,
     pub pending_exit_sats: u64,
     pub pending_lightning_send_sats: u64,
-    pub pending_lightning_receive_total_sats: u64,
-    pub pending_lightning_receive_claimable_sats: u64,
+    pub claimable_lightning_receive_sats: u64,
     pub pending_board_sats: u64,
 }
 
@@ -131,8 +131,9 @@ impl From<BarkBalance> for Balance {
             pending_in_round_sats: b.pending_in_round.to_sat(),
             pending_exit_sats: b.pending_exit.unwrap_or_default().to_sat(),
             pending_lightning_send_sats: b.pending_lightning_send.to_sat(),
-            pending_lightning_receive_total_sats: b.claimable_lightning_receive.to_sat(),
-            pending_lightning_receive_claimable_sats: b.claimable_lightning_receive.to_sat(),
+            // Note: Bark's Balance only has claimable_lightning_receive field.
+            // There is no separate "total pending receive" field in upstream.
+            claimable_lightning_receive_sats: b.claimable_lightning_receive.to_sat(),
             pending_board_sats: b.pending_board.to_sat(),
         }
     }
@@ -303,6 +304,48 @@ impl From<bark::movement::Movement> for Movement {
 }
 
 // ============================================================================
+// OnchainBalance
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct OnchainBalance {
+    pub confirmed_sats: u64,
+    pub pending_sats: u64,
+    pub total_sats: u64,
+}
+
+impl From<bark::onchain::bdk_wallet::Balance> for OnchainBalance {
+    fn from(b: bark::onchain::bdk_wallet::Balance) -> Self {
+        Self {
+            confirmed_sats: b.confirmed.to_sat(),
+            pending_sats: b.untrusted_pending.to_sat() + b.trusted_pending.to_sat(),
+            total_sats: b.total().to_sat(),
+        }
+    }
+}
+
+// ============================================================================
+// PendingBoard
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct PendingBoard {
+    pub vtxo_id: String,
+    pub amount_sats: u64,
+    pub txid: String,
+}
+
+impl From<BarkPendingBoard> for PendingBoard {
+    fn from(pb: BarkPendingBoard) -> Self {
+        Self {
+            vtxo_id: pb.vtxos.first().map(|v| v.to_string()).unwrap_or_default(),
+            amount_sats: pb.amount.to_sat(),
+            txid: pb.funding_tx.compute_txid().to_string(),
+        }
+    }
+}
+
+// ============================================================================
 // ArkInfo
 // ============================================================================
 
@@ -350,4 +393,38 @@ impl From<&bark::ark::ArkInfo> for ArkInfo {
             ln_receive_anti_dos_required: info.ln_receive_anti_dos_required,
         }
     }
+}
+
+// ============================================================================
+// Callback Wallet Types
+// ============================================================================
+
+/// A Bitcoin transaction output destination
+#[derive(Clone, Debug)]
+pub struct Destination {
+    pub address: String,
+    pub amount_sats: u64,
+}
+
+/// A Bitcoin transaction outpoint (reference to a previous output)
+#[derive(Clone, Debug)]
+pub struct OutPoint {
+    pub txid: String,
+    pub vout: u32,
+}
+
+/// Reference to a block in the blockchain
+#[derive(Clone, Debug)]
+pub struct BlockRef {
+    pub height: u32,
+    pub hash: String,
+}
+
+/// Parameters for creating a CPFP (Child Pays For Parent) transaction
+#[derive(Clone, Debug)]
+pub struct CpfpParams {
+    pub tx_hex: String,
+    pub fees_type: String,
+    pub effective_fee_rate_sat_per_vb: u64,
+    pub current_package_fee_sats: Option<u64>,
 }

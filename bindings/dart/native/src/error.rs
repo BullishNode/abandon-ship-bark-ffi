@@ -29,6 +29,9 @@ pub enum BarkError {
 
     #[error("Internal error: {error_message}")]
     Internal { error_message: String },
+
+    #[error("Onchain wallet required: {error_message}")]
+    OnchainWalletRequired { error_message: String },
 }
 
 impl BarkError {
@@ -43,6 +46,7 @@ impl BarkError {
             BarkError::NotFound { error_message } => error_message.clone(),
             BarkError::ServerConnection { error_message } => error_message.clone(),
             BarkError::Internal { error_message } => error_message.clone(),
+            BarkError::OnchainWalletRequired { error_message } => error_message.clone(),
         }
     }
 }

@@ -16,8 +16,7 @@ class WalletBalanceResponse {
   final int pendingInRoundSats;
   final int pendingExitSats;
   final int pendingLightningSendSats;
-  final int pendingLightningReceiveTotalSats;
-  final int pendingLightningReceiveClaimableSats;
+  final int claimableLightningReceiveSats;
   final int pendingBoardSats;
 
   const WalletBalanceResponse({
@@ -25,8 +24,7 @@ class WalletBalanceResponse {
     required this.pendingInRoundSats,
     required this.pendingExitSats,
     required this.pendingLightningSendSats,
-    required this.pendingLightningReceiveTotalSats,
-    required this.pendingLightningReceiveClaimableSats,
+    required this.claimableLightningReceiveSats,
     required this.pendingBoardSats,
   });
 }
@@ -50,10 +48,7 @@ class GetWalletBalance
         pendingInRoundSats: balance.pendingInRoundSats,
         pendingExitSats: balance.pendingExitSats,
         pendingLightningSendSats: balance.pendingLightningSendSats,
-        pendingLightningReceiveTotalSats:
-            balance.pendingLightningReceiveTotalSats,
-        pendingLightningReceiveClaimableSats:
-            balance.pendingLightningReceiveClaimableSats,
+        claimableLightningReceiveSats: balance.claimableLightningReceiveSats,
         pendingBoardSats: balance.pendingBoardSats,
       ),
     );

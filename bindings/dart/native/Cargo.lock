@@ -266,13 +266,16 @@ dependencies = [
  "ark-lib",
  "bark-bitcoin-ext",
  "bark-wallet",
+ "base64 0.22.1",
  "bip39",
  "bitcoin",
  "camino",
+ "hex",
  "lightning-invoice",
  "lnurl-rs",
  "once_cell",
  "rusqlite",
+ "serde",
  "serde_json",
  "thiserror",
  "tokio",
@@ -309,6 +312,7 @@ dependencies = [
  "bdk_bitcoind_rpc",
  "bdk_core",
  "bdk_esplora",
+ "bdk_wallet",
  "bip39",
  "bitcoin",
  "chrono",
@@ -388,6 +392,7 @@ dependencies = [
  "bdk_core",
  "bitcoin",
  "miniscript",
+ "rusqlite",
  "serde",
 ]
 
@@ -1217,6 +1222,12 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
+
+[[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hex-conservative"
@@ -2906,7 +2917,6 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
- "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",
@@ -3221,7 +3231,7 @@ dependencies = [
 [[package]]
 name = "uniffi-dart"
 version = "0.1.0"
-source = "git+https://github.com/kumulynja/uniffi-dart?branch=lazy-static-v1.4.0#91efbe4f7a94631d4ddc05e4490b81b158f8cb20"
+source = "git+https://github.com/kumulynja/uniffi-dart?branch=lazy-static-v1.4.0#54c3cb3b8d80c84ec1674262bf7508ecfccb36fd"
 dependencies = [
  "anyhow",
  "camino",
@@ -3292,14 +3302,13 @@ dependencies = [
 [[package]]
 name = "uniffi_dart_macro"
 version = "0.1.0"
-source = "git+https://github.com/kumulynja/uniffi-dart?branch=lazy-static-v1.4.0#91efbe4f7a94631d4ddc05e4490b81b158f8cb20"
+source = "git+https://github.com/kumulynja/uniffi-dart?branch=lazy-static-v1.4.0#54c3cb3b8d80c84ec1674262bf7508ecfccb36fd"
 dependencies = [
  "futures",
  "proc-macro2",
  "quote",
  "stringcase 0.3.0",
  "syn 1.0.109",
- "tokio",
  "uniffi",
 ]
 

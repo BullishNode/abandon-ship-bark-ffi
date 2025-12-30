@@ -414,7 +414,13 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
 
 
 // Public interface members begin here.
-
+// Magic number for the Rust proxy to call using the same mechanism as every other method,
+// to free the callback once it's dropped by Rust.
+private let IDX_CALLBACK_FREE: Int32 = 0
+// Callback return codes
+private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
+private let UNIFFI_CALLBACK_ERROR: Int32 = 1
+private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -549,6 +555,223 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 /**
+ * Onchain Bitcoin wallet for boarding and exits
+ *
+ * Supports two implementations:
+ * - Default: BDK-based wallet (built-in)
+ * - Custom: Your own wallet implementation via callbacks
+ */
+public protocol OnchainWalletProtocol: AnyObject, Sendable {
+    
+    /**
+     * Get the onchain wallet balance
+     */
+    func balance() throws  -> OnchainBalance
+    
+    /**
+     * Generate a new Bitcoin address
+     */
+    func newAddress() throws  -> String
+    
+    /**
+     * Send Bitcoin to an address
+     * Returns the transaction ID
+     */
+    func send(address: String, amountSats: UInt64, feeRateSatPerVb: UInt64) throws  -> String
+    
+    /**
+     * Sync the onchain wallet with the blockchain
+     * Returns the amount synced in satoshis
+     */
+    func sync() throws  -> UInt64
+    
+}
+/**
+ * Onchain Bitcoin wallet for boarding and exits
+ *
+ * Supports two implementations:
+ * - Default: BDK-based wallet (built-in)
+ * - Custom: Your own wallet implementation via callbacks
+ */
+open class OnchainWallet: OnchainWalletProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_bark_ffi_fn_clone_onchainwallet(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        try! rustCall { uniffi_bark_ffi_fn_free_onchainwallet(handle, $0) }
+    }
+
+    
+    /**
+     * Create an onchain wallet using a custom implementation
+     *
+     * Use this when you have an existing wallet implementation in your language
+     * (Dart/Swift/Kotlin) and want to integrate it with Bark for boarding and exits.
+     * Your implementation must handle all wallet operations via the callbacks interface.
+     */
+public static func custom(callbacks: CustomOnchainWalletCallbacks)throws  -> OnchainWallet  {
+    return try  FfiConverterTypeOnchainWallet_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_constructor_onchainwallet_custom(
+        FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks_lower(callbacks),$0
+    )
+})
+}
+    
+    /**
+     * Create or load an onchain wallet using a default BDK implementation shipped with Bark
+     *
+     * The wallet uses BDK for onchain operations
+     * and the same chain source configuration as the Bark wallet (esplora_address or bitcoind_*).
+     */
+public static func `default`(mnemonic: String, config: Config, datadir: String)throws  -> OnchainWallet  {
+    return try  FfiConverterTypeOnchainWallet_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_constructor_onchainwallet_default(
+        FfiConverterString.lower(mnemonic),
+        FfiConverterTypeConfig_lower(config),
+        FfiConverterString.lower(datadir),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Get the onchain wallet balance
+     */
+open func balance()throws  -> OnchainBalance  {
+    return try  FfiConverterTypeOnchainBalance_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_onchainwallet_balance(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Generate a new Bitcoin address
+     */
+open func newAddress()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_onchainwallet_new_address(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Send Bitcoin to an address
+     * Returns the transaction ID
+     */
+open func send(address: String, amountSats: UInt64, feeRateSatPerVb: UInt64)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_onchainwallet_send(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(address),
+        FfiConverterUInt64.lower(amountSats),
+        FfiConverterUInt64.lower(feeRateSatPerVb),$0
+    )
+})
+}
+    
+    /**
+     * Sync the onchain wallet with the blockchain
+     * Returns the amount synced in satoshis
+     */
+open func sync()throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_onchainwallet_sync(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnchainWallet: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = OnchainWallet
+
+    public static func lift(_ handle: UInt64) throws -> OnchainWallet {
+        return OnchainWallet(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: OnchainWallet) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnchainWallet {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: OnchainWallet, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnchainWallet_lift(_ handle: UInt64) throws -> OnchainWallet {
+    return try FfiConverterTypeOnchainWallet.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnchainWallet_lower(_ value: OnchainWallet) -> UInt64 {
+    return FfiConverterTypeOnchainWallet.lower(value)
+}
+
+
+
+
+
+
+/**
  * The main Bark wallet interface for Ark operations
  */
 public protocol WalletProtocol: AnyObject, Sendable {
@@ -564,6 +787,16 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func arkInfo()  -> ArkInfo?
     
     func balance() throws  -> Balance
+    
+    /**
+     * Board all funds from onchain wallet into Ark
+     */
+    func boardAll(onchainWallet: OnchainWallet) throws  -> PendingBoard
+    
+    /**
+     * Board a specific amount from onchain wallet into Ark
+     */
+    func boardAmount(onchainWallet: OnchainWallet, amountSats: UInt64) throws  -> PendingBoard
     
     func bolt11Invoice(amountSats: UInt64) throws  -> LightningInvoice
     
@@ -656,7 +889,27 @@ public protocol WalletProtocol: AnyObject, Sendable {
      */
     func spendableVtxos() throws  -> [Vtxo]
     
+    /**
+     * Start unilateral exit for the entire wallet
+     */
+    func startExitForEntireWallet(onchainWallet: OnchainWallet) throws 
+    
+    /**
+     * Lightweight sync with Ark server and blockchain
+     * Note: Bark's sync() handles errors internally with logging.
+     * The Throws annotation is for forward compatibility only.
+     */
     func sync() throws 
+    
+    /**
+     * Sync exit state
+     */
+    func syncExits(onchainWallet: OnchainWallet) throws 
+    
+    /**
+     * Sync pending board transactions
+     */
+    func syncPendingBoards() throws 
     
     func tryClaimAllLightningReceives(wait: Bool) throws 
     
@@ -727,6 +980,21 @@ public static func create(mnemonic: String, config: Config, datadir: String, for
 }
     
     /**
+     * Create a new Bark wallet WITH onchain capabilities
+     */
+public static func createWithOnchain(mnemonic: String, config: Config, datadir: String, onchainWallet: OnchainWallet, forceRescan: Bool)throws  -> Wallet  {
+    return try  FfiConverterTypeWallet_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_constructor_wallet_create_with_onchain(
+        FfiConverterString.lower(mnemonic),
+        FfiConverterTypeConfig_lower(config),
+        FfiConverterString.lower(datadir),
+        FfiConverterTypeOnchainWallet_lower(onchainWallet),
+        FfiConverterBool.lower(forceRescan),$0
+    )
+})
+}
+    
+    /**
      * Open an existing Bark wallet
      */
 public static func `open`(mnemonic: String, config: Config, datadir: String)throws  -> Wallet  {
@@ -735,6 +1003,20 @@ public static func `open`(mnemonic: String, config: Config, datadir: String)thro
         FfiConverterString.lower(mnemonic),
         FfiConverterTypeConfig_lower(config),
         FfiConverterString.lower(datadir),$0
+    )
+})
+}
+    
+    /**
+     * Open an existing Bark wallet WITH onchain capabilities
+     */
+public static func openWithOnchain(mnemonic: String, config: Config, datadir: String, onchainWallet: OnchainWallet)throws  -> Wallet  {
+    return try  FfiConverterTypeWallet_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_constructor_wallet_open_with_onchain(
+        FfiConverterString.lower(mnemonic),
+        FfiConverterTypeConfig_lower(config),
+        FfiConverterString.lower(datadir),
+        FfiConverterTypeOnchainWallet_lower(onchainWallet),$0
     )
 })
 }
@@ -767,6 +1049,31 @@ open func balance()throws  -> Balance  {
     return try  FfiConverterTypeBalance_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_balance(
             self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Board all funds from onchain wallet into Ark
+     */
+open func boardAll(onchainWallet: OnchainWallet)throws  -> PendingBoard  {
+    return try  FfiConverterTypePendingBoard_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_board_all(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeOnchainWallet_lower(onchainWallet),$0
+    )
+})
+}
+    
+    /**
+     * Board a specific amount from onchain wallet into Ark
+     */
+open func boardAmount(onchainWallet: OnchainWallet, amountSats: UInt64)throws  -> PendingBoard  {
+    return try  FfiConverterTypePendingBoard_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_board_amount(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeOnchainWallet_lower(onchainWallet),
+        FfiConverterUInt64.lower(amountSats),$0
     )
 })
 }
@@ -1016,8 +1323,45 @@ open func spendableVtxos()throws  -> [Vtxo]  {
 })
 }
     
+    /**
+     * Start unilateral exit for the entire wallet
+     */
+open func startExitForEntireWallet(onchainWallet: OnchainWallet)throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_start_exit_for_entire_wallet(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeOnchainWallet_lower(onchainWallet),$0
+    )
+}
+}
+    
+    /**
+     * Lightweight sync with Ark server and blockchain
+     * Note: Bark's sync() handles errors internally with logging.
+     * The Throws annotation is for forward compatibility only.
+     */
 open func sync()throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_sync(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+    
+    /**
+     * Sync exit state
+     */
+open func syncExits(onchainWallet: OnchainWallet)throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_sync_exits(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeOnchainWallet_lower(onchainWallet),$0
+    )
+}
+}
+    
+    /**
+     * Sync pending board transactions
+     */
+open func syncPendingBoards()throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_sync_pending_boards(
             self.uniffiCloneHandle(),$0
     )
 }
@@ -1362,13 +1706,11 @@ public struct Balance: Equatable, Hashable {
      */
     public var pendingLightningSendSats: UInt64
     /**
-     * Total pending Lightning receives (all invoices)
-     */
-    public var pendingLightningReceiveTotalSats: UInt64
-    /**
      * Claimable pending Lightning receives
+     * Note: Bark only tracks claimable receives, not total pending.
+     * The upstream Balance struct only provides claimable_lightning_receive.
      */
-    public var pendingLightningReceiveClaimableSats: UInt64
+    public var claimableLightningReceiveSats: UInt64
     /**
      * Coins pending board confirmations
      */
@@ -1390,11 +1732,10 @@ public struct Balance: Equatable, Hashable {
          * Coins pending as Lightning sends
          */pendingLightningSendSats: UInt64, 
         /**
-         * Total pending Lightning receives (all invoices)
-         */pendingLightningReceiveTotalSats: UInt64, 
-        /**
          * Claimable pending Lightning receives
-         */pendingLightningReceiveClaimableSats: UInt64, 
+         * Note: Bark only tracks claimable receives, not total pending.
+         * The upstream Balance struct only provides claimable_lightning_receive.
+         */claimableLightningReceiveSats: UInt64, 
         /**
          * Coins pending board confirmations
          */pendingBoardSats: UInt64) {
@@ -1402,8 +1743,7 @@ public struct Balance: Equatable, Hashable {
         self.pendingInRoundSats = pendingInRoundSats
         self.pendingExitSats = pendingExitSats
         self.pendingLightningSendSats = pendingLightningSendSats
-        self.pendingLightningReceiveTotalSats = pendingLightningReceiveTotalSats
-        self.pendingLightningReceiveClaimableSats = pendingLightningReceiveClaimableSats
+        self.claimableLightningReceiveSats = claimableLightningReceiveSats
         self.pendingBoardSats = pendingBoardSats
     }
 
@@ -1425,8 +1765,7 @@ public struct FfiConverterTypeBalance: FfiConverterRustBuffer {
                 pendingInRoundSats: FfiConverterUInt64.read(from: &buf), 
                 pendingExitSats: FfiConverterUInt64.read(from: &buf), 
                 pendingLightningSendSats: FfiConverterUInt64.read(from: &buf), 
-                pendingLightningReceiveTotalSats: FfiConverterUInt64.read(from: &buf), 
-                pendingLightningReceiveClaimableSats: FfiConverterUInt64.read(from: &buf), 
+                claimableLightningReceiveSats: FfiConverterUInt64.read(from: &buf), 
                 pendingBoardSats: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -1436,8 +1775,7 @@ public struct FfiConverterTypeBalance: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.pendingInRoundSats, into: &buf)
         FfiConverterUInt64.write(value.pendingExitSats, into: &buf)
         FfiConverterUInt64.write(value.pendingLightningSendSats, into: &buf)
-        FfiConverterUInt64.write(value.pendingLightningReceiveTotalSats, into: &buf)
-        FfiConverterUInt64.write(value.pendingLightningReceiveClaimableSats, into: &buf)
+        FfiConverterUInt64.write(value.claimableLightningReceiveSats, into: &buf)
         FfiConverterUInt64.write(value.pendingBoardSats, into: &buf)
     }
 }
@@ -1455,6 +1793,61 @@ public func FfiConverterTypeBalance_lift(_ buf: RustBuffer) throws -> Balance {
 #endif
 public func FfiConverterTypeBalance_lower(_ value: Balance) -> RustBuffer {
     return FfiConverterTypeBalance.lower(value)
+}
+
+
+/**
+ * Reference to a block in the blockchain
+ */
+public struct BlockRef: Equatable, Hashable {
+    public var height: UInt32
+    public var hash: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(height: UInt32, hash: String) {
+        self.height = height
+        self.hash = hash
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension BlockRef: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlockRef: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlockRef {
+        return
+            try BlockRef(
+                height: FfiConverterUInt32.read(from: &buf), 
+                hash: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlockRef, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.height, into: &buf)
+        FfiConverterString.write(value.hash, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlockRef_lift(_ buf: RustBuffer) throws -> BlockRef {
+    return try FfiConverterTypeBlockRef.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlockRef_lower(_ value: BlockRef) -> RustBuffer {
+    return FfiConverterTypeBlockRef.lower(value)
 }
 
 
@@ -1622,6 +2015,148 @@ public func FfiConverterTypeConfig_lift(_ buf: RustBuffer) throws -> Config {
 #endif
 public func FfiConverterTypeConfig_lower(_ value: Config) -> RustBuffer {
     return FfiConverterTypeConfig.lower(value)
+}
+
+
+/**
+ * Parameters for creating a CPFP (Child Pays For Parent) transaction
+ */
+public struct CpfpParams: Equatable, Hashable {
+    /**
+     * Parent transaction to fee-bump (hex-encoded)
+     */
+    public var txHex: String
+    /**
+     * Fee strategy: "Effective" for normal fee, "Rbf" for replace-by-fee
+     */
+    public var feesType: String
+    /**
+     * Target effective fee rate in sat/vB
+     */
+    public var effectiveFeeRateSatPerVb: UInt64
+    /**
+     * Current package fee in sats (only required for RBF)
+     */
+    public var currentPackageFeeSats: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Parent transaction to fee-bump (hex-encoded)
+         */txHex: String, 
+        /**
+         * Fee strategy: "Effective" for normal fee, "Rbf" for replace-by-fee
+         */feesType: String, 
+        /**
+         * Target effective fee rate in sat/vB
+         */effectiveFeeRateSatPerVb: UInt64, 
+        /**
+         * Current package fee in sats (only required for RBF)
+         */currentPackageFeeSats: UInt64?) {
+        self.txHex = txHex
+        self.feesType = feesType
+        self.effectiveFeeRateSatPerVb = effectiveFeeRateSatPerVb
+        self.currentPackageFeeSats = currentPackageFeeSats
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension CpfpParams: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCpfpParams: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CpfpParams {
+        return
+            try CpfpParams(
+                txHex: FfiConverterString.read(from: &buf), 
+                feesType: FfiConverterString.read(from: &buf), 
+                effectiveFeeRateSatPerVb: FfiConverterUInt64.read(from: &buf), 
+                currentPackageFeeSats: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CpfpParams, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.txHex, into: &buf)
+        FfiConverterString.write(value.feesType, into: &buf)
+        FfiConverterUInt64.write(value.effectiveFeeRateSatPerVb, into: &buf)
+        FfiConverterOptionUInt64.write(value.currentPackageFeeSats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCpfpParams_lift(_ buf: RustBuffer) throws -> CpfpParams {
+    return try FfiConverterTypeCpfpParams.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCpfpParams_lower(_ value: CpfpParams) -> RustBuffer {
+    return FfiConverterTypeCpfpParams.lower(value)
+}
+
+
+/**
+ * A Bitcoin transaction output destination
+ */
+public struct Destination: Equatable, Hashable {
+    public var address: String
+    public var amountSats: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(address: String, amountSats: UInt64) {
+        self.address = address
+        self.amountSats = amountSats
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension Destination: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDestination: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Destination {
+        return
+            try Destination(
+                address: FfiConverterString.read(from: &buf), 
+                amountSats: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Destination, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterUInt64.write(value.amountSats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDestination_lift(_ buf: RustBuffer) throws -> Destination {
+    return try FfiConverterTypeDestination.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDestination_lower(_ value: Destination) -> RustBuffer {
+    return FfiConverterTypeDestination.lower(value)
 }
 
 
@@ -2188,6 +2723,215 @@ public func FfiConverterTypeOffboardResult_lower(_ value: OffboardResult) -> Rus
 
 
 /**
+ * Onchain Bitcoin wallet balance
+ */
+public struct OnchainBalance: Equatable, Hashable {
+    /**
+     * Confirmed balance in sats
+     */
+    public var confirmedSats: UInt64
+    /**
+     * Pending balance (trusted + untrusted) in sats
+     */
+    public var pendingSats: UInt64
+    /**
+     * Total balance in sats
+     */
+    public var totalSats: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Confirmed balance in sats
+         */confirmedSats: UInt64, 
+        /**
+         * Pending balance (trusted + untrusted) in sats
+         */pendingSats: UInt64, 
+        /**
+         * Total balance in sats
+         */totalSats: UInt64) {
+        self.confirmedSats = confirmedSats
+        self.pendingSats = pendingSats
+        self.totalSats = totalSats
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension OnchainBalance: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnchainBalance: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnchainBalance {
+        return
+            try OnchainBalance(
+                confirmedSats: FfiConverterUInt64.read(from: &buf), 
+                pendingSats: FfiConverterUInt64.read(from: &buf), 
+                totalSats: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnchainBalance, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.confirmedSats, into: &buf)
+        FfiConverterUInt64.write(value.pendingSats, into: &buf)
+        FfiConverterUInt64.write(value.totalSats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnchainBalance_lift(_ buf: RustBuffer) throws -> OnchainBalance {
+    return try FfiConverterTypeOnchainBalance.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnchainBalance_lower(_ value: OnchainBalance) -> RustBuffer {
+    return FfiConverterTypeOnchainBalance.lower(value)
+}
+
+
+/**
+ * A Bitcoin transaction outpoint (reference to a previous output)
+ */
+public struct OutPoint: Equatable, Hashable {
+    public var txid: String
+    public var vout: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(txid: String, vout: UInt32) {
+        self.txid = txid
+        self.vout = vout
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension OutPoint: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOutPoint: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OutPoint {
+        return
+            try OutPoint(
+                txid: FfiConverterString.read(from: &buf), 
+                vout: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OutPoint, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.txid, into: &buf)
+        FfiConverterUInt32.write(value.vout, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOutPoint_lift(_ buf: RustBuffer) throws -> OutPoint {
+    return try FfiConverterTypeOutPoint.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOutPoint_lower(_ value: OutPoint) -> RustBuffer {
+    return FfiConverterTypeOutPoint.lower(value)
+}
+
+
+/**
+ * Pending board transaction information
+ */
+public struct PendingBoard: Equatable, Hashable {
+    /**
+     * VTXO ID that will be created once board is registered
+     */
+    public var vtxoId: String
+    /**
+     * Amount being boarded in sats
+     */
+    public var amountSats: UInt64
+    /**
+     * On-chain transaction ID
+     */
+    public var txid: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * VTXO ID that will be created once board is registered
+         */vtxoId: String, 
+        /**
+         * Amount being boarded in sats
+         */amountSats: UInt64, 
+        /**
+         * On-chain transaction ID
+         */txid: String) {
+        self.vtxoId = vtxoId
+        self.amountSats = amountSats
+        self.txid = txid
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension PendingBoard: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePendingBoard: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PendingBoard {
+        return
+            try PendingBoard(
+                vtxoId: FfiConverterString.read(from: &buf), 
+                amountSats: FfiConverterUInt64.read(from: &buf), 
+                txid: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PendingBoard, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.vtxoId, into: &buf)
+        FfiConverterUInt64.write(value.amountSats, into: &buf)
+        FfiConverterString.write(value.txid, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePendingBoard_lift(_ buf: RustBuffer) throws -> PendingBoard {
+    return try FfiConverterTypePendingBoard.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePendingBoard_lower(_ value: PendingBoard) -> RustBuffer {
+    return FfiConverterTypePendingBoard.lower(value)
+}
+
+
+/**
  * Simplified view of a VTXO
  */
 public struct Vtxo: Equatable, Hashable {
@@ -2364,6 +3108,8 @@ public enum BarkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     )
     case Internal(errorMessage: String
     )
+    case OnchainWalletRequired(errorMessage: String
+    )
 
     
 
@@ -2416,6 +3162,9 @@ public struct FfiConverterTypeBarkError: FfiConverterRustBuffer {
             errorMessage: try FfiConverterString.read(from: &buf)
             )
         case 9: return .Internal(
+            errorMessage: try FfiConverterString.read(from: &buf)
+            )
+        case 10: return .OnchainWalletRequired(
             errorMessage: try FfiConverterString.read(from: &buf)
             )
 
@@ -2472,6 +3221,11 @@ public struct FfiConverterTypeBarkError: FfiConverterRustBuffer {
         
         case let .Internal(errorMessage):
             writeInt(&buf, Int32(9))
+            FfiConverterString.write(errorMessage, into: &buf)
+            
+        
+        case let .OnchainWalletRequired(errorMessage):
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(errorMessage, into: &buf)
             
         }
@@ -2574,6 +3328,428 @@ public func FfiConverterTypeNetwork_lower(_ value: Network) -> RustBuffer {
     return FfiConverterTypeNetwork.lower(value)
 }
 
+
+
+
+
+/**
+ * Callback interface for custom onchain wallet implementations
+ *
+ * Implement this interface in Dart/Swift/Kotlin to provide your own wallet.
+ */
+public protocol CustomOnchainWalletCallbacks: AnyObject, Sendable {
+    
+    /**
+     * Get the wallet balance in satoshis
+     */
+    func getBalance() throws  -> UInt64
+    
+    /**
+     * Prepare a transaction to send to given destinations
+     *
+     * # Arguments
+     * * `destinations` - List of destinations with addresses and amounts
+     * * `fee_rate_sat_per_vb` - Fee rate in sats per vbyte
+     *
+     * # Returns
+     * Base64-encoded PSBT
+     */
+    func prepareTx(destinations: [Destination], feeRateSatPerVb: UInt64) throws  -> String
+    
+    /**
+     * Prepare a transaction that drains the wallet to a single address
+     *
+     * # Arguments
+     * * `address` - Bitcoin address to drain to
+     * * `fee_rate_sat_per_vb` - Fee rate in sats per vbyte
+     *
+     * # Returns
+     * Base64-encoded PSBT
+     */
+    func prepareDrainTx(address: String, feeRateSatPerVb: UInt64) throws  -> String
+    
+    /**
+     * Sign and finalize a PSBT
+     *
+     * # Arguments
+     * * `psbt_base64` - Base64-encoded PSBT
+     *
+     * # Returns
+     * Hex-encoded signed transaction
+     */
+    func finishTx(psbtBase64: String) throws  -> String
+    
+    /**
+     * Get a wallet transaction by txid
+     *
+     * # Arguments
+     * * `txid` - Transaction ID as hex string
+     *
+     * # Returns
+     * Hex-encoded transaction, or null if not found
+     */
+    func getWalletTx(txid: String) throws  -> String?
+    
+    /**
+     * Get the block hash where a transaction was confirmed
+     *
+     * # Arguments
+     * * `txid` - Transaction ID as hex string
+     *
+     * # Returns
+     * Block reference with height and hash, or null if unconfirmed
+     */
+    func getWalletTxConfirmedBlock(txid: String) throws  -> BlockRef?
+    
+    /**
+     * Find transaction that spends a given output
+     *
+     * # Arguments
+     * * `outpoint` - Transaction outpoint to check
+     *
+     * # Returns
+     * Hex-encoded spending transaction, or null if unspent
+     */
+    func getSpendingTx(outpoint: OutPoint) throws  -> String?
+    
+    /**
+     * Create a signed P2A CPFP transaction
+     *
+     * # Arguments
+     * * `params` - CPFP transaction parameters
+     *
+     * # Returns
+     * Hex-encoded signed CPFP transaction
+     */
+    func makeSignedP2aCpfp(params: CpfpParams) throws  -> String
+    
+    /**
+     * Store a signed P2A CPFP transaction in the wallet
+     *
+     * # Arguments
+     * * `tx_hex` - Hex-encoded transaction
+     */
+    func storeSignedP2aCpfp(txHex: String) throws 
+    
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceCustomOnchainWalletCallbacks {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceCustomOnchainWalletCallbacks] = [UniffiVTableCallbackInterfaceCustomOnchainWalletCallbacks(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface CustomOnchainWalletCallbacks: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface CustomOnchainWalletCallbacks: handle missing in uniffiClone")
+            }
+        },
+        getBalance: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UInt64>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> UInt64 in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.getBalance(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterUInt64.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeBarkError_lower
+            )
+        },
+        prepareTx: { (
+            uniffiHandle: UInt64,
+            destinations: RustBuffer,
+            feeRateSatPerVb: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.prepareTx(
+                     destinations: try FfiConverterSequenceTypeDestination.lift(destinations),
+                     feeRateSatPerVb: try FfiConverterUInt64.lift(feeRateSatPerVb)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeBarkError_lower
+            )
+        },
+        prepareDrainTx: { (
+            uniffiHandle: UInt64,
+            address: RustBuffer,
+            feeRateSatPerVb: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.prepareDrainTx(
+                     address: try FfiConverterString.lift(address),
+                     feeRateSatPerVb: try FfiConverterUInt64.lift(feeRateSatPerVb)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeBarkError_lower
+            )
+        },
+        finishTx: { (
+            uniffiHandle: UInt64,
+            psbtBase64: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.finishTx(
+                     psbtBase64: try FfiConverterString.lift(psbtBase64)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeBarkError_lower
+            )
+        },
+        getWalletTx: { (
+            uniffiHandle: UInt64,
+            txid: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String? in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.getWalletTx(
+                     txid: try FfiConverterString.lift(txid)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeBarkError_lower
+            )
+        },
+        getWalletTxConfirmedBlock: { (
+            uniffiHandle: UInt64,
+            txid: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> BlockRef? in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.getWalletTxConfirmedBlock(
+                     txid: try FfiConverterString.lift(txid)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionTypeBlockRef.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeBarkError_lower
+            )
+        },
+        getSpendingTx: { (
+            uniffiHandle: UInt64,
+            outpoint: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String? in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.getSpendingTx(
+                     outpoint: try FfiConverterTypeOutPoint_lift(outpoint)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeBarkError_lower
+            )
+        },
+        makeSignedP2aCpfp: { (
+            uniffiHandle: UInt64,
+            params: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.makeSignedP2aCpfp(
+                     params: try FfiConverterTypeCpfpParams_lift(params)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeBarkError_lower
+            )
+        },
+        storeSignedP2aCpfp: { (
+            uniffiHandle: UInt64,
+            txHex: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.storeSignedP2aCpfp(
+                     txHex: try FfiConverterString.lift(txHex)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeBarkError_lower
+            )
+        }
+    )]
+}
+
+private func uniffiCallbackInitCustomOnchainWalletCallbacks() {
+    uniffi_bark_ffi_fn_init_callback_vtable_customonchainwalletcallbacks(UniffiCallbackInterfaceCustomOnchainWalletCallbacks.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks {
+    fileprivate static let handleMap = UniffiHandleMap<CustomOnchainWalletCallbacks>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks : FfiConverter {
+    typealias SwiftType = CustomOnchainWalletCallbacks
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks_lift(_ handle: UInt64) throws -> CustomOnchainWalletCallbacks {
+    return try FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks_lower(_ v: CustomOnchainWalletCallbacks) -> UInt64 {
+    return FfiConverterCallbackInterfaceCustomOnchainWalletCallbacks.lower(v)
+}
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2698,6 +3874,30 @@ fileprivate struct FfiConverterOptionTypeArkInfo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeBlockRef: FfiConverterRustBuffer {
+    typealias SwiftType = BlockRef?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBlockRef.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBlockRef.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -2715,6 +3915,31 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeDestination: FfiConverterRustBuffer {
+    typealias SwiftType = [Destination]
+
+    public static func write(_ value: [Destination], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeDestination.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Destination] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Destination]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeDestination.read(from: &buf))
         }
         return seq
     }
@@ -2864,6 +4089,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_func_validate_mnemonic() != 2707) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_onchainwallet_balance() != 22016) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_onchainwallet_new_address() != 41946) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_onchainwallet_send() != 33716) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_onchainwallet_sync() != 30454) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_all_vtxos() != 48937) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2871,6 +4108,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_balance() != 11221) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_board_all() != 41101) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_board_amount() != 42163) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_bolt11_invoice() != 64551) {
@@ -2942,7 +4185,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_method_wallet_spendable_vtxos() != 48976) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_wallet_start_exit_for_entire_wallet() != 26993) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_sync() != 3312) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_sync_exits() != 5469) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_sync_pending_boards() != 8863) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_try_claim_all_lightning_receives() != 53132) {
@@ -2951,13 +4203,53 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_method_wallet_vtxos() != 16778) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_constructor_onchainwallet_custom() != 33851) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_constructor_onchainwallet_default() != 27781) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_constructor_wallet_create() != 28953) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_constructor_wallet_create_with_onchain() != 8743) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_constructor_wallet_open() != 34910) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_constructor_wallet_open_with_onchain() != 2455) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_get_balance() != 17287) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_prepare_tx() != 44054) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_prepare_drain_tx() != 7162) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_finish_tx() != 60386) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_get_wallet_tx() != 24800) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_get_wallet_tx_confirmed_block() != 908) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_get_spending_tx() != 62027) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_make_signed_p2a_cpfp() != 51567) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_customonchainwalletcallbacks_store_signed_p2a_cpfp() != 35734) {
+        return InitializationResult.apiChecksumMismatch
+    }
 
+    uniffiCallbackInitCustomOnchainWalletCallbacks()
     return InitializationResult.ok
 }()
 

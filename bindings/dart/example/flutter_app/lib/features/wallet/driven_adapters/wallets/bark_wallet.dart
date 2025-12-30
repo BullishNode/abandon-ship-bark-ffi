@@ -155,10 +155,7 @@ class BarkWallet implements WalletPort {
           pendingInRoundSats: balance.pendingInRoundSats,
           pendingExitSats: balance.pendingExitSats,
           pendingLightningSendSats: balance.pendingLightningSendSats,
-          pendingLightningReceiveTotalSats:
-              balance.pendingLightningReceiveTotalSats,
-          pendingLightningReceiveClaimableSats:
-              balance.pendingLightningReceiveClaimableSats,
+          claimableLightningReceiveSats: balance.claimableLightningReceiveSats,
           pendingBoardSats: balance.pendingBoardSats,
         );
       },

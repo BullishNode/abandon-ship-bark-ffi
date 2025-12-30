@@ -159,10 +159,8 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
             pendingInRoundSats: balance.pendingInRoundSats,
             pendingExitSats: balance.pendingExitSats,
             pendingLightningSendSats: balance.pendingLightningSendSats,
-            pendingLightningReceiveTotalSats:
-                balance.pendingLightningReceiveTotalSats,
-            pendingLightningReceiveClaimableSats:
-                balance.pendingLightningReceiveClaimableSats,
+            claimableLightningReceiveSats:
+                balance.claimableLightningReceiveSats,
             pendingBoardSats: balance.pendingBoardSats,
           );
 
@@ -343,28 +341,22 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
       GetWalletBackupQuery(walletId: event.walletId),
     );
 
-    result.fold(
-      (failure) => emit(WalletError(failure.message)),
-      (response) {
-        // Map DTO to VM
-        final WalletBackupVM backupVM;
-        final dto = response.backup;
-        if (dto is BarkWalletBackupDto) {
-          backupVM = BarkWalletBackupVM(
-            mnemonic: dto.mnemonic,
-            fingerprint: dto.fingerprint,
-          );
-        } else {
-          emit(WalletError('Unsupported wallet backup type'));
-          return;
-        }
+    result.fold((failure) => emit(WalletError(failure.message)), (response) {
+      // Map DTO to VM
+      final WalletBackupVM backupVM;
+      final dto = response.backup;
+      if (dto is BarkWalletBackupDto) {
+        backupVM = BarkWalletBackupVM(
+          mnemonic: dto.mnemonic,
+          fingerprint: dto.fingerprint,
+        );
+      } else {
+        emit(WalletError('Unsupported wallet backup type'));
+        return;
+      }
 
-        emit(BackupLoaded(
-          walletId: event.walletId,
-          backup: backupVM,
-        ));
-      },
-    );
+      emit(BackupLoaded(walletId: event.walletId, backup: backupVM));
+    });
   }
 
   Future<void> _onSendArkoorPayment(
@@ -381,20 +373,19 @@ class WalletBloc extends Bloc<events.WalletEvent, WalletState> {
       ),
     );
 
-    result.fold(
-      (failure) => emit(WalletError(failure.message)),
-      (response) {
-        final dto = response.result;
-        if (dto is ArkoorSendPaymentDto) {
-          emit(PaymentSent(
+    result.fold((failure) => emit(WalletError(failure.message)), (response) {
+      final dto = response.result;
+      if (dto is ArkoorSendPaymentDto) {
+        emit(
+          PaymentSent(
             walletId: event.walletId,
             txid: dto.txid,
             amountSats: dto.amountSats,
-          ));
-        } else {
-          emit(WalletError('Unsupported payment result type'));
-        }
-      },
-    );
+          ),
+        );
+      } else {
+        emit(WalletError('Unsupported payment result type'));
+      }
+    });
   }
 }
