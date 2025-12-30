@@ -394,3 +394,37 @@ impl From<&bark::ark::ArkInfo> for ArkInfo {
         }
     }
 }
+
+// ============================================================================
+// Callback Wallet Types
+// ============================================================================
+
+/// A Bitcoin transaction output destination
+#[derive(Clone, Debug)]
+pub struct Destination {
+    pub address: String,
+    pub amount_sats: u64,
+}
+
+/// A Bitcoin transaction outpoint (reference to a previous output)
+#[derive(Clone, Debug)]
+pub struct OutPoint {
+    pub txid: String,
+    pub vout: u32,
+}
+
+/// Reference to a block in the blockchain
+#[derive(Clone, Debug)]
+pub struct BlockRef {
+    pub height: u32,
+    pub hash: String,
+}
+
+/// Parameters for creating a CPFP (Child Pays For Parent) transaction
+#[derive(Clone, Debug)]
+pub struct CpfpParams {
+    pub tx_hex: String,
+    pub fees_type: String,
+    pub effective_fee_rate_sat_per_vb: u64,
+    pub current_package_fee_sats: Option<u64>,
+}

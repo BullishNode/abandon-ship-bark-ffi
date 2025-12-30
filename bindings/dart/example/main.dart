@@ -82,10 +82,7 @@ Future<void> example() async {
   print("  Pending exit: ${balance.pendingExitSats} sats");
   print("  Pending Lightning send: ${balance.pendingLightningSendSats} sats");
   print(
-    "  Pending Lightning receive (total): ${balance.pendingLightningReceiveTotalSats} sats",
-  );
-  print(
-    "  Pending Lightning receive (claimable): ${balance.pendingLightningReceiveClaimableSats} sats",
+    "  Claimable Lightning receive: ${balance.claimableLightningReceiveSats} sats",
   );
   print("  Pending board: ${balance.pendingBoardSats} sats");
 

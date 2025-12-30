@@ -81,8 +81,7 @@ class _WalletViewState extends State<WalletView>
           int totalPendingInRound = 0;
           int totalPendingExit = 0;
           int totalPendingLightningSend = 0;
-          int totalPendingLightningReceiveTotal = 0;
-          int totalPendingLightningReceiveClaimable = 0;
+          int totalClaimableLightningReceive = 0;
           int totalPendingBoard = 0;
 
           for (final balance in state.balances.values) {
@@ -90,10 +89,8 @@ class _WalletViewState extends State<WalletView>
             totalPendingInRound += balance.pendingInRoundSats;
             totalPendingExit += balance.pendingExitSats;
             totalPendingLightningSend += balance.pendingLightningSendSats;
-            totalPendingLightningReceiveTotal +=
-                balance.pendingLightningReceiveTotalSats;
-            totalPendingLightningReceiveClaimable +=
-                balance.pendingLightningReceiveClaimableSats;
+            totalClaimableLightningReceive +=
+                balance.claimableLightningReceiveSats;
             totalPendingBoard += balance.pendingBoardSats;
           }
 
@@ -103,9 +100,7 @@ class _WalletViewState extends State<WalletView>
             pendingInRoundSats: totalPendingInRound,
             pendingExitSats: totalPendingExit,
             pendingLightningSendSats: totalPendingLightningSend,
-            pendingLightningReceiveTotalSats: totalPendingLightningReceiveTotal,
-            pendingLightningReceiveClaimableSats:
-                totalPendingLightningReceiveClaimable,
+            claimableLightningReceiveSats: totalClaimableLightningReceive,
             pendingBoardSats: totalPendingBoard,
           );
         }
@@ -206,7 +201,12 @@ class _WalletViewState extends State<WalletView>
                             // Backup Card
                             if (hasWallets && state.wallets.isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  16,
+                                  16,
+                                  0,
+                                ),
                                 child: Container(
                                   decoration: BoxDecoration(
                                     color: isDark

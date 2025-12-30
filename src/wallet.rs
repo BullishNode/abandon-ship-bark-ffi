@@ -110,21 +110,37 @@ impl Wallet {
             let db = crate::db::get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
 
-            // Get reference to onchain wallet
-            let onchain_inner = onchain_wallet.inner().lock().await;
-
             eprintln!("[CREATE] Creating Bark wallet with onchain capabilities...");
 
-            let inner = InnerWallet::create_with_onchain(
-                &mnemonic,
-                network,
-                cfg,
-                db,
-                &*onchain_inner,
-                force_rescan,
-            )
-            .await
-            .map_err(BarkError::from)?;
+            let inner = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
+                let onchain_inner = bdk_wallet.lock().await;
+                InnerWallet::create_with_onchain(
+                    &mnemonic,
+                    network,
+                    cfg,
+                    db,
+                    &*onchain_inner,
+                    force_rescan,
+                )
+                .await
+                .map_err(BarkError::from)?
+            } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
+                let onchain_inner = callback_adapter.lock().await;
+                InnerWallet::create_with_onchain(
+                    &mnemonic,
+                    network,
+                    cfg,
+                    db,
+                    &*onchain_inner,
+                    force_rescan,
+                )
+                .await
+                .map_err(BarkError::from)?
+            } else {
+                return Err(BarkError::Internal {
+                    error_message: "Invalid onchain wallet state".to_string(),
+                });
+            };
 
             eprintln!("[CREATE] ✅ Bark wallet with onchain created successfully");
 
@@ -150,14 +166,23 @@ impl Wallet {
             let db = crate::db::get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
 
-            // Get reference to onchain wallet
-            let onchain_inner = onchain_wallet.inner().lock().await;
-
             eprintln!("[OPEN] Opening Bark wallet with onchain capabilities...");
 
-            let inner = InnerWallet::open_with_onchain(&mnemonic, db, &*onchain_inner, cfg)
-                .await
-                .map_err(BarkError::from)?;
+            let inner = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
+                let onchain_inner = bdk_wallet.lock().await;
+                InnerWallet::open_with_onchain(&mnemonic, db, &*onchain_inner, cfg)
+                    .await
+                    .map_err(BarkError::from)?
+            } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
+                let onchain_inner = callback_adapter.lock().await;
+                InnerWallet::open_with_onchain(&mnemonic, db, &*onchain_inner, cfg)
+                    .await
+                    .map_err(BarkError::from)?
+            } else {
+                return Err(BarkError::Internal {
+                    error_message: "Invalid onchain wallet state".to_string(),
+                });
+            };
 
             // Check if server connection was established
             if inner.ark_info().await.ok().flatten().is_some() {
@@ -660,18 +685,31 @@ impl Wallet {
         amount_sats: u64,
     ) -> Result<crate::PendingBoard, BarkError> {
         TOKIO_RT.block_on(async {
-            let mut onchain = onchain_wallet.inner().lock().await;
             let amount = bitcoin::Amount::from_sat(amount_sats);
 
             eprintln!("[BOARD] Boarding {} sats into Ark...", amount_sats);
 
-            let pb = self
-                .inner
-                .board_amount(&mut *onchain, amount)
-                .await
-                .map_err(|e| BarkError::Internal {
-                    error_message: format!("Board failed: {}", e),
-                })?;
+            let pb = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
+                let mut onchain = bdk_wallet.lock().await;
+                self.inner
+                    .board_amount(&mut *onchain, amount)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Board failed: {}", e),
+                    })?
+            } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
+                let mut onchain = callback_adapter.lock().await;
+                self.inner
+                    .board_amount(&mut *onchain, amount)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Board failed: {}", e),
+                    })?
+            } else {
+                return Err(BarkError::Internal {
+                    error_message: "Invalid onchain wallet state".to_string(),
+                });
+            };
 
             let txid = pb.funding_tx.compute_txid();
             let vtxo_id = pb.vtxos.first().map(|v| v.to_string()).unwrap_or_default();
@@ -702,17 +740,29 @@ impl Wallet {
         onchain_wallet: Arc<crate::OnchainWallet>,
     ) -> Result<crate::PendingBoard, BarkError> {
         TOKIO_RT.block_on(async {
-            let mut onchain = onchain_wallet.inner().lock().await;
-
             eprintln!("[BOARD] Boarding ALL funds into Ark...");
 
-            let pb = self
-                .inner
-                .board_all(&mut *onchain)
-                .await
-                .map_err(|e| BarkError::Internal {
-                    error_message: format!("Board all failed: {}", e),
-                })?;
+            let pb = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
+                let mut onchain = bdk_wallet.lock().await;
+                self.inner
+                    .board_all(&mut *onchain)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Board all failed: {}", e),
+                    })?
+            } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
+                let mut onchain = callback_adapter.lock().await;
+                self.inner
+                    .board_all(&mut *onchain)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Board all failed: {}", e),
+                    })?
+            } else {
+                return Err(BarkError::Internal {
+                    error_message: "Invalid onchain wallet state".to_string(),
+                });
+            };
 
             let txid = pb.funding_tx.compute_txid();
             let vtxo_id = pb.vtxos.first().map(|v| v.to_string()).unwrap_or_default();
@@ -772,19 +822,35 @@ impl Wallet {
         onchain_wallet: Arc<crate::OnchainWallet>,
     ) -> Result<(), BarkError> {
         TOKIO_RT.block_on(async {
-            let onchain = onchain_wallet.inner().lock().await;
-
             eprintln!("[EXIT] Starting unilateral exit for entire wallet...");
 
-            self.inner
-                .exit
-                .write()
-                .await
-                .start_exit_for_entire_wallet(&*onchain)
-                .await
-                .map_err(|e| BarkError::Internal {
-                    error_message: format!("Start exit failed: {}", e),
-                })?;
+            if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
+                let onchain = bdk_wallet.lock().await;
+                self.inner
+                    .exit
+                    .write()
+                    .await
+                    .start_exit_for_entire_wallet(&*onchain)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Start exit failed: {}", e),
+                    })?;
+            } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
+                let onchain = callback_adapter.lock().await;
+                self.inner
+                    .exit
+                    .write()
+                    .await
+                    .start_exit_for_entire_wallet(&*onchain)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Start exit failed: {}", e),
+                    })?;
+            } else {
+                return Err(BarkError::Internal {
+                    error_message: "Invalid onchain wallet state".to_string(),
+                });
+            }
 
             eprintln!("[EXIT] ✅ Exit initiated - call sync_exits() periodically to progress");
 
@@ -808,16 +874,29 @@ impl Wallet {
         onchain_wallet: Arc<crate::OnchainWallet>,
     ) -> Result<(), BarkError> {
         TOKIO_RT.block_on(async {
-            let mut onchain = onchain_wallet.inner().lock().await;
-
             eprintln!("[EXIT] Syncing exits...");
 
-            self.inner
-                .sync_exits(&mut *onchain)
-                .await
-                .map_err(|e| BarkError::Internal {
-                    error_message: format!("Sync exits failed: {}", e),
-                })?;
+            if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
+                let mut onchain = bdk_wallet.lock().await;
+                self.inner
+                    .sync_exits(&mut *onchain)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Sync exits failed: {}", e),
+                    })?;
+            } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
+                let mut onchain = callback_adapter.lock().await;
+                self.inner
+                    .sync_exits(&mut *onchain)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Sync exits failed: {}", e),
+                    })?;
+            } else {
+                return Err(BarkError::Internal {
+                    error_message: "Invalid onchain wallet state".to_string(),
+                });
+            }
 
             eprintln!("[EXIT] ✅ Exits synced");
 

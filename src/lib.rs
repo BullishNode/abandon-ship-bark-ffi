@@ -5,6 +5,7 @@
 //! This crate provides UniFFI-generated bindings that allow using Bark
 //! from other languages like Dart, Swift, Kotlin, and Python.
 
+mod callback_wallet;
 mod db;
 mod error;
 mod functions;
@@ -13,6 +14,7 @@ mod runtime;
 mod types;
 mod wallet;
 
+pub use callback_wallet::OnchainWalletCallbacks;
 pub use error::BarkError;
 pub use functions::*;
 pub use onchain_wallet::OnchainWallet;

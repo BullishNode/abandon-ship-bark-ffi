@@ -7,8 +7,7 @@ class BarkBalanceVO extends Equatable {
   final int pendingInRoundSats;
   final int pendingExitSats;
   final int pendingLightningSendSats;
-  final int pendingLightningReceiveTotalSats;
-  final int pendingLightningReceiveClaimableSats;
+  final int claimableLightningReceiveSats;
   final int pendingBoardSats;
 
   const BarkBalanceVO({
@@ -16,8 +15,7 @@ class BarkBalanceVO extends Equatable {
     required this.pendingInRoundSats,
     required this.pendingExitSats,
     required this.pendingLightningSendSats,
-    required this.pendingLightningReceiveTotalSats,
-    required this.pendingLightningReceiveClaimableSats,
+    required this.claimableLightningReceiveSats,
     required this.pendingBoardSats,
   });
 
@@ -27,7 +25,7 @@ class BarkBalanceVO extends Equatable {
       pendingInRoundSats +
       pendingExitSats +
       pendingLightningSendSats +
-      pendingLightningReceiveTotalSats +
+      claimableLightningReceiveSats +
       pendingBoardSats;
 
   @override
@@ -36,8 +34,7 @@ class BarkBalanceVO extends Equatable {
     pendingInRoundSats,
     pendingExitSats,
     pendingLightningSendSats,
-    pendingLightningReceiveTotalSats,
-    pendingLightningReceiveClaimableSats,
+    claimableLightningReceiveSats,
     pendingBoardSats,
   ];
 }
