@@ -48,7 +48,7 @@ Future<void> defaultOnchainExample() async {
   final props = wallet.properties();
   print("Bark wallet fingerprint: ${props.fingerprint}");
 
-  if (balance.totalSats > 0) {
+  if (balance.confirmedSats > 0) {
     print("\nBoarding ${balance.totalSats} sats...");
     try {
       final pendingBoard = await wallet.boardAll(onchainWallet);
@@ -62,4 +62,8 @@ Future<void> defaultOnchainExample() async {
   } else {
     print("\nNo onchain funds. Send sats to: $address");
   }
+
+  wallet.balance().pendingBoardSats > 0
+      ? await wallet.syncPendingBoards()
+      : print("No pending boards.");
 }
