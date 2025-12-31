@@ -777,6 +777,13 @@ public func FfiConverterTypeOnchainWallet_lower(_ value: OnchainWallet) -> UInt6
 public protocol WalletProtocol: AnyObject, Sendable {
     
     /**
+     * Get earliest block height when all exits will be claimable
+     *
+     * Returns null if no exits or any exit has undetermined claimability.
+     */
+    func allExitsClaimableAtHeight() throws  -> UInt32?
+    
+    /**
      * Get all VTXOs (including spent)
      */
     func allVtxos() throws  -> [Vtxo]
@@ -801,6 +808,28 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func bolt11Invoice(amountSats: UInt64) throws  -> LightningInvoice
     
     /**
+     * Cancel all pending rounds
+     */
+    func cancelAllPendingRounds() throws 
+    
+    /**
+     * Cancel a specific pending round
+     */
+    func cancelPendingRound(roundId: UInt32) throws 
+    
+    /**
+     * Check lightning payment status by payment hash
+     *
+     * # Arguments
+     *
+     * * `payment_hash` - Payment hash as hex string
+     * * `wait` - Whether to wait for the payment to complete
+     *
+     * Returns the preimage if payment is successful, null if still pending
+     */
+    func checkLightningPayment(paymentHash: String, wait: Bool) throws  -> String?
+    
+    /**
      * Get claimable lightning receive balance
      */
     func claimableLightningReceiveBalanceSats() throws  -> UInt64
@@ -811,9 +840,56 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func config()  -> Config
     
     /**
+     * Drain claimable exits to an address
+     *
+     * Builds a signed PSBT that claims exited funds and sends them to the address.
+     * The PSBT can be broadcast directly or modified before broadcasting.
+     *
+     * # Arguments
+     *
+     * * `vtxo_ids` - List of claimable VTXO IDs to drain (empty = drain all)
+     * * `address` - Bitcoin address to send claimed funds to
+     * * `fee_rate_sat_per_vb` - Optional fee rate override in sats/vB
+     */
+    func drainExits(vtxoIds: [String], address: String, feeRateSatPerVb: UInt64?) throws  -> ExitClaimTransaction
+    
+    /**
+     * Get detailed exit status for a specific VTXO
+     *
+     * Returns detailed status including current state, history, and transactions.
+     *
+     * # Arguments
+     *
+     * * `vtxo_id` - The VTXO ID to check
+     * * `include_history` - Whether to include full state machine history
+     * * `include_transactions` - Whether to include transaction details
+     */
+    func getExitStatus(vtxoId: String, includeHistory: Bool, includeTransactions: Bool) throws  -> ExitTransactionStatus?
+    
+    /**
+     * Get all VTXOs currently in exit process
+     */
+    func getExitVtxos() throws  -> [ExitVtxo]
+    
+    /**
      * Get VTXOs expiring within threshold blocks
      */
     func getExpiringVtxos(thresholdBlocks: UInt32) throws  -> [Vtxo]
+    
+    /**
+     * Get the block height of the first expiring VTXO
+     *
+     * Returns null if there are no spendable VTXOs.
+     */
+    func getFirstExpiringVtxoBlockheight() throws  -> UInt32?
+    
+    /**
+     * Get the next block height when a refresh should be performed
+     *
+     * This is calculated as the first expiring VTXO height minus the refresh threshold.
+     * Returns null if there are no VTXOs to refresh.
+     */
+    func getNextRequiredRefreshBlockheight() throws  -> UInt32?
     
     /**
      * Get a specific VTXO by ID
@@ -825,6 +901,32 @@ public protocol WalletProtocol: AnyObject, Sendable {
      */
     func getVtxosToRefresh() throws  -> [Vtxo]
     
+    /**
+     * Check if any exits are pending
+     */
+    func hasPendingExits() throws  -> Bool
+    
+    /**
+     * Get all wallet movements (transaction history)
+     */
+    func history() throws  -> [Movement]
+    
+    /**
+     * Get lightning receive status by payment hash
+     *
+     * # Arguments
+     *
+     * * `payment_hash` - Payment hash as hex string
+     */
+    func lightningReceiveStatus(paymentHash: String) throws  -> LightningReceive?
+    
+    /**
+     * List all exits that are claimable
+     *
+     * Returns exits ready to be drained to onchain wallet.
+     */
+    func listClaimableExits() throws  -> [ExitVtxo]
+    
     func maintenance() throws 
     
     /**
@@ -833,9 +935,18 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func maintenanceRefresh() throws  -> String?
     
     /**
-     * Get all wallet movements (transaction history)
+     * Full maintenance including onchain wallet sync
+     *
+     * More thorough than maintenance() - also syncs onchain wallet and exits.
      */
-    func movements() throws  -> [Movement]
+    func maintenanceWithOnchain(onchainWallet: OnchainWallet) throws 
+    
+    /**
+     * Schedule a maintenance refresh if VTXOs need refreshing
+     *
+     * Returns the round ID if a refresh was scheduled, null otherwise.
+     */
+    func maybeScheduleMaintenanceRefresh() throws  -> UInt32?
     
     func newAddress() throws  -> String
     
@@ -851,9 +962,19 @@ public protocol WalletProtocol: AnyObject, Sendable {
      */
     func offboardVtxos(vtxoIds: [String], bitcoinAddress: String) throws  -> String
     
-    func payLightningAddress(lightningAddress: String, amountSats: UInt64, comment: String?) throws  -> LightningPaymentResult
+    func payLightningAddress(lightningAddress: String, amountSats: UInt64, comment: String?) throws  -> LightningSend
     
-    func payLightningInvoice(invoice: String, amountSats: UInt64?) throws  -> LightningPaymentResult
+    func payLightningInvoice(invoice: String, amountSats: UInt64?) throws  -> LightningSend
+    
+    /**
+     * Pay a BOLT12 lightning offer
+     *
+     * # Arguments
+     *
+     * * `offer` - BOLT12 offer string
+     * * `amount_sats` - Optional amount in sats (required if offer doesn't specify amount)
+     */
+    func payLightningOffer(offer: String, amountSats: UInt64?) throws  -> LightningSend
     
     /**
      * Peek at an address at a specific index
@@ -861,16 +982,53 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func peakAddress(index: UInt32) throws  -> String
     
     /**
+     * Get total amount in pending exits (sats)
+     */
+    func pendingExitsTotalSats() throws  -> UInt64
+    
+    /**
      * Get all pending lightning receives
      */
-    func pendingLightningReceives() throws  -> [LightningReceiveStatus]
+    func pendingLightningReceives() throws  -> [LightningReceive]
     
     /**
      * Get all pending lightning sends
      */
-    func pendingLightningSends() throws  -> [LightningSendStatus]
+    func pendingLightningSends() throws  -> [LightningSend]
+    
+    /**
+     * Get all pending round states
+     */
+    func pendingRoundStates() throws  -> [RoundState]
+    
+    /**
+     * Progress unilateral exits (broadcast, fee bump, advance state machine)
+     *
+     * This is the critical method for actually moving exits forward.
+     * Call periodically after starting exits.
+     *
+     * # Arguments
+     *
+     * * `onchain_wallet` - Onchain wallet for building exit transactions
+     * * `fee_rate_sat_per_vb` - Optional fee rate override in sats/vB
+     */
+    func progressExits(onchainWallet: OnchainWallet, feeRateSatPerVb: UInt64?) throws  -> [ExitProgressStatus]
+    
+    /**
+     * Progress pending rounds
+     *
+     * Advances the state of all pending rounds. Call periodically.
+     */
+    func progressPendingRounds() throws 
     
     func properties() throws  -> WalletProperties
+    
+    /**
+     * Refresh the Ark server connection
+     *
+     * Re-establishes connection if it was lost.
+     */
+    func refreshServer() throws 
     
     /**
      * Refresh specific VTXOs
@@ -885,6 +1043,20 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func sendRoundOnchainPayment(address: String, amountSats: UInt64) throws  -> String
     
     /**
+     * Sign exit claim inputs in an external PSBT
+     *
+     * This is useful if you want to combine exit claims with other inputs
+     * in a single transaction.
+     *
+     * # Arguments
+     *
+     * * `psbt_base64` - Base64-encoded PSBT to sign
+     *
+     * Returns the signed PSBT
+     */
+    func signExitClaimInputs(psbtBase64: String) throws  -> String
+    
+    /**
      * Get all spendable VTXOs
      */
     func spendableVtxos() throws  -> [Vtxo]
@@ -892,7 +1064,14 @@ public protocol WalletProtocol: AnyObject, Sendable {
     /**
      * Start unilateral exit for the entire wallet
      */
-    func startExitForEntireWallet(onchainWallet: OnchainWallet) throws 
+    func startExitForEntireWallet() throws 
+    
+    /**
+     * Start unilateral exit for specific VTXOs
+     *
+     * Marks specific VTXOs for exit. Call progress_exits() to actually advance them.
+     */
+    func startExitForVtxos(vtxoIds: [String]) throws 
     
     /**
      * Lightweight sync with Ark server and blockchain
@@ -902,7 +1081,7 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func sync() throws 
     
     /**
-     * Sync exit state
+     * Sync exit state (checks status but doesn't progress)
      */
     func syncExits(onchainWallet: OnchainWallet) throws 
     
@@ -912,6 +1091,25 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func syncPendingBoards() throws 
     
     func tryClaimAllLightningReceives(wait: Bool) throws 
+    
+    /**
+     * Try to claim a specific lightning receive by payment hash
+     *
+     * # Arguments
+     *
+     * * `payment_hash` - Payment hash as hex string
+     * * `wait` - Whether to wait for claim to complete
+     */
+    func tryClaimLightningReceive(paymentHash: String, wait: Bool) throws 
+    
+    /**
+     * Validate an Ark address against the connected server
+     *
+     * This performs full validation including checking if the address
+     * belongs to the currently connected Ark server.
+     * For basic format validation only, use validate_ark_address() instead.
+     */
+    func validateArkoorAddress(address: String) throws  -> Bool
     
     func vtxos() throws  -> [Vtxo]
     
@@ -1024,6 +1222,19 @@ public static func openWithOnchain(mnemonic: String, config: Config, datadir: St
 
     
     /**
+     * Get earliest block height when all exits will be claimable
+     *
+     * Returns null if no exits or any exit has undetermined claimability.
+     */
+open func allExitsClaimableAtHeight()throws  -> UInt32?  {
+    return try  FfiConverterOptionUInt32.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_all_exits_claimable_at_height(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
      * Get all VTXOs (including spent)
      */
 open func allVtxos()throws  -> [Vtxo]  {
@@ -1088,6 +1299,47 @@ open func bolt11Invoice(amountSats: UInt64)throws  -> LightningInvoice  {
 }
     
     /**
+     * Cancel all pending rounds
+     */
+open func cancelAllPendingRounds()throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_cancel_all_pending_rounds(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+    
+    /**
+     * Cancel a specific pending round
+     */
+open func cancelPendingRound(roundId: UInt32)throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_cancel_pending_round(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(roundId),$0
+    )
+}
+}
+    
+    /**
+     * Check lightning payment status by payment hash
+     *
+     * # Arguments
+     *
+     * * `payment_hash` - Payment hash as hex string
+     * * `wait` - Whether to wait for the payment to complete
+     *
+     * Returns the preimage if payment is successful, null if still pending
+     */
+open func checkLightningPayment(paymentHash: String, wait: Bool)throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_check_lightning_payment(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(paymentHash),
+        FfiConverterBool.lower(wait),$0
+    )
+})
+}
+    
+    /**
      * Get claimable lightning receive balance
      */
 open func claimableLightningReceiveBalanceSats()throws  -> UInt64  {
@@ -1110,6 +1362,62 @@ open func config() -> Config  {
 }
     
     /**
+     * Drain claimable exits to an address
+     *
+     * Builds a signed PSBT that claims exited funds and sends them to the address.
+     * The PSBT can be broadcast directly or modified before broadcasting.
+     *
+     * # Arguments
+     *
+     * * `vtxo_ids` - List of claimable VTXO IDs to drain (empty = drain all)
+     * * `address` - Bitcoin address to send claimed funds to
+     * * `fee_rate_sat_per_vb` - Optional fee rate override in sats/vB
+     */
+open func drainExits(vtxoIds: [String], address: String, feeRateSatPerVb: UInt64?)throws  -> ExitClaimTransaction  {
+    return try  FfiConverterTypeExitClaimTransaction_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_drain_exits(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceString.lower(vtxoIds),
+        FfiConverterString.lower(address),
+        FfiConverterOptionUInt64.lower(feeRateSatPerVb),$0
+    )
+})
+}
+    
+    /**
+     * Get detailed exit status for a specific VTXO
+     *
+     * Returns detailed status including current state, history, and transactions.
+     *
+     * # Arguments
+     *
+     * * `vtxo_id` - The VTXO ID to check
+     * * `include_history` - Whether to include full state machine history
+     * * `include_transactions` - Whether to include transaction details
+     */
+open func getExitStatus(vtxoId: String, includeHistory: Bool, includeTransactions: Bool)throws  -> ExitTransactionStatus?  {
+    return try  FfiConverterOptionTypeExitTransactionStatus.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_get_exit_status(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(vtxoId),
+        FfiConverterBool.lower(includeHistory),
+        FfiConverterBool.lower(includeTransactions),$0
+    )
+})
+}
+    
+    /**
+     * Get all VTXOs currently in exit process
+     */
+open func getExitVtxos()throws  -> [ExitVtxo]  {
+    return try  FfiConverterSequenceTypeExitVtxo.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_get_exit_vtxos(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
      * Get VTXOs expiring within threshold blocks
      */
 open func getExpiringVtxos(thresholdBlocks: UInt32)throws  -> [Vtxo]  {
@@ -1117,6 +1425,33 @@ open func getExpiringVtxos(thresholdBlocks: UInt32)throws  -> [Vtxo]  {
     uniffi_bark_ffi_fn_method_wallet_get_expiring_vtxos(
             self.uniffiCloneHandle(),
         FfiConverterUInt32.lower(thresholdBlocks),$0
+    )
+})
+}
+    
+    /**
+     * Get the block height of the first expiring VTXO
+     *
+     * Returns null if there are no spendable VTXOs.
+     */
+open func getFirstExpiringVtxoBlockheight()throws  -> UInt32?  {
+    return try  FfiConverterOptionUInt32.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_get_first_expiring_vtxo_blockheight(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get the next block height when a refresh should be performed
+     *
+     * This is calculated as the first expiring VTXO height minus the refresh threshold.
+     * Returns null if there are no VTXOs to refresh.
+     */
+open func getNextRequiredRefreshBlockheight()throws  -> UInt32?  {
+    return try  FfiConverterOptionUInt32.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_get_next_required_refresh_blockheight(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
@@ -1144,6 +1479,57 @@ open func getVtxosToRefresh()throws  -> [Vtxo]  {
 })
 }
     
+    /**
+     * Check if any exits are pending
+     */
+open func hasPendingExits()throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_has_pending_exits(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get all wallet movements (transaction history)
+     */
+open func history()throws  -> [Movement]  {
+    return try  FfiConverterSequenceTypeMovement.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_history(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Get lightning receive status by payment hash
+     *
+     * # Arguments
+     *
+     * * `payment_hash` - Payment hash as hex string
+     */
+open func lightningReceiveStatus(paymentHash: String)throws  -> LightningReceive?  {
+    return try  FfiConverterOptionTypeLightningReceive.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_lightning_receive_status(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(paymentHash),$0
+    )
+})
+}
+    
+    /**
+     * List all exits that are claimable
+     *
+     * Returns exits ready to be drained to onchain wallet.
+     */
+open func listClaimableExits()throws  -> [ExitVtxo]  {
+    return try  FfiConverterSequenceTypeExitVtxo.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_list_claimable_exits(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
 open func maintenance()throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_maintenance(
             self.uniffiCloneHandle(),$0
@@ -1163,11 +1549,26 @@ open func maintenanceRefresh()throws  -> String?  {
 }
     
     /**
-     * Get all wallet movements (transaction history)
+     * Full maintenance including onchain wallet sync
+     *
+     * More thorough than maintenance() - also syncs onchain wallet and exits.
      */
-open func movements()throws  -> [Movement]  {
-    return try  FfiConverterSequenceTypeMovement.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
-    uniffi_bark_ffi_fn_method_wallet_movements(
+open func maintenanceWithOnchain(onchainWallet: OnchainWallet)throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_maintenance_with_onchain(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeOnchainWallet_lower(onchainWallet),$0
+    )
+}
+}
+    
+    /**
+     * Schedule a maintenance refresh if VTXOs need refreshing
+     *
+     * Returns the round ID if a refresh was scheduled, null otherwise.
+     */
+open func maybeScheduleMaintenanceRefresh()throws  -> UInt32?  {
+    return try  FfiConverterOptionUInt32.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_maybe_schedule_maintenance_refresh(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -1214,8 +1615,8 @@ open func offboardVtxos(vtxoIds: [String], bitcoinAddress: String)throws  -> Str
 })
 }
     
-open func payLightningAddress(lightningAddress: String, amountSats: UInt64, comment: String?)throws  -> LightningPaymentResult  {
-    return try  FfiConverterTypeLightningPaymentResult_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+open func payLightningAddress(lightningAddress: String, amountSats: UInt64, comment: String?)throws  -> LightningSend  {
+    return try  FfiConverterTypeLightningSend_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_pay_lightning_address(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(lightningAddress),
@@ -1225,11 +1626,29 @@ open func payLightningAddress(lightningAddress: String, amountSats: UInt64, comm
 })
 }
     
-open func payLightningInvoice(invoice: String, amountSats: UInt64?)throws  -> LightningPaymentResult  {
-    return try  FfiConverterTypeLightningPaymentResult_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+open func payLightningInvoice(invoice: String, amountSats: UInt64?)throws  -> LightningSend  {
+    return try  FfiConverterTypeLightningSend_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_pay_lightning_invoice(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(invoice),
+        FfiConverterOptionUInt64.lower(amountSats),$0
+    )
+})
+}
+    
+    /**
+     * Pay a BOLT12 lightning offer
+     *
+     * # Arguments
+     *
+     * * `offer` - BOLT12 offer string
+     * * `amount_sats` - Optional amount in sats (required if offer doesn't specify amount)
+     */
+open func payLightningOffer(offer: String, amountSats: UInt64?)throws  -> LightningSend  {
+    return try  FfiConverterTypeLightningSend_lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_pay_lightning_offer(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(offer),
         FfiConverterOptionUInt64.lower(amountSats),$0
     )
 })
@@ -1248,10 +1667,21 @@ open func peakAddress(index: UInt32)throws  -> String  {
 }
     
     /**
+     * Get total amount in pending exits (sats)
+     */
+open func pendingExitsTotalSats()throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_pending_exits_total_sats(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
      * Get all pending lightning receives
      */
-open func pendingLightningReceives()throws  -> [LightningReceiveStatus]  {
-    return try  FfiConverterSequenceTypeLightningReceiveStatus.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+open func pendingLightningReceives()throws  -> [LightningReceive]  {
+    return try  FfiConverterSequenceTypeLightningReceive.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_pending_lightning_receives(
             self.uniffiCloneHandle(),$0
     )
@@ -1261,12 +1691,56 @@ open func pendingLightningReceives()throws  -> [LightningReceiveStatus]  {
     /**
      * Get all pending lightning sends
      */
-open func pendingLightningSends()throws  -> [LightningSendStatus]  {
-    return try  FfiConverterSequenceTypeLightningSendStatus.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+open func pendingLightningSends()throws  -> [LightningSend]  {
+    return try  FfiConverterSequenceTypeLightningSend.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_pending_lightning_sends(
             self.uniffiCloneHandle(),$0
     )
 })
+}
+    
+    /**
+     * Get all pending round states
+     */
+open func pendingRoundStates()throws  -> [RoundState]  {
+    return try  FfiConverterSequenceTypeRoundState.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_pending_round_states(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Progress unilateral exits (broadcast, fee bump, advance state machine)
+     *
+     * This is the critical method for actually moving exits forward.
+     * Call periodically after starting exits.
+     *
+     * # Arguments
+     *
+     * * `onchain_wallet` - Onchain wallet for building exit transactions
+     * * `fee_rate_sat_per_vb` - Optional fee rate override in sats/vB
+     */
+open func progressExits(onchainWallet: OnchainWallet, feeRateSatPerVb: UInt64?)throws  -> [ExitProgressStatus]  {
+    return try  FfiConverterSequenceTypeExitProgressStatus.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_progress_exits(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeOnchainWallet_lower(onchainWallet),
+        FfiConverterOptionUInt64.lower(feeRateSatPerVb),$0
+    )
+})
+}
+    
+    /**
+     * Progress pending rounds
+     *
+     * Advances the state of all pending rounds. Call periodically.
+     */
+open func progressPendingRounds()throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_progress_pending_rounds(
+            self.uniffiCloneHandle(),$0
+    )
+}
 }
     
 open func properties()throws  -> WalletProperties  {
@@ -1275,6 +1749,18 @@ open func properties()throws  -> WalletProperties  {
             self.uniffiCloneHandle(),$0
     )
 })
+}
+    
+    /**
+     * Refresh the Ark server connection
+     *
+     * Re-establishes connection if it was lost.
+     */
+open func refreshServer()throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_refresh_server(
+            self.uniffiCloneHandle(),$0
+    )
+}
 }
     
     /**
@@ -1313,6 +1799,27 @@ open func sendRoundOnchainPayment(address: String, amountSats: UInt64)throws  ->
 }
     
     /**
+     * Sign exit claim inputs in an external PSBT
+     *
+     * This is useful if you want to combine exit claims with other inputs
+     * in a single transaction.
+     *
+     * # Arguments
+     *
+     * * `psbt_base64` - Base64-encoded PSBT to sign
+     *
+     * Returns the signed PSBT
+     */
+open func signExitClaimInputs(psbtBase64: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_sign_exit_claim_inputs(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(psbtBase64),$0
+    )
+})
+}
+    
+    /**
      * Get all spendable VTXOs
      */
 open func spendableVtxos()throws  -> [Vtxo]  {
@@ -1326,10 +1833,22 @@ open func spendableVtxos()throws  -> [Vtxo]  {
     /**
      * Start unilateral exit for the entire wallet
      */
-open func startExitForEntireWallet(onchainWallet: OnchainWallet)throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+open func startExitForEntireWallet()throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_start_exit_for_entire_wallet(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+    
+    /**
+     * Start unilateral exit for specific VTXOs
+     *
+     * Marks specific VTXOs for exit. Call progress_exits() to actually advance them.
+     */
+open func startExitForVtxos(vtxoIds: [String])throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_start_exit_for_vtxos(
             self.uniffiCloneHandle(),
-        FfiConverterTypeOnchainWallet_lower(onchainWallet),$0
+        FfiConverterSequenceString.lower(vtxoIds),$0
     )
 }
 }
@@ -1347,7 +1866,7 @@ open func sync()throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) 
 }
     
     /**
-     * Sync exit state
+     * Sync exit state (checks status but doesn't progress)
      */
 open func syncExits(onchainWallet: OnchainWallet)throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_method_wallet_sync_exits(
@@ -1373,6 +1892,39 @@ open func tryClaimAllLightningReceives(wait: Bool)throws   {try rustCallWithErro
         FfiConverterBool.lower(wait),$0
     )
 }
+}
+    
+    /**
+     * Try to claim a specific lightning receive by payment hash
+     *
+     * # Arguments
+     *
+     * * `payment_hash` - Payment hash as hex string
+     * * `wait` - Whether to wait for claim to complete
+     */
+open func tryClaimLightningReceive(paymentHash: String, wait: Bool)throws   {try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_try_claim_lightning_receive(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(paymentHash),
+        FfiConverterBool.lower(wait),$0
+    )
+}
+}
+    
+    /**
+     * Validate an Ark address against the connected server
+     *
+     * This performs full validation including checking if the address
+     * belongs to the currently connected Ark server.
+     * For basic format validation only, use validate_ark_address() instead.
+     */
+open func validateArkoorAddress(address: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_validate_arkoor_address(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(address),$0
+    )
+})
 }
     
 open func vtxos()throws  -> [Vtxo]  {
@@ -2161,6 +2713,324 @@ public func FfiConverterTypeDestination_lower(_ value: Destination) -> RustBuffe
 
 
 /**
+ * Claim transaction for exited funds
+ */
+public struct ExitClaimTransaction: Equatable, Hashable {
+    /**
+     * Base64-encoded PSBT
+     */
+    public var psbtBase64: String
+    /**
+     * Transaction fee in sats
+     */
+    public var feeSats: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Base64-encoded PSBT
+         */psbtBase64: String, 
+        /**
+         * Transaction fee in sats
+         */feeSats: UInt64) {
+        self.psbtBase64 = psbtBase64
+        self.feeSats = feeSats
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension ExitClaimTransaction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExitClaimTransaction: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExitClaimTransaction {
+        return
+            try ExitClaimTransaction(
+                psbtBase64: FfiConverterString.read(from: &buf), 
+                feeSats: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExitClaimTransaction, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.psbtBase64, into: &buf)
+        FfiConverterUInt64.write(value.feeSats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExitClaimTransaction_lift(_ buf: RustBuffer) throws -> ExitClaimTransaction {
+    return try FfiConverterTypeExitClaimTransaction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExitClaimTransaction_lower(_ value: ExitClaimTransaction) -> RustBuffer {
+    return FfiConverterTypeExitClaimTransaction.lower(value)
+}
+
+
+/**
+ * Status of an exit progression
+ */
+public struct ExitProgressStatus: Equatable, Hashable {
+    /**
+     * VTXO ID being exited
+     */
+    public var vtxoId: String
+    /**
+     * Current state
+     */
+    public var state: String
+    /**
+     * Error if any occurred
+     */
+    public var error: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * VTXO ID being exited
+         */vtxoId: String, 
+        /**
+         * Current state
+         */state: String, 
+        /**
+         * Error if any occurred
+         */error: String?) {
+        self.vtxoId = vtxoId
+        self.state = state
+        self.error = error
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension ExitProgressStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExitProgressStatus: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExitProgressStatus {
+        return
+            try ExitProgressStatus(
+                vtxoId: FfiConverterString.read(from: &buf), 
+                state: FfiConverterString.read(from: &buf), 
+                error: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExitProgressStatus, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.vtxoId, into: &buf)
+        FfiConverterString.write(value.state, into: &buf)
+        FfiConverterOptionString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExitProgressStatus_lift(_ buf: RustBuffer) throws -> ExitProgressStatus {
+    return try FfiConverterTypeExitProgressStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExitProgressStatus_lower(_ value: ExitProgressStatus) -> RustBuffer {
+    return FfiConverterTypeExitProgressStatus.lower(value)
+}
+
+
+/**
+ * Detailed status of an exit transaction
+ */
+public struct ExitTransactionStatus: Equatable, Hashable {
+    /**
+     * VTXO ID
+     */
+    public var vtxoId: String
+    /**
+     * Current state
+     */
+    public var state: String
+    /**
+     * State history (if requested)
+     */
+    public var history: [String]?
+    /**
+     * Number of transactions
+     */
+    public var transactionCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * VTXO ID
+         */vtxoId: String, 
+        /**
+         * Current state
+         */state: String, 
+        /**
+         * State history (if requested)
+         */history: [String]?, 
+        /**
+         * Number of transactions
+         */transactionCount: UInt32) {
+        self.vtxoId = vtxoId
+        self.state = state
+        self.history = history
+        self.transactionCount = transactionCount
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension ExitTransactionStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExitTransactionStatus: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExitTransactionStatus {
+        return
+            try ExitTransactionStatus(
+                vtxoId: FfiConverterString.read(from: &buf), 
+                state: FfiConverterString.read(from: &buf), 
+                history: FfiConverterOptionSequenceString.read(from: &buf), 
+                transactionCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExitTransactionStatus, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.vtxoId, into: &buf)
+        FfiConverterString.write(value.state, into: &buf)
+        FfiConverterOptionSequenceString.write(value.history, into: &buf)
+        FfiConverterUInt32.write(value.transactionCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExitTransactionStatus_lift(_ buf: RustBuffer) throws -> ExitTransactionStatus {
+    return try FfiConverterTypeExitTransactionStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExitTransactionStatus_lower(_ value: ExitTransactionStatus) -> RustBuffer {
+    return FfiConverterTypeExitTransactionStatus.lower(value)
+}
+
+
+/**
+ * A VTXO in the exit process
+ */
+public struct ExitVtxo: Equatable, Hashable {
+    /**
+     * VTXO ID
+     */
+    public var vtxoId: String
+    /**
+     * Amount in sats
+     */
+    public var amountSats: UInt64
+    /**
+     * Current exit state
+     */
+    public var state: String
+    /**
+     * Whether this exit is claimable
+     */
+    public var isClaimable: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * VTXO ID
+         */vtxoId: String, 
+        /**
+         * Amount in sats
+         */amountSats: UInt64, 
+        /**
+         * Current exit state
+         */state: String, 
+        /**
+         * Whether this exit is claimable
+         */isClaimable: Bool) {
+        self.vtxoId = vtxoId
+        self.amountSats = amountSats
+        self.state = state
+        self.isClaimable = isClaimable
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension ExitVtxo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExitVtxo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExitVtxo {
+        return
+            try ExitVtxo(
+                vtxoId: FfiConverterString.read(from: &buf), 
+                amountSats: FfiConverterUInt64.read(from: &buf), 
+                state: FfiConverterString.read(from: &buf), 
+                isClaimable: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExitVtxo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.vtxoId, into: &buf)
+        FfiConverterUInt64.write(value.amountSats, into: &buf)
+        FfiConverterString.write(value.state, into: &buf)
+        FfiConverterBool.write(value.isClaimable, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExitVtxo_lift(_ buf: RustBuffer) throws -> ExitVtxo {
+    return try FfiConverterTypeExitVtxo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExitVtxo_lower(_ value: ExitVtxo) -> RustBuffer {
+    return FfiConverterTypeExitVtxo.lower(value)
+}
+
+
+/**
  * Result of creating a BOLT11 invoice
  */
 public struct LightningInvoice: Equatable, Hashable {
@@ -2228,76 +3098,9 @@ public func FfiConverterTypeLightningInvoice_lower(_ value: LightningInvoice) ->
 
 
 /**
- * Result of a successful lightning payment
- */
-public struct LightningPaymentResult: Equatable, Hashable {
-    /**
-     * The invoice that was paid
-     */
-    public var invoice: String
-    /**
-     * Payment preimage as hex string
-     */
-    public var preimage: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(
-        /**
-         * The invoice that was paid
-         */invoice: String, 
-        /**
-         * Payment preimage as hex string
-         */preimage: String) {
-        self.invoice = invoice
-        self.preimage = preimage
-    }
-
-    
-}
-
-#if compiler(>=6)
-extension LightningPaymentResult: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeLightningPaymentResult: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LightningPaymentResult {
-        return
-            try LightningPaymentResult(
-                invoice: FfiConverterString.read(from: &buf), 
-                preimage: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: LightningPaymentResult, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.invoice, into: &buf)
-        FfiConverterString.write(value.preimage, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeLightningPaymentResult_lift(_ buf: RustBuffer) throws -> LightningPaymentResult {
-    return try FfiConverterTypeLightningPaymentResult.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeLightningPaymentResult_lower(_ value: LightningPaymentResult) -> RustBuffer {
-    return FfiConverterTypeLightningPaymentResult.lower(value)
-}
-
-
-/**
  * Status of a pending Lightning receive
  */
-public struct LightningReceiveStatus: Equatable, Hashable {
+public struct LightningReceive: Equatable, Hashable {
     /**
      * Payment hash
      */
@@ -2348,16 +3151,16 @@ public struct LightningReceiveStatus: Equatable, Hashable {
 }
 
 #if compiler(>=6)
-extension LightningReceiveStatus: Sendable {}
+extension LightningReceive: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeLightningReceiveStatus: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LightningReceiveStatus {
+public struct FfiConverterTypeLightningReceive: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LightningReceive {
         return
-            try LightningReceiveStatus(
+            try LightningReceive(
                 paymentHash: FfiConverterString.read(from: &buf), 
                 invoice: FfiConverterString.read(from: &buf), 
                 amountSats: FfiConverterUInt64.read(from: &buf), 
@@ -2366,7 +3169,7 @@ public struct FfiConverterTypeLightningReceiveStatus: FfiConverterRustBuffer {
         )
     }
 
-    public static func write(_ value: LightningReceiveStatus, into buf: inout [UInt8]) {
+    public static func write(_ value: LightningReceive, into buf: inout [UInt8]) {
         FfiConverterString.write(value.paymentHash, into: &buf)
         FfiConverterString.write(value.invoice, into: &buf)
         FfiConverterUInt64.write(value.amountSats, into: &buf)
@@ -2379,22 +3182,22 @@ public struct FfiConverterTypeLightningReceiveStatus: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeLightningReceiveStatus_lift(_ buf: RustBuffer) throws -> LightningReceiveStatus {
-    return try FfiConverterTypeLightningReceiveStatus.lift(buf)
+public func FfiConverterTypeLightningReceive_lift(_ buf: RustBuffer) throws -> LightningReceive {
+    return try FfiConverterTypeLightningReceive.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeLightningReceiveStatus_lower(_ value: LightningReceiveStatus) -> RustBuffer {
-    return FfiConverterTypeLightningReceiveStatus.lower(value)
+public func FfiConverterTypeLightningReceive_lower(_ value: LightningReceive) -> RustBuffer {
+    return FfiConverterTypeLightningReceive.lower(value)
 }
 
 
 /**
- * Status of a pending Lightning send
+ * Lightning send payment information
  */
-public struct LightningSendStatus: Equatable, Hashable {
+public struct LightningSend: Equatable, Hashable {
     /**
      * The invoice being paid
      */
@@ -2407,6 +3210,10 @@ public struct LightningSendStatus: Equatable, Hashable {
      * Number of HTLC VTXOs locked
      */
     public var htlcVtxoCount: UInt32
+    /**
+     * Payment preimage (only present if payment completed)
+     */
+    public var preimage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2419,36 +3226,42 @@ public struct LightningSendStatus: Equatable, Hashable {
          */amountSats: UInt64, 
         /**
          * Number of HTLC VTXOs locked
-         */htlcVtxoCount: UInt32) {
+         */htlcVtxoCount: UInt32, 
+        /**
+         * Payment preimage (only present if payment completed)
+         */preimage: String?) {
         self.invoice = invoice
         self.amountSats = amountSats
         self.htlcVtxoCount = htlcVtxoCount
+        self.preimage = preimage
     }
 
     
 }
 
 #if compiler(>=6)
-extension LightningSendStatus: Sendable {}
+extension LightningSend: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeLightningSendStatus: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LightningSendStatus {
+public struct FfiConverterTypeLightningSend: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LightningSend {
         return
-            try LightningSendStatus(
+            try LightningSend(
                 invoice: FfiConverterString.read(from: &buf), 
                 amountSats: FfiConverterUInt64.read(from: &buf), 
-                htlcVtxoCount: FfiConverterUInt32.read(from: &buf)
+                htlcVtxoCount: FfiConverterUInt32.read(from: &buf), 
+                preimage: FfiConverterOptionString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: LightningSendStatus, into buf: inout [UInt8]) {
+    public static func write(_ value: LightningSend, into buf: inout [UInt8]) {
         FfiConverterString.write(value.invoice, into: &buf)
         FfiConverterUInt64.write(value.amountSats, into: &buf)
         FfiConverterUInt32.write(value.htlcVtxoCount, into: &buf)
+        FfiConverterOptionString.write(value.preimage, into: &buf)
     }
 }
 
@@ -2456,15 +3269,15 @@ public struct FfiConverterTypeLightningSendStatus: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeLightningSendStatus_lift(_ buf: RustBuffer) throws -> LightningSendStatus {
-    return try FfiConverterTypeLightningSendStatus.lift(buf)
+public func FfiConverterTypeLightningSend_lift(_ buf: RustBuffer) throws -> LightningSend {
+    return try FfiConverterTypeLightningSend.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeLightningSendStatus_lower(_ value: LightningSendStatus) -> RustBuffer {
-    return FfiConverterTypeLightningSendStatus.lower(value)
+public func FfiConverterTypeLightningSend_lower(_ value: LightningSend) -> RustBuffer {
+    return FfiConverterTypeLightningSend.lower(value)
 }
 
 
@@ -2477,7 +3290,7 @@ public struct Movement: Equatable, Hashable {
      */
     public var id: UInt32
     /**
-     * Status (pending, finished, failed, cancelled)
+     * Status (pending, successful, failed, canceled)
      */
     public var status: String
     /**
@@ -2521,6 +3334,10 @@ public struct Movement: Equatable, Hashable {
      */
     public var outputVtxoIds: [String]
     /**
+     * VTXOs sent to exit system
+     */
+    public var exitedVtxoIds: [String]
+    /**
      * Created at timestamp
      */
     public var createdAt: String
@@ -2540,7 +3357,7 @@ public struct Movement: Equatable, Hashable {
          * Movement ID
          */id: UInt32, 
         /**
-         * Status (pending, finished, failed, cancelled)
+         * Status (pending, successful, failed, canceled)
          */status: String, 
         /**
          * Subsystem name
@@ -2573,6 +3390,9 @@ public struct Movement: Equatable, Hashable {
          * Output VTXO IDs
          */outputVtxoIds: [String], 
         /**
+         * VTXOs sent to exit system
+         */exitedVtxoIds: [String], 
+        /**
          * Created at timestamp
          */createdAt: String, 
         /**
@@ -2593,6 +3413,7 @@ public struct Movement: Equatable, Hashable {
         self.receivedOnAddresses = receivedOnAddresses
         self.inputVtxoIds = inputVtxoIds
         self.outputVtxoIds = outputVtxoIds
+        self.exitedVtxoIds = exitedVtxoIds
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.completedAt = completedAt
@@ -2624,6 +3445,7 @@ public struct FfiConverterTypeMovement: FfiConverterRustBuffer {
                 receivedOnAddresses: FfiConverterSequenceString.read(from: &buf), 
                 inputVtxoIds: FfiConverterSequenceString.read(from: &buf), 
                 outputVtxoIds: FfiConverterSequenceString.read(from: &buf), 
+                exitedVtxoIds: FfiConverterSequenceString.read(from: &buf), 
                 createdAt: FfiConverterString.read(from: &buf), 
                 updatedAt: FfiConverterString.read(from: &buf), 
                 completedAt: FfiConverterOptionString.read(from: &buf)
@@ -2643,6 +3465,7 @@ public struct FfiConverterTypeMovement: FfiConverterRustBuffer {
         FfiConverterSequenceString.write(value.receivedOnAddresses, into: &buf)
         FfiConverterSequenceString.write(value.inputVtxoIds, into: &buf)
         FfiConverterSequenceString.write(value.outputVtxoIds, into: &buf)
+        FfiConverterSequenceString.write(value.exitedVtxoIds, into: &buf)
         FfiConverterString.write(value.createdAt, into: &buf)
         FfiConverterString.write(value.updatedAt, into: &buf)
         FfiConverterOptionString.write(value.completedAt, into: &buf)
@@ -2928,6 +3751,73 @@ public func FfiConverterTypePendingBoard_lift(_ buf: RustBuffer) throws -> Pendi
 #endif
 public func FfiConverterTypePendingBoard_lower(_ value: PendingBoard) -> RustBuffer {
     return FfiConverterTypePendingBoard.lower(value)
+}
+
+
+/**
+ * A pending round state
+ */
+public struct RoundState: Equatable, Hashable {
+    /**
+     * Round ID
+     */
+    public var id: UInt32
+    /**
+     * Whether the round is ongoing
+     */
+    public var ongoing: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Round ID
+         */id: UInt32, 
+        /**
+         * Whether the round is ongoing
+         */ongoing: Bool) {
+        self.id = id
+        self.ongoing = ongoing
+    }
+
+    
+}
+
+#if compiler(>=6)
+extension RoundState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoundState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoundState {
+        return
+            try RoundState(
+                id: FfiConverterUInt32.read(from: &buf), 
+                ongoing: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoundState, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.id, into: &buf)
+        FfiConverterBool.write(value.ongoing, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoundState_lift(_ buf: RustBuffer) throws -> RoundState {
+    return try FfiConverterTypeRoundState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoundState_lower(_ value: RoundState) -> RustBuffer {
+    return FfiConverterTypeRoundState.lower(value)
 }
 
 
@@ -3898,6 +4788,78 @@ fileprivate struct FfiConverterOptionTypeBlockRef: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeExitTransactionStatus: FfiConverterRustBuffer {
+    typealias SwiftType = ExitTransactionStatus?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeExitTransactionStatus.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeExitTransactionStatus.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeLightningReceive: FfiConverterRustBuffer {
+    typealias SwiftType = LightningReceive?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeLightningReceive.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeLightningReceive.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -3948,23 +4910,23 @@ fileprivate struct FfiConverterSequenceTypeDestination: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeLightningReceiveStatus: FfiConverterRustBuffer {
-    typealias SwiftType = [LightningReceiveStatus]
+fileprivate struct FfiConverterSequenceTypeExitProgressStatus: FfiConverterRustBuffer {
+    typealias SwiftType = [ExitProgressStatus]
 
-    public static func write(_ value: [LightningReceiveStatus], into buf: inout [UInt8]) {
+    public static func write(_ value: [ExitProgressStatus], into buf: inout [UInt8]) {
         let len = Int32(value.count)
         writeInt(&buf, len)
         for item in value {
-            FfiConverterTypeLightningReceiveStatus.write(item, into: &buf)
+            FfiConverterTypeExitProgressStatus.write(item, into: &buf)
         }
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LightningReceiveStatus] {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ExitProgressStatus] {
         let len: Int32 = try readInt(&buf)
-        var seq = [LightningReceiveStatus]()
+        var seq = [ExitProgressStatus]()
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeLightningReceiveStatus.read(from: &buf))
+            seq.append(try FfiConverterTypeExitProgressStatus.read(from: &buf))
         }
         return seq
     }
@@ -3973,23 +4935,73 @@ fileprivate struct FfiConverterSequenceTypeLightningReceiveStatus: FfiConverterR
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeLightningSendStatus: FfiConverterRustBuffer {
-    typealias SwiftType = [LightningSendStatus]
+fileprivate struct FfiConverterSequenceTypeExitVtxo: FfiConverterRustBuffer {
+    typealias SwiftType = [ExitVtxo]
 
-    public static func write(_ value: [LightningSendStatus], into buf: inout [UInt8]) {
+    public static func write(_ value: [ExitVtxo], into buf: inout [UInt8]) {
         let len = Int32(value.count)
         writeInt(&buf, len)
         for item in value {
-            FfiConverterTypeLightningSendStatus.write(item, into: &buf)
+            FfiConverterTypeExitVtxo.write(item, into: &buf)
         }
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LightningSendStatus] {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ExitVtxo] {
         let len: Int32 = try readInt(&buf)
-        var seq = [LightningSendStatus]()
+        var seq = [ExitVtxo]()
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeLightningSendStatus.read(from: &buf))
+            seq.append(try FfiConverterTypeExitVtxo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeLightningReceive: FfiConverterRustBuffer {
+    typealias SwiftType = [LightningReceive]
+
+    public static func write(_ value: [LightningReceive], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLightningReceive.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LightningReceive] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LightningReceive]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLightningReceive.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeLightningSend: FfiConverterRustBuffer {
+    typealias SwiftType = [LightningSend]
+
+    public static func write(_ value: [LightningSend], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLightningSend.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LightningSend] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LightningSend]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLightningSend.read(from: &buf))
         }
         return seq
     }
@@ -4015,6 +5027,31 @@ fileprivate struct FfiConverterSequenceTypeMovement: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeMovement.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRoundState: FfiConverterRustBuffer {
+    typealias SwiftType = [RoundState]
+
+    public static func write(_ value: [RoundState], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoundState.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoundState] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RoundState]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRoundState.read(from: &buf))
         }
         return seq
     }
@@ -4101,6 +5138,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_method_onchainwallet_sync() != 30454) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_wallet_all_exits_claimable_at_height() != 24892) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_all_vtxos() != 48937) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4119,13 +5159,37 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_method_wallet_bolt11_invoice() != 64551) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_wallet_cancel_all_pending_rounds() != 8095) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_cancel_pending_round() != 3417) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_check_lightning_payment() != 13160) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_claimable_lightning_receive_balance_sats() != 64974) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_config() != 57616) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_wallet_drain_exits() != 16953) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_get_exit_status() != 27512) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_get_exit_vtxos() != 24545) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_get_expiring_vtxos() != 19482) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_get_first_expiring_vtxo_blockheight() != 41108) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_get_next_required_refresh_blockheight() != 29762) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_get_vtxo_by_id() != 41126) {
@@ -4134,13 +5198,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_method_wallet_get_vtxos_to_refresh() != 55019) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_wallet_has_pending_exits() != 40981) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_history() != 21880) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_lightning_receive_status() != 26106) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_list_claimable_exits() != 62145) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_maintenance() != 9626) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_maintenance_refresh() != 29994) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_wallet_movements() != 23904) {
+    if (uniffi_bark_ffi_checksum_method_wallet_maintenance_with_onchain() != 335) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_maybe_schedule_maintenance_refresh() != 32397) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_new_address() != 25174) {
@@ -4155,22 +5234,40 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_method_wallet_offboard_vtxos() != 19001) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_wallet_pay_lightning_address() != 8340) {
+    if (uniffi_bark_ffi_checksum_method_wallet_pay_lightning_address() != 39952) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_wallet_pay_lightning_invoice() != 3587) {
+    if (uniffi_bark_ffi_checksum_method_wallet_pay_lightning_invoice() != 31286) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_pay_lightning_offer() != 37035) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_peak_address() != 23469) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_wallet_pending_lightning_receives() != 7863) {
+    if (uniffi_bark_ffi_checksum_method_wallet_pending_exits_total_sats() != 47419) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_wallet_pending_lightning_sends() != 5489) {
+    if (uniffi_bark_ffi_checksum_method_wallet_pending_lightning_receives() != 14491) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_pending_lightning_sends() != 51186) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_pending_round_states() != 19530) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_progress_exits() != 43190) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_progress_pending_rounds() != 17062) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_properties() != 34715) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_refresh_server() != 705) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_refresh_vtxos() != 720) {
@@ -4182,10 +5279,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_bark_ffi_checksum_method_wallet_send_round_onchain_payment() != 21156) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_bark_ffi_checksum_method_wallet_sign_exit_claim_inputs() != 31570) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_bark_ffi_checksum_method_wallet_spendable_vtxos() != 48976) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_bark_ffi_checksum_method_wallet_start_exit_for_entire_wallet() != 26993) {
+    if (uniffi_bark_ffi_checksum_method_wallet_start_exit_for_entire_wallet() != 50435) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_start_exit_for_vtxos() != 12580) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_sync() != 3312) {
@@ -4198,6 +5301,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_try_claim_all_lightning_receives() != 53132) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_try_claim_lightning_receive() != 60644) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_validate_arkoor_address() != 16628) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_vtxos() != 16778) {

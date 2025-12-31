@@ -192,7 +192,7 @@ class BarkWallet implements WalletPort {
     return _executeWithEsploraRetry<List<TransactionVO>>(
       config: config,
       operation: (barkWallet) async {
-        final movements = barkWallet.movements();
+        final movements = barkWallet.history();
         return movements
             .map(
               (movement) => TransactionVO(

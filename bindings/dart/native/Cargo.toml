@@ -18,12 +18,12 @@ path = "uniffi-bindgen.rs"
 [dependencies]
 # Bark dependencies from GitLab (using kumulynja fork with lazy_static 1.5.0 fix)
 # Pinned to commit 7f625dff to avoid breaking API changes
-bark = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-wallet", rev = "7f625dffd598c23127f69590294ae7c397458d23", default-features = false, features = [
+bark = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-wallet", rev = "916e0d61d0fa1be274eb731a545a73774e2df492", default-features = false, features = [
     "tls-webpki-roots",
     "onchain_bdk",
 ] }
-ark-lib = { git = "https://gitlab.com/ark-bitcoin/bark", package = "ark-lib", rev = "7f625dffd598c23127f69590294ae7c397458d23", default-features = false }
-bark-bitcoin-ext = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-bitcoin-ext", rev = "7f625dffd598c23127f69590294ae7c397458d23", default-features = false }
+ark-lib = { git = "https://gitlab.com/ark-bitcoin/bark", package = "ark-lib", rev = "916e0d61d0fa1be274eb731a545a73774e2df492", default-features = false }
+bark-bitcoin-ext = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-bitcoin-ext", rev = "916e0d61d0fa1be274eb731a545a73774e2df492", default-features = false }
 # External dependencies
 bitcoin = { version = "0.32", features = ["serde", "rand", "rand-std"] }
 bip39 = { version = "2.0.0", features = ["rand"] }
