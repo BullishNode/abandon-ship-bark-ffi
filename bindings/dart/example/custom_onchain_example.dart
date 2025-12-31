@@ -220,8 +220,16 @@ class BdkCustomWallet implements CustomOnchainWalletCallbacks {
 
         var psbt = txBuilder.finish(_wallet);
 
-        // Sign the PSBT
-        final finalized = _wallet.sign(psbt, null);
+        // Sign the PSBT with witness-only signing (required for P2A foreign UTXO)
+        final signOptions = bdk.SignOptions(
+          true, // trustWitnessUtxo
+          null, // assumeHeight
+          false, // allowAllSighashes
+          true, // tryFinalize
+          true, // signWithTapInternalKey
+          false, // allowGrinding
+        );
+        final finalized = _wallet.sign(psbt, signOptions);
         if (!finalized) {
           throw Exception("Failed to finalize PSBT");
         }
@@ -259,10 +267,16 @@ class BdkCustomWallet implements CustomOnchainWalletCallbacks {
         final txBytes = tx.serialize();
         return txBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
       } catch (e) {
+        // Don't retry on insufficient funds - it won't get better
+        if (e.toString().contains("Insufficient funds") ||
+            e.toString().contains("CoinSelection")) {
+          rethrow;
+        }
+
         if (i == maxIterations - 1) {
           rethrow;
         }
-        // Continue loop on error
+        // Continue loop on other errors (like weight mismatches)
       }
     }
 
@@ -415,24 +429,6 @@ Future<void> customOnchainExample() async {
   final props = wallet.properties();
   print("Bark wallet fingerprint: ${props.fingerprint}");
 
-  // Test boarding with custom onchain wallet
-  print("\n--- Testing Boarding ---");
-
-  if (balance.totalSats > 0) {
-    print("\nBoarding ${balance.totalSats} sats...");
-    try {
-      final pendingBoard = await wallet.boardAll(onchainWallet);
-      print("Board initiated:");
-      print("  VTXO ID: ${pendingBoard.vtxoId}");
-      print("  Amount: ${pendingBoard.amountSats} sats");
-      print("  Txid: ${pendingBoard.txid}");
-    } catch (e) {
-      print("Board failed: $e");
-    }
-  } else {
-    print("\nNo onchain funds. Send sats to: $address");
-  }
-
   // Test unilateral exit with custom onchain wallet
   print("\n--- Testing Unilateral Exit ---");
 
@@ -441,35 +437,149 @@ Future<void> customOnchainExample() async {
 
   if (barkBalance.spendableSats > 0) {
     print("Spendable balance: ${barkBalance.spendableSats} sats");
-    print("Starting unilateral exit for entire wallet...");
+    print("\nStarting unilateral exit for entire wallet...");
 
     try {
-      await wallet.startExitForEntireWallet(onchainWallet);
-      print("Exit initiated successfully");
-
-      // Sync exits to progress the exit state machine
-      await wallet.syncExits(onchainWallet);
-      print("Exit status synced");
+      await wallet.startExitForEntireWallet();
+      print("✅ Exit initiated successfully");
 
       final updatedBalance = wallet.balance();
       print("Pending exit: ${updatedBalance.pendingExitSats} sats");
     } catch (e) {
-      print("Exit failed: $e");
+      print("❌ Exit failed: $e");
     }
-  } else if (barkBalance.pendingExitSats > 0) {
-    print("Pending exit: ${barkBalance.pendingExitSats} sats");
-    print("Syncing exit status...");
+  }
 
+  // Check if we have any pending exits
+  if (barkBalance.pendingExitSats > 0 || wallet.hasPendingExits()) {
+    print("\n--- Progressing Exits ---");
+
+    final hasPending = wallet.hasPendingExits();
+    final pendingTotal = wallet.pendingExitsTotalSats();
+    print("Has pending exits: $hasPending");
+    print("Pending exits total: $pendingTotal sats");
+
+    // Get all exit VTXOs
+    final exitVtxos = wallet.getExitVtxos();
+    print("\nExit VTXOs (${exitVtxos.length}):");
+    for (final exitVtxo in exitVtxos) {
+      print("  • ${exitVtxo.vtxoId}");
+      print("    Amount: ${exitVtxo.amountSats} sats");
+      print("    State: ${exitVtxo.state}");
+      print("    Claimable: ${exitVtxo.isClaimable}");
+    }
+
+    // Get detailed exit status for each exit BEFORE progressing
+    print("\n--- Detailed Exit Status (Before Progress) ---");
+    for (final exitVtxo in exitVtxos) {
+      try {
+        final exitStatus = await wallet.getExitStatus(
+          exitVtxo.vtxoId,
+          true, // include history
+          true, // include transactions
+        );
+
+        if (exitStatus != null) {
+          print("\n📊 Exit Status for ${exitStatus.vtxoId}:");
+          print("   Current State: ${exitStatus.state}");
+          print("   Transaction Count: ${exitStatus.transactionCount}");
+
+          if (exitStatus.history != null && exitStatus.history!.isNotEmpty) {
+            print("   State History:");
+            for (final historyState in exitStatus.history!) {
+              print("     → $historyState");
+            }
+          }
+        }
+      } catch (e) {
+        print("❌ Failed to get exit status for ${exitVtxo.vtxoId}: $e");
+      }
+    }
+
+    // Progress the exits (broadcast txs, fee bump, advance state machine)
+    print("\n🔄 Progressing exits...");
+    try {
+      final progressStatuses = await wallet.progressExits(onchainWallet, null);
+      print("✅ Exit progress completed (${progressStatuses.length} exits):");
+
+      for (final status in progressStatuses) {
+        print("  • ${status.vtxoId}");
+        print("    State: ${status.state}");
+        if (status.error != null) {
+          print("    Error: ${status.error}");
+        }
+      }
+    } catch (e) {
+      print("❌ Progress exits failed: $e");
+    }
+
+    // Check if any exits are claimable
+    print("\n--- Checking Claimable Exits ---");
+    final claimableExits = wallet.listClaimableExits();
+
+    if (claimableExits.isNotEmpty) {
+      print("✅ Found ${claimableExits.length} claimable exit(s):");
+
+      for (final exit in claimableExits) {
+        print("  • ${exit.vtxoId}");
+        print("    Amount: ${exit.amountSats} sats");
+        print("    State: ${exit.state}");
+      }
+
+      // Get when all exits will be claimable
+      final claimableAtHeight = wallet.allExitsClaimableAtHeight();
+      if (claimableAtHeight != null) {
+        print("\nAll exits claimable at block height: $claimableAtHeight");
+      }
+
+      // Drain the exits to onchain wallet
+      print("\n💰 Draining exits to onchain wallet...");
+      try {
+        final drainAddress = customWallet.newAddress;
+        print("Drain address: $drainAddress");
+
+        // Drain all claimable exits (empty list = drain all)
+        final claimTx = await wallet.drainExits(
+          [], // empty = drain all claimable
+          drainAddress,
+          null, // use automatic fee rate
+        );
+
+        print("✅ Drain transaction created:");
+        print("  Fee: ${claimTx.feeSats} sats");
+        print("  PSBT (base64): ${claimTx.psbtBase64.substring(0, 64)}...");
+        print("\n⚠️  To complete the exit, broadcast this PSBT!");
+        print("    The funds will be sent to: $drainAddress");
+      } catch (e) {
+        print("❌ Drain exits failed: $e");
+      }
+    } else {
+      print("ℹ️  No exits are claimable yet");
+      print(
+        "   Exits need to be confirmed onchain and wait for the exit delta period",
+      );
+
+      // Show when exits will be claimable
+      final claimableAtHeight = wallet.allExitsClaimableAtHeight();
+      if (claimableAtHeight != null) {
+        print(
+          "   All exits will be claimable at block height: $claimableAtHeight",
+        );
+      }
+    }
+
+    // Sync exits one more time to update state
+    print("\n🔄 Syncing exit state...");
     try {
       await wallet.syncExits(onchainWallet);
-      print("Exit status synced");
+      print("✅ Exit status synced");
 
-      final updatedBalance = wallet.balance();
-      print("Updated pending exit: ${updatedBalance.pendingExitSats} sats");
+      final finalBalance = wallet.balance();
+      print("Final pending exit: ${finalBalance.pendingExitSats} sats");
     } catch (e) {
-      print("Exit sync failed: $e");
+      print("❌ Exit sync failed: $e");
     }
   } else {
-    print("No balance to exit");
+    print("\nℹ️  No balance to exit and no pending exits");
   }
 }

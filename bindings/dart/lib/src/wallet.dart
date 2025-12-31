@@ -298,7 +298,7 @@ class Wallet {
   /// Parameters:
   /// - `invoice`: The BOLT11 invoice string to pay
   /// - `amountSats`: Optional amount override for invoices without amounts
-  Future<ffi.LightningPaymentResult> payLightningInvoice(
+  Future<ffi.LightningSend> payLightningInvoice(
     String invoice, [
     int? amountSats,
   ]) async {
@@ -311,7 +311,7 @@ class Wallet {
   /// - `lightningAddress`: The Lightning Address (e.g., "user@domain.com")
   /// - `amountSats`: Amount to send in satoshis
   /// - `comment`: Optional comment to include with the payment
-  Future<ffi.LightningPaymentResult> payLightningAddress(
+  Future<ffi.LightningSend> payLightningAddress(
     String lightningAddress,
     int amountSats, [
     String? comment,
@@ -393,8 +393,8 @@ class Wallet {
   /// Get all wallet movements (transaction history).
   ///
   /// Returns a list of movements ordered from newest to oldest.
-  List<ffi.Movement> movements() {
-    return _inner.movements();
+  List<ffi.Movement> history() {
+    return _inner.history();
   }
 
   // ------------------------------------------------------------------------
@@ -460,10 +460,10 @@ class Wallet {
   ///
   /// Note: You must call [syncExits] after this to track the exit progress.
   ///
-  /// IMPORTANT: This method does NOT run in an isolate because it may invoke
-  /// callbacks if using a custom onchain wallet. Callbacks cannot cross isolate boundaries.
-  Future<void> startExitForEntireWallet(OnchainWallet onchainWallet) async {
-    return _inner.startExitForEntireWallet(onchainWallet.ffi);
+  /// Note: Requires an onchain wallet to have been configured when creating/opening
+  /// the wallet for the exit to succeed.
+  Future<void> startExitForEntireWallet() async {
+    return _inner.startExitForEntireWallet();
   }
 
   /// Sync exit state
@@ -472,6 +472,8 @@ class Wallet {
   /// Call this periodically after starting an exit to track progress and
   /// complete the exit process.
   ///
+  /// This does NOT progress exits (broadcast, fee bump, etc.). Use [progressExits] for that.
+  ///
   /// Parameters:
   /// - `onchainWallet`: The onchain wallet used for the exit
   ///
@@ -479,6 +481,180 @@ class Wallet {
   /// callbacks if using a custom onchain wallet. Callbacks cannot cross isolate boundaries.
   Future<void> syncExits(OnchainWallet onchainWallet) async {
     return _inner.syncExits(onchainWallet.ffi);
+  }
+
+  // ------------------------------------------------------------------------
+  // Extended Exit Methods
+  // ------------------------------------------------------------------------
+
+  /// Get detailed exit status for a specific VTXO
+  ///
+  /// Parameters:
+  /// - `vtxoId`: The VTXO ID to check
+  /// - `includeHistory`: Include state transition history
+  /// - `includeTransactions`: Include transaction details
+  ///
+  /// Returns detailed exit status or null if VTXO is not in exit
+  Future<ffi.ExitTransactionStatus?> getExitStatus(
+    String vtxoId,
+    bool includeHistory,
+    bool includeTransactions,
+  ) async {
+    return Isolate.run(
+      () => _inner.getExitStatus(vtxoId, includeHistory, includeTransactions),
+    );
+  }
+
+  /// Progress unilateral exits (broadcast, fee bump, advance state machine)
+  ///
+  /// This is THE CRITICAL METHOD for actually moving exits forward!
+  /// It will:
+  /// - Broadcast exit transactions to the Bitcoin network
+  /// - Perform CPFP fee bumping when needed
+  /// - Advance the exit state machine until exits become claimable
+  ///
+  /// Call this periodically after starting exits.
+  ///
+  /// Parameters:
+  /// - `onchainWallet`: Onchain wallet for building exit transactions
+  /// - `feeRateSatPerVb`: Optional fee rate override in sats per vbyte
+  ///
+  /// Returns a list of exit progress statuses
+  ///
+  /// IMPORTANT: This method does NOT run in an isolate because it may invoke
+  /// callbacks if using a custom onchain wallet. Callbacks cannot cross isolate boundaries.
+  Future<List<ffi.ExitProgressStatus>> progressExits(
+    OnchainWallet onchainWallet, [
+    int? feeRateSatPerVb,
+  ]) async {
+    return _inner.progressExits(onchainWallet.ffi, feeRateSatPerVb);
+  }
+
+  /// Start unilateral exit for specific VTXOs
+  ///
+  /// Initiates the emergency exit process for the specified VTXOs.
+  /// You must call [progressExits] periodically to actually advance the exit.
+  ///
+  /// Parameters:
+  /// - `vtxoIds`: List of VTXO IDs to exit
+  Future<void> startExitForVtxos(List<String> vtxoIds) async {
+    return _inner.startExitForVtxos(vtxoIds);
+  }
+
+  /// List all exits that are claimable
+  ///
+  /// Returns all exits ready to be drained to an onchain wallet.
+  List<ffi.ExitVtxo> listClaimableExits() {
+    return _inner.listClaimableExits();
+  }
+
+  /// Get all VTXOs currently in the exit process
+  List<ffi.ExitVtxo> getExitVtxos() {
+    return _inner.getExitVtxos();
+  }
+
+  /// Check if there are any pending exits
+  bool hasPendingExits() {
+    return _inner.hasPendingExits();
+  }
+
+  /// Get total amount in pending exits (in satoshis)
+  int pendingExitsTotalSats() {
+    return _inner.pendingExitsTotalSats();
+  }
+
+  /// Get earliest block height when all exits will be claimable
+  ///
+  /// Returns null if no exits are tracked or if any exit has undetermined claimability.
+  int? allExitsClaimableAtHeight() {
+    return _inner.allExitsClaimableAtHeight();
+  }
+
+  /// Drain claimable exits to an address
+  ///
+  /// Builds a signed PSBT that claims exited funds and sends them to the specified address.
+  /// The PSBT can be broadcast directly or modified before broadcasting.
+  ///
+  /// Parameters:
+  /// - `vtxoIds`: List of claimable VTXO IDs to drain (empty list = drain all claimable)
+  /// - `address`: Bitcoin address to send claimed funds to
+  /// - `feeRateSatPerVb`: Optional fee rate override in sats per vbyte
+  ///
+  /// Returns a signed exit claim transaction with PSBT and fee information
+  Future<ffi.ExitClaimTransaction> drainExits(
+    List<String> vtxoIds,
+    String address, [
+    int? feeRateSatPerVb,
+  ]) async {
+    return Isolate.run(
+      () => _inner.drainExits(vtxoIds, address, feeRateSatPerVb),
+    );
+  }
+
+  // ------------------------------------------------------------------------
+  // Round Management
+  // ------------------------------------------------------------------------
+
+  /// Get all pending round states
+  List<ffi.RoundState> pendingRoundStates() {
+    return _inner.pendingRoundStates();
+  }
+
+  /// Cancel a specific pending round
+  ///
+  /// Parameters:
+  /// - `roundId`: The ID of the round to cancel
+  Future<void> cancelPendingRound(int roundId) async {
+    return Isolate.run(() => _inner.cancelPendingRound(roundId));
+  }
+
+  /// Cancel all pending rounds
+  Future<void> cancelAllPendingRounds() async {
+    return Isolate.run(() => _inner.cancelAllPendingRounds());
+  }
+
+  /// Progress pending rounds
+  ///
+  /// Advances the state of all pending rounds. Call this periodically.
+  Future<void> progressPendingRounds() async {
+    return Isolate.run(() => _inner.progressPendingRounds());
+  }
+
+  // ------------------------------------------------------------------------
+  // Extended Maintenance & Validation
+  // ------------------------------------------------------------------------
+
+  /// Refresh the Ark server connection
+  ///
+  /// Re-establishes connection to the Ark server if it was lost.
+  Future<void> refreshServer() async {
+    return Isolate.run(() => _inner.refreshServer());
+  }
+
+  /// Validate an Ark address against the connected server
+  ///
+  /// This performs full validation including checking if the address
+  /// belongs to the currently connected Ark server.
+  ///
+  /// For basic format validation only, use the standalone `validateArkAddress()` function.
+  ///
+  /// Parameters:
+  /// - `address`: The Ark address to validate
+  Future<bool> validateArkoorAddress(String address) async {
+    return Isolate.run(() => _inner.validateArkoorAddress(address));
+  }
+
+  /// Full maintenance including onchain wallet sync
+  ///
+  /// More thorough than [maintenance] - also syncs the onchain wallet and exit system.
+  ///
+  /// Parameters:
+  /// - `onchainWallet`: The onchain wallet to sync
+  ///
+  /// IMPORTANT: This method does NOT run in an isolate because it may invoke
+  /// callbacks if using a custom onchain wallet. Callbacks cannot cross isolate boundaries.
+  Future<void> maintenanceWithOnchain(OnchainWallet onchainWallet) async {
+    return _inner.maintenanceWithOnchain(onchainWallet.ffi);
   }
 
   // ------------------------------------------------------------------------
@@ -502,17 +678,94 @@ class Wallet {
     return Isolate.run(() => _inner.maintenanceRefresh());
   }
 
+  /// Get the block height of the first expiring VTXO
+  ///
+  /// Returns the block height when the first VTXO will expire, or null if no VTXOs.
+  Future<int?> getFirstExpiringVtxoBlockheight() async {
+    return Isolate.run(() => _inner.getFirstExpiringVtxoBlockheight());
+  }
+
+  /// Get the next required refresh block height
+  ///
+  /// Returns the block height when a refresh should be performed, or null if no refresh needed.
+  Future<int?> getNextRequiredRefreshBlockheight() async {
+    return Isolate.run(() => _inner.getNextRequiredRefreshBlockheight());
+  }
+
+  /// Schedule maintenance refresh if needed
+  ///
+  /// Determines if a maintenance refresh should be scheduled and returns the target round ID.
+  ///
+  /// Returns the round ID if refresh was scheduled, null otherwise.
+  Future<int?> maybeScheduleMaintenanceRefresh() async {
+    return Isolate.run(() => _inner.maybeScheduleMaintenanceRefresh());
+  }
+
   // ------------------------------------------------------------------------
   // Extended Lightning
   // ------------------------------------------------------------------------
 
+  /// Pay a BOLT12 Lightning offer
+  ///
+  /// Parameters:
+  /// - `offer`: BOLT12 offer string
+  /// - `amountSats`: Optional amount override for offers without amounts
+  Future<ffi.LightningSend> payLightningOffer(
+    String offer, [
+    int? amountSats,
+  ]) async {
+    return Isolate.run(() => _inner.payLightningOffer(offer, amountSats));
+  }
+
+  /// Check the status of a Lightning payment by payment hash
+  ///
+  /// Parameters:
+  /// - `paymentHash`: The payment hash as hex string
+  /// - `wait`: Whether to wait for the payment to complete
+  ///
+  /// Returns the preimage as hex string if payment succeeded, null otherwise
+  Future<String?> checkLightningPayment(
+    String paymentHash,
+    bool wait,
+  ) async {
+    return Isolate.run(
+      () => _inner.checkLightningPayment(paymentHash, wait),
+    );
+  }
+
+  /// Get status of a specific Lightning receive by payment hash
+  ///
+  /// Parameters:
+  /// - `paymentHash`: The payment hash as hex string
+  ///
+  /// Returns the receive status or null if not found
+  Future<ffi.LightningReceive?> lightningReceiveStatus(
+    String paymentHash,
+  ) async {
+    return Isolate.run(() => _inner.lightningReceiveStatus(paymentHash));
+  }
+
+  /// Try to claim a specific Lightning receive by payment hash
+  ///
+  /// Parameters:
+  /// - `paymentHash`: The payment hash as hex string
+  /// - `wait`: Whether to wait for the payment to be received
+  Future<void> tryClaimLightningReceive(
+    String paymentHash,
+    bool wait,
+  ) async {
+    return Isolate.run(
+      () => _inner.tryClaimLightningReceive(paymentHash, wait),
+    );
+  }
+
   /// Get all pending lightning sends.
-  List<ffi.LightningSendStatus> pendingLightningSends() {
+  List<ffi.LightningSend> pendingLightningSends() {
     return _inner.pendingLightningSends();
   }
 
   /// Get all pending lightning receives.
-  List<ffi.LightningReceiveStatus> pendingLightningReceives() {
+  List<ffi.LightningReceive> pendingLightningReceives() {
     return _inner.pendingLightningReceives();
   }
 
@@ -548,5 +801,22 @@ class Wallet {
   /// Get wallet config.
   ffi.Config config() {
     return _inner.config();
+  }
+
+  // ------------------------------------------------------------------------
+  // Advanced Methods
+  // ------------------------------------------------------------------------
+
+  /// Sign exit claim inputs in a PSBT
+  ///
+  /// Used for external PSBT workflows where you need to sign the exit claim inputs
+  /// without broadcasting immediately.
+  ///
+  /// Parameters:
+  /// - `psbtBase64`: Base64-encoded PSBT to sign
+  ///
+  /// Returns the signed PSBT as base64 string
+  Future<String> signExitClaimInputs(String psbtBase64) async {
+    return Isolate.run(() => _inner.signExitClaimInputs(psbtBase64));
   }
 }

@@ -136,15 +136,6 @@ dictionary LightningInvoice {
     u64 amount_sats;
 };
 
-/// Result of a successful lightning payment
-dictionary LightningPaymentResult {
-    /// The invoice that was paid
-    string invoice;
-
-    /// Payment preimage as hex string
-    string preimage;
-};
-
 /// Result of an offboard operation
 dictionary OffboardResult {
     /// The round ID
@@ -161,7 +152,7 @@ dictionary AddressWithIndex {
 };
 
 /// Status of a pending Lightning receive
-dictionary LightningReceiveStatus {
+dictionary LightningReceive {
     /// Payment hash
     string payment_hash;
 
@@ -178,8 +169,8 @@ dictionary LightningReceiveStatus {
     boolean preimage_revealed;
 };
 
-/// Status of a pending Lightning send
-dictionary LightningSendStatus {
+/// Lightning send payment information
+dictionary LightningSend {
     /// The invoice being paid
     string invoice;
 
@@ -188,6 +179,9 @@ dictionary LightningSendStatus {
 
     /// Number of HTLC VTXOs locked
     u32 htlc_vtxo_count;
+
+    /// Payment preimage (only present if payment completed)
+    string? preimage;
 };
 
 /// Wallet movement/transaction record
@@ -195,7 +189,7 @@ dictionary Movement {
     /// Movement ID
     u32 id;
 
-    /// Status (pending, finished, failed, cancelled)
+    /// Status (pending, successful, failed, canceled)
     string status;
 
     /// Subsystem name
@@ -227,6 +221,9 @@ dictionary Movement {
 
     /// Output VTXO IDs
     sequence<string> output_vtxo_ids;
+
+    /// VTXOs sent to exit system
+    sequence<string> exited_vtxo_ids;
 
     /// Created at timestamp
     string created_at;
@@ -305,6 +302,74 @@ dictionary ArkInfo {
 
     /// Whether the Ark server requires anti-DoS measures for lightning receives
     boolean ln_receive_anti_dos_required;
+};
+
+// ============================================================================
+// Exit Types
+// ============================================================================
+
+/// A VTXO in the exit process
+dictionary ExitVtxo {
+    /// VTXO ID
+    string vtxo_id;
+
+    /// Amount in sats
+    u64 amount_sats;
+
+    /// Current exit state
+    string state;
+
+    /// Whether this exit is claimable
+    boolean is_claimable;
+};
+
+/// Status of an exit progression
+dictionary ExitProgressStatus {
+    /// VTXO ID being exited
+    string vtxo_id;
+
+    /// Current state
+    string state;
+
+    /// Error if any occurred
+    string? error;
+};
+
+/// Claim transaction for exited funds
+dictionary ExitClaimTransaction {
+    /// Base64-encoded PSBT
+    string psbt_base64;
+
+    /// Transaction fee in sats
+    u64 fee_sats;
+};
+
+/// Detailed status of an exit transaction
+dictionary ExitTransactionStatus {
+    /// VTXO ID
+    string vtxo_id;
+
+    /// Current state
+    string state;
+
+    /// State history (if requested)
+    sequence<string>? history;
+
+    /// Number of transactions
+    u32 transaction_count;
+};
+
+// ============================================================================
+// Round Types
+// ============================================================================
+
+/// A pending round state
+dictionary RoundState {
+    /// Round ID
+    u32 id;
+
+    /// Whether the round is ongoing
+    boolean ongoing;
 };
 
 // ============================================================================
@@ -559,10 +624,10 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     [Throws=BarkError]
-    LightningPaymentResult pay_lightning_invoice(string invoice, u64? amount_sats);
+    LightningSend pay_lightning_invoice(string invoice, u64? amount_sats);
 
     [Throws=BarkError]
-    LightningPaymentResult pay_lightning_address(
+    LightningSend pay_lightning_address(
         string lightning_address,
         u64 amount_sats,
         string? comment
@@ -603,7 +668,7 @@ interface Wallet {
 
     /// Get all wallet movements (transaction history)
     [Throws=BarkError]
-    sequence<Movement> movements();
+    sequence<Movement> history();
 
     // ------------------------------------------------------------------------
     // Extended VTXO Queries
@@ -655,15 +720,52 @@ interface Wallet {
 
     /// Get all pending lightning sends
     [Throws=BarkError]
-    sequence<LightningSendStatus> pending_lightning_sends();
+    sequence<LightningSend> pending_lightning_sends();
 
     /// Get all pending lightning receives
     [Throws=BarkError]
-    sequence<LightningReceiveStatus> pending_lightning_receives();
+    sequence<LightningReceive> pending_lightning_receives();
 
     /// Get claimable lightning receive balance
     [Throws=BarkError]
     u64 claimable_lightning_receive_balance_sats();
+
+    /// Pay a BOLT12 lightning offer
+    ///
+    /// # Arguments
+    ///
+    /// * `offer` - BOLT12 offer string
+    /// * `amount_sats` - Optional amount in sats (required if offer doesn't specify amount)
+    [Throws=BarkError]
+    LightningSend pay_lightning_offer(string offer, u64? amount_sats);
+
+    /// Check lightning payment status by payment hash
+    ///
+    /// # Arguments
+    ///
+    /// * `payment_hash` - Payment hash as hex string
+    /// * `wait` - Whether to wait for the payment to complete
+    ///
+    /// Returns the preimage if payment is successful, null if still pending
+    [Throws=BarkError]
+    string? check_lightning_payment(string payment_hash, boolean wait);
+
+    /// Get lightning receive status by payment hash
+    ///
+    /// # Arguments
+    ///
+    /// * `payment_hash` - Payment hash as hex string
+    [Throws=BarkError]
+    LightningReceive? lightning_receive_status(string payment_hash);
+
+    /// Try to claim a specific lightning receive by payment hash
+    ///
+    /// # Arguments
+    ///
+    /// * `payment_hash` - Payment hash as hex string
+    /// * `wait` - Whether to wait for claim to complete
+    [Throws=BarkError]
+    void try_claim_lightning_receive(string payment_hash, boolean wait);
 
     // ------------------------------------------------------------------------
     // Onchain Payments
@@ -705,9 +807,177 @@ interface Wallet {
 
     /// Start unilateral exit for the entire wallet
     [Throws=BarkError]
-    void start_exit_for_entire_wallet(OnchainWallet onchain_wallet);
+    void start_exit_for_entire_wallet();
 
-    /// Sync exit state
+    /// Sync exit state (checks status but doesn't progress)
     [Throws=BarkError]
     void sync_exits(OnchainWallet onchain_wallet);
+
+    // ------------------------------------------------------------------------
+    // Extended Exit Methods
+    // ------------------------------------------------------------------------
+
+    /// Progress unilateral exits (broadcast, fee bump, advance state machine)
+    ///
+    /// This is the critical method for actually moving exits forward.
+    /// Call periodically after starting exits.
+    ///
+    /// # Arguments
+    ///
+    /// * `onchain_wallet` - Onchain wallet for building exit transactions
+    /// * `fee_rate_sat_per_vb` - Optional fee rate override in sats/vB
+    [Throws=BarkError]
+    sequence<ExitProgressStatus> progress_exits(
+        OnchainWallet onchain_wallet,
+        u64? fee_rate_sat_per_vb
+    );
+
+    /// Start unilateral exit for specific VTXOs
+    ///
+    /// Marks specific VTXOs for exit. Call progress_exits() to actually advance them.
+    [Throws=BarkError]
+    void start_exit_for_vtxos(sequence<string> vtxo_ids);
+
+    /// List all exits that are claimable
+    ///
+    /// Returns exits ready to be drained to onchain wallet.
+    [Throws=BarkError]
+    sequence<ExitVtxo> list_claimable_exits();
+
+    /// Get all VTXOs currently in exit process
+    [Throws=BarkError]
+    sequence<ExitVtxo> get_exit_vtxos();
+
+    /// Check if any exits are pending
+    [Throws=BarkError]
+    boolean has_pending_exits();
+
+    /// Get total amount in pending exits (sats)
+    [Throws=BarkError]
+    u64 pending_exits_total_sats();
+
+    /// Get earliest block height when all exits will be claimable
+    ///
+    /// Returns null if no exits or any exit has undetermined claimability.
+    [Throws=BarkError]
+    u32? all_exits_claimable_at_height();
+
+    /// Get detailed exit status for a specific VTXO
+    ///
+    /// Returns detailed status including current state, history, and transactions.
+    ///
+    /// # Arguments
+    ///
+    /// * `vtxo_id` - The VTXO ID to check
+    /// * `include_history` - Whether to include full state machine history
+    /// * `include_transactions` - Whether to include transaction details
+    [Throws=BarkError]
+    ExitTransactionStatus? get_exit_status(
+        string vtxo_id,
+        boolean include_history,
+        boolean include_transactions
+    );
+
+    /// Drain claimable exits to an address
+    ///
+    /// Builds a signed PSBT that claims exited funds and sends them to the address.
+    /// The PSBT can be broadcast directly or modified before broadcasting.
+    ///
+    /// # Arguments
+    ///
+    /// * `vtxo_ids` - List of claimable VTXO IDs to drain (empty = drain all)
+    /// * `address` - Bitcoin address to send claimed funds to
+    /// * `fee_rate_sat_per_vb` - Optional fee rate override in sats/vB
+    [Throws=BarkError]
+    ExitClaimTransaction drain_exits(
+        sequence<string> vtxo_ids,
+        string address,
+        u64? fee_rate_sat_per_vb
+    );
+
+    // ------------------------------------------------------------------------
+    // Round Management
+    // ------------------------------------------------------------------------
+
+    /// Get all pending round states
+    [Throws=BarkError]
+    sequence<RoundState> pending_round_states();
+
+    /// Cancel a specific pending round
+    [Throws=BarkError]
+    void cancel_pending_round(u32 round_id);
+
+    /// Cancel all pending rounds
+    [Throws=BarkError]
+    void cancel_all_pending_rounds();
+
+    /// Progress pending rounds
+    ///
+    /// Advances the state of all pending rounds. Call periodically.
+    [Throws=BarkError]
+    void progress_pending_rounds();
+
+    // ------------------------------------------------------------------------
+    // Extended Maintenance & Validation
+    // ------------------------------------------------------------------------
+
+    /// Refresh the Ark server connection
+    ///
+    /// Re-establishes connection if it was lost.
+    [Throws=BarkError]
+    void refresh_server();
+
+    /// Validate an Ark address against the connected server
+    ///
+    /// This performs full validation including checking if the address
+    /// belongs to the currently connected Ark server.
+    /// For basic format validation only, use validate_ark_address() instead.
+    [Throws=BarkError]
+    boolean validate_arkoor_address(string address);
+
+    /// Full maintenance including onchain wallet sync
+    ///
+    /// More thorough than maintenance() - also syncs onchain wallet and exits.
+    [Throws=BarkError]
+    void maintenance_with_onchain(OnchainWallet onchain_wallet);
+
+    // ------------------------------------------------------------------------
+    // VTXO Expiry & Refresh Scheduling
+    // ------------------------------------------------------------------------
+
+    /// Get the block height of the first expiring VTXO
+    ///
+    /// Returns null if there are no spendable VTXOs.
+    [Throws=BarkError]
+    u32? get_first_expiring_vtxo_blockheight();
+
+    /// Get the next block height when a refresh should be performed
+    ///
+    /// This is calculated as the first expiring VTXO height minus the refresh threshold.
+    /// Returns null if there are no VTXOs to refresh.
+    [Throws=BarkError]
+    u32? get_next_required_refresh_blockheight();
+
+    /// Schedule a maintenance refresh if VTXOs need refreshing
+    ///
+    /// Returns the round ID if a refresh was scheduled, null otherwise.
+    [Throws=BarkError]
+    u32? maybe_schedule_maintenance_refresh();
+
+    // ------------------------------------------------------------------------
+    // Advanced Exit Methods
+    // ------------------------------------------------------------------------
+
+    /// Sign exit claim inputs in an external PSBT
+    ///
+    /// This is useful if you want to combine exit claims with other inputs
+    /// in a single transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `psbt_base64` - Base64-encoded PSBT to sign
+    ///
+    /// Returns the signed PSBT
+    [Throws=BarkError]
+    string sign_exit_claim_inputs(string psbt_base64);
 };

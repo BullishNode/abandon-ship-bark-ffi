@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use bark::onchain::{ChainSource, ChainSourceSpec, OnchainWallet as BarkOnchainWallet};
+use bark::onchain::{ChainSource, ChainSourceSpec, ChainSync, OnchainWallet as BarkOnchainWallet};
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;
 
@@ -34,15 +34,12 @@ impl OnchainWallet {
     /// * `mnemonic` - BIP39 mnemonic phrase
     /// * `config` - Wallet configuration (includes network and chain source settings)
     /// * `datadir` - Directory for wallet data (shares database with Bark wallet)
-    pub fn default(
-        mnemonic: String,
-        config: Config,
-        datadir: String,
-    ) -> Result<Self, BarkError> {
+    pub fn default(mnemonic: String, config: Config, datadir: String) -> Result<Self, BarkError> {
         TOKIO_RT.block_on(async {
-            let mnemonic = Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
-                error_message: e.to_string(),
-            })?;
+            let mnemonic =
+                Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
+                    error_message: e.to_string(),
+                })?;
 
             let seed = mnemonic.to_seed("");
             let btc_network: BtcNetwork = config.network.into();
@@ -50,7 +47,10 @@ impl OnchainWallet {
             // Use shared database cache
             let db = crate::db::get_or_open_db(&datadir)?;
 
-            eprintln!("[ONCHAIN] Creating onchain wallet for {:?} network", btc_network);
+            eprintln!(
+                "[ONCHAIN] Creating onchain wallet for {:?} network",
+                btc_network
+            );
 
             // Create the onchain wallet
             let onchain = BarkOnchainWallet::load_or_create(btc_network, seed, db.clone())?;
@@ -60,7 +60,9 @@ impl OnchainWallet {
                 use bark_bitcoin_ext::rpc::Auth;
                 let auth = if let Some(cookie) = config.bitcoind_cookiefile {
                     Auth::CookieFile(std::path::PathBuf::from(cookie))
-                } else if let (Some(user), Some(pass)) = (config.bitcoind_user, config.bitcoind_pass) {
+                } else if let (Some(user), Some(pass)) =
+                    (config.bitcoind_user, config.bitcoind_pass)
+                {
                     Auth::UserPass(user, pass)
                 } else {
                     Auth::None
@@ -75,7 +77,8 @@ impl OnchainWallet {
                 ChainSourceSpec::Esplora { url }
             } else {
                 return Err(BarkError::InvalidAddress {
-                    error_message: "Config must specify either esplora_address or bitcoind_address".to_string(),
+                    error_message: "Config must specify either esplora_address or bitcoind_address"
+                        .to_string(),
                 });
             };
 
@@ -128,11 +131,15 @@ impl OnchainWallet {
             OnchainWalletInner::Bdk { wallet, chain } => TOKIO_RT.block_on(async {
                 eprintln!("[ONCHAIN] Starting BDK sync...");
                 let mut w = wallet.lock().await;
-                let amount = w.sync(chain).await.map_err(|e| BarkError::Network {
+                w.sync(chain).await.map_err(|e| BarkError::Network {
                     error_message: format!("Sync failed: {}", e),
                 })?;
-                eprintln!("[ONCHAIN] BDK sync completed, amount: {} sats", amount.to_sat());
-                Ok(amount.to_sat())
+                let balance = w.balance();
+                eprintln!(
+                    "[ONCHAIN] BDK sync completed, balance: {} sats",
+                    balance.total().to_sat()
+                );
+                Ok(balance.total().to_sat())
             }),
             OnchainWalletInner::Callback { .. } => {
                 eprintln!("[ONCHAIN] Callback wallets manage their own sync");
@@ -194,39 +201,40 @@ impl OnchainWallet {
         fee_rate_sat_per_vb: u64,
     ) -> Result<String, BarkError> {
         match &self.inner {
-            OnchainWalletInner::Bdk { wallet, chain } => TOKIO_RT.block_on(async {
-                let mut w = wallet.lock().await;
+            OnchainWalletInner::Bdk { wallet, chain } => {
+                TOKIO_RT.block_on(async {
+                    let mut w = wallet.lock().await;
 
-                let addr = address
-                    .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-                    .map_err(|e| BarkError::InvalidAddress {
-                        error_message: e.to_string(),
-                    })?
-                    .assume_checked();
+                    let addr = address
+                        .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+                        .map_err(|e| BarkError::InvalidAddress {
+                            error_message: e.to_string(),
+                        })?
+                        .assume_checked();
 
-                let amount = bitcoin::Amount::from_sat(amount_sats);
+                    let amount = bitcoin::Amount::from_sat(amount_sats);
 
-                let fee_rate = bitcoin::FeeRate::from_sat_per_vb(fee_rate_sat_per_vb)
-                    .ok_or_else(|| BarkError::Internal {
-                        error_message: "Invalid fee rate".to_string(),
+                    let fee_rate = bitcoin::FeeRate::from_sat_per_vb(fee_rate_sat_per_vb)
+                        .ok_or_else(|| BarkError::Internal {
+                            error_message: "Invalid fee rate".to_string(),
+                        })?;
+
+                    eprintln!(
+                        "[ONCHAIN] Sending {} sats to {} with fee rate {} sat/vB",
+                        amount_sats, addr, fee_rate_sat_per_vb
+                    );
+
+                    let txid = w.send(chain, addr, amount, fee_rate).await.map_err(|e| {
+                        BarkError::Internal {
+                            error_message: format!("Send failed: {}", e),
+                        }
                     })?;
 
-                eprintln!(
-                    "[ONCHAIN] Sending {} sats to {} with fee rate {} sat/vB",
-                    amount_sats, addr, fee_rate_sat_per_vb
-                );
+                    eprintln!("[ONCHAIN] Transaction broadcast: {}", txid);
 
-                let txid = w
-                    .send(chain, addr, amount, fee_rate)
-                    .await
-                    .map_err(|e| BarkError::Internal {
-                        error_message: format!("Send failed: {}", e),
-                    })?;
-
-                eprintln!("[ONCHAIN] Transaction broadcast: {}", txid);
-
-                Ok(txid.to_string())
-            }),
+                    Ok(txid.to_string())
+                })
+            }
             OnchainWalletInner::Callback { .. } => Err(BarkError::Internal {
                 error_message: "send() not supported for callback wallets".to_string(),
             }),

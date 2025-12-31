@@ -26,11 +26,7 @@ Future<void> defaultOnchainExample() async {
   final scriptPath = path.dirname(Platform.script.toFilePath());
   final dataDir = Directory(path.join(scriptPath, 'bark_db'));
 
-  final onchainWallet = OnchainWallet.default_(
-    mnemonic,
-    config,
-    dataDir.path,
-  );
+  final onchainWallet = OnchainWallet.default_(mnemonic, config, dataDir.path);
 
   print("Syncing onchain wallet...");
   await onchainWallet.sync();

@@ -21,7 +21,11 @@ pub fn validate_mnemonic(mnemonic: String) -> Result<bool, BarkError> {
     }
 }
 
-/// Validate an Ark address
+/// Validate an Ark address (basic format check only)
+///
+/// This only validates the format of the address, not whether it belongs
+/// to a specific Ark server. For full validation against a connected server,
+/// use Wallet::validate_arkoor_address() instead.
 pub fn validate_ark_address(address: String) -> Result<bool, BarkError> {
     match address.parse::<ark::Address>() {
         Ok(_) => Ok(true),

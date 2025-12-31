@@ -1,6 +1,6 @@
+use bark::persist::models::PendingBoard as BarkPendingBoard;
 use bark::WalletVtxo as BarkWalletVtxo;
 use bark::{Balance as BarkBalance, WalletProperties as BarkWalletProperties};
-use bark::persist::models::PendingBoard as BarkPendingBoard;
 use bark_bitcoin_ext::AmountExt;
 use bitcoin::Network as BtcNetwork;
 
@@ -175,16 +175,6 @@ pub struct LightningInvoice {
 }
 
 // ============================================================================
-// LightningPaymentResult
-// ============================================================================
-
-#[derive(Clone, Debug)]
-pub struct LightningPaymentResult {
-    pub invoice: String,
-    pub preimage: String,
-}
-
-// ============================================================================
 // OffboardResult
 // ============================================================================
 
@@ -204,11 +194,11 @@ pub struct AddressWithIndex {
 }
 
 // ============================================================================
-// LightningReceiveStatus
+// LightningReceive
 // ============================================================================
 
 #[derive(Clone, Debug)]
-pub struct LightningReceiveStatus {
+pub struct LightningReceive {
     pub payment_hash: String,
     pub invoice: String,
     pub amount_sats: u64,
@@ -216,7 +206,7 @@ pub struct LightningReceiveStatus {
     pub preimage_revealed: bool,
 }
 
-impl From<bark::persist::models::LightningReceive> for LightningReceiveStatus {
+impl From<bark::persist::models::LightningReceive> for LightningReceive {
     fn from(r: bark::persist::models::LightningReceive) -> Self {
         use bitcoin::hex::DisplayHex;
         Self {
@@ -234,22 +224,24 @@ impl From<bark::persist::models::LightningReceive> for LightningReceiveStatus {
 }
 
 // ============================================================================
-// LightningSendStatus
+// LightningSend
 // ============================================================================
 
 #[derive(Clone, Debug)]
-pub struct LightningSendStatus {
+pub struct LightningSend {
     pub invoice: String,
     pub amount_sats: u64,
     pub htlc_vtxo_count: u32,
+    pub preimage: Option<String>,
 }
 
-impl From<bark::persist::models::PendingLightningSend> for LightningSendStatus {
-    fn from(s: bark::persist::models::PendingLightningSend) -> Self {
+impl From<bark::persist::models::LightningSend> for LightningSend {
+    fn from(s: bark::persist::models::LightningSend) -> Self {
         Self {
             invoice: s.invoice.to_string(),
             amount_sats: s.amount.to_sat(),
             htlc_vtxo_count: s.htlc_vtxos.len() as u32,
+            preimage: s.preimage.map(|p| p.to_string()),
         }
     }
 }
@@ -272,6 +264,7 @@ pub struct Movement {
     pub received_on_addresses: Vec<String>,
     pub input_vtxo_ids: Vec<String>,
     pub output_vtxo_ids: Vec<String>,
+    pub exited_vtxo_ids: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
     pub completed_at: Option<String>,
@@ -288,14 +281,27 @@ impl From<bark::movement::Movement> for Movement {
             intended_balance_sats: m.intended_balance.to_sat(),
             effective_balance_sats: m.effective_balance.to_sat(),
             offchain_fee_sats: m.offchain_fee.to_sat(),
-            sent_to_addresses: m.sent_to.iter().map(|d| d.destination.clone()).collect(),
+            sent_to_addresses: m
+                .sent_to
+                .iter()
+                .map(|d| {
+                    // Serialize PaymentMethod to JSON string for FFI
+                    serde_json::to_string(&d.destination)
+                        .unwrap_or_else(|_| format!("{:?}", d.destination))
+                })
+                .collect(),
             received_on_addresses: m
                 .received_on
                 .iter()
-                .map(|d| d.destination.clone())
+                .map(|d| {
+                    // Serialize PaymentMethod to JSON string for FFI
+                    serde_json::to_string(&d.destination)
+                        .unwrap_or_else(|_| format!("{:?}", d.destination))
+                })
                 .collect(),
             input_vtxo_ids: m.input_vtxos.iter().map(|v| v.to_string()).collect(),
             output_vtxo_ids: m.output_vtxos.iter().map(|v| v.to_string()).collect(),
+            exited_vtxo_ids: m.exited_vtxos.iter().map(|v| v.to_string()).collect(),
             created_at: m.time.created_at.to_rfc3339(),
             updated_at: m.time.updated_at.to_rfc3339(),
             completed_at: m.time.completed_at.map(|t| t.to_rfc3339()),
@@ -391,6 +397,101 @@ impl From<&bark::ark::ArkInfo> for ArkInfo {
             min_board_amount_sats: info.min_board_amount.to_sat(),
             offboard_feerate_sat_per_vb: info.offboard_feerate.to_sat_per_vb_ceil(),
             ln_receive_anti_dos_required: info.ln_receive_anti_dos_required,
+        }
+    }
+}
+
+// ============================================================================
+// Exit Types
+// ============================================================================
+
+use bark::exit::models::ExitProgressStatus as BarkExitProgressStatus;
+use bark::exit::ExitVtxo as BarkExitVtxo;
+
+/// A VTXO that is being unilaterally exited
+#[derive(Clone, Debug)]
+pub struct ExitVtxo {
+    pub vtxo_id: String,
+    pub amount_sats: u64,
+    pub state: String,
+    pub is_claimable: bool,
+}
+
+impl From<&BarkExitVtxo> for ExitVtxo {
+    fn from(ev: &BarkExitVtxo) -> Self {
+        Self {
+            vtxo_id: ev.id().to_string(),
+            amount_sats: ev.amount().to_sat(),
+            state: format!("{:?}", ev.state()),
+            is_claimable: ev.is_claimable(),
+        }
+    }
+}
+
+/// Status of an exit progression
+#[derive(Clone, Debug)]
+pub struct ExitProgressStatus {
+    pub vtxo_id: String,
+    pub state: String,
+    pub error: Option<String>,
+}
+
+impl From<BarkExitProgressStatus> for ExitProgressStatus {
+    fn from(eps: BarkExitProgressStatus) -> Self {
+        Self {
+            vtxo_id: eps.vtxo_id.to_string(),
+            state: format!("{:?}", eps.state),
+            error: eps.error.map(|e| e.to_string()),
+        }
+    }
+}
+
+/// Claim transaction for exited funds
+#[derive(Clone, Debug)]
+pub struct ExitClaimTransaction {
+    pub psbt_base64: String,
+    pub fee_sats: u64,
+}
+
+/// Detailed status of an exit transaction
+#[derive(Clone, Debug)]
+pub struct ExitTransactionStatus {
+    pub vtxo_id: String,
+    pub state: String,
+    pub history: Option<Vec<String>>,
+    pub transaction_count: u32,
+}
+
+impl From<bark::exit::models::ExitTransactionStatus> for ExitTransactionStatus {
+    fn from(ets: bark::exit::models::ExitTransactionStatus) -> Self {
+        Self {
+            vtxo_id: ets.vtxo_id.to_string(),
+            state: format!("{:?}", ets.state),
+            history: ets.history.map(|h| h.iter().map(|s| format!("{:?}", s)).collect()),
+            transaction_count: ets.transactions.len() as u32,
+        }
+    }
+}
+
+// ============================================================================
+// Round Types
+// ============================================================================
+
+use bark::persist::StoredRoundState;
+
+/// A pending round state
+#[derive(Clone, Debug)]
+pub struct RoundState {
+    pub id: u32,
+    /// Whether the round is ongoing
+    pub ongoing: bool,
+}
+
+impl From<StoredRoundState> for RoundState {
+    fn from(rs: StoredRoundState) -> Self {
+        Self {
+            id: rs.id.0,
+            ongoing: rs.state.ongoing_participation(),
         }
     }
 }
