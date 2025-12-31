@@ -375,6 +375,15 @@ class BdkCustomWallet implements CustomOnchainWalletCallbacks {
     final address = _wallet.nextUnusedAddress(bdk.KeychainKind.external_);
     return address.address.toString();
   }
+
+  String broadcastPsbt(String psbtBase64) {
+    final psbt = bdk.Psbt(psbtBase64);
+    final tx = psbt.extractTx();
+
+    _esploraClient.broadcast(tx);
+
+    return tx.computeTxid().toString();
+  }
 }
 
 Future<void> customOnchainExample() async {
@@ -441,12 +450,12 @@ Future<void> customOnchainExample() async {
 
     try {
       await wallet.startExitForEntireWallet();
-      print("✅ Exit initiated successfully");
+      print("Exit initiated successfully");
 
       final updatedBalance = wallet.balance();
       print("Pending exit: ${updatedBalance.pendingExitSats} sats");
     } catch (e) {
-      print("❌ Exit failed: $e");
+      print("Exit failed: $e");
     }
   }
 
@@ -480,27 +489,27 @@ Future<void> customOnchainExample() async {
         );
 
         if (exitStatus != null) {
-          print("\n📊 Exit Status for ${exitStatus.vtxoId}:");
+          print("\nExit Status for ${exitStatus.vtxoId}:");
           print("   Current State: ${exitStatus.state}");
           print("   Transaction Count: ${exitStatus.transactionCount}");
 
           if (exitStatus.history != null && exitStatus.history!.isNotEmpty) {
             print("   State History:");
             for (final historyState in exitStatus.history!) {
-              print("     → $historyState");
+              print("     - $historyState");
             }
           }
         }
       } catch (e) {
-        print("❌ Failed to get exit status for ${exitVtxo.vtxoId}: $e");
+        print("Failed to get exit status for ${exitVtxo.vtxoId}: $e");
       }
     }
 
     // Progress the exits (broadcast txs, fee bump, advance state machine)
-    print("\n🔄 Progressing exits...");
+    print("\nProgressing exits...");
     try {
       final progressStatuses = await wallet.progressExits(onchainWallet, null);
-      print("✅ Exit progress completed (${progressStatuses.length} exits):");
+      print("Exit progress completed (${progressStatuses.length} exits):");
 
       for (final status in progressStatuses) {
         print("  • ${status.vtxoId}");
@@ -510,7 +519,7 @@ Future<void> customOnchainExample() async {
         }
       }
     } catch (e) {
-      print("❌ Progress exits failed: $e");
+      print("Progress exits failed: $e");
     }
 
     // Check if any exits are claimable
@@ -518,7 +527,7 @@ Future<void> customOnchainExample() async {
     final claimableExits = wallet.listClaimableExits();
 
     if (claimableExits.isNotEmpty) {
-      print("✅ Found ${claimableExits.length} claimable exit(s):");
+      print("Found ${claimableExits.length} claimable exit(s):");
 
       for (final exit in claimableExits) {
         print("  • ${exit.vtxoId}");
@@ -533,7 +542,7 @@ Future<void> customOnchainExample() async {
       }
 
       // Drain the exits to onchain wallet
-      print("\n💰 Draining exits to onchain wallet...");
+      print("\nDraining exits to onchain wallet...");
       try {
         final drainAddress = customWallet.newAddress;
         print("Drain address: $drainAddress");
@@ -545,41 +554,43 @@ Future<void> customOnchainExample() async {
           null, // use automatic fee rate
         );
 
-        print("✅ Drain transaction created:");
+        print("Drain transaction created:");
         print("  Fee: ${claimTx.feeSats} sats");
         print("  PSBT (base64): ${claimTx.psbtBase64.substring(0, 64)}...");
-        print("\n⚠️  To complete the exit, broadcast this PSBT!");
-        print("    The funds will be sent to: $drainAddress");
+        print("\nTo complete the exit, broadcast this PSBT");
+        print("  The funds will be sent to: $drainAddress");
+        final txId = customWallet.broadcastPsbt(claimTx.psbtBase64);
+        print("  PSBT broadcasted successfully with txid: $txId");
       } catch (e) {
-        print("❌ Drain exits failed: $e");
+        print("Drain exits failed: $e");
       }
     } else {
-      print("ℹ️  No exits are claimable yet");
+      print("No exits are claimable yet");
       print(
-        "   Exits need to be confirmed onchain and wait for the exit delta period",
+        "Exits need to be confirmed onchain and wait for the exit delta period",
       );
 
       // Show when exits will be claimable
       final claimableAtHeight = wallet.allExitsClaimableAtHeight();
       if (claimableAtHeight != null) {
         print(
-          "   All exits will be claimable at block height: $claimableAtHeight",
+          "All exits will be claimable at block height: $claimableAtHeight",
         );
       }
     }
 
     // Sync exits one more time to update state
-    print("\n🔄 Syncing exit state...");
+    print("\nSyncing exit state...");
     try {
       await wallet.syncExits(onchainWallet);
-      print("✅ Exit status synced");
+      print("Exit status synced");
 
       final finalBalance = wallet.balance();
       print("Final pending exit: ${finalBalance.pendingExitSats} sats");
     } catch (e) {
-      print("❌ Exit sync failed: $e");
+      print("Exit sync failed: $e");
     }
   } else {
-    print("\nℹ️  No balance to exit and no pending exits");
+    print("\nNo balance to exit and no pending exits");
   }
 }
