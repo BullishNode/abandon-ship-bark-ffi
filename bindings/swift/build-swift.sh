@@ -96,15 +96,22 @@ cp "$BUILD_DIR/swift/barkFFI.h" "$IOS_SIM_FRAMEWORK/Headers/"
 cp "$BUILD_DIR/swift/barkFFI.modulemap" "$IOS_SIM_FRAMEWORK/Modules/module.modulemap"
 cp "$SCRIPT_DIR/resources/Info-iOSSimulator.plist" "$IOS_SIM_FRAMEWORK/Info.plist"
 
-# macOS framework
+# macOS framework (versioned bundle layout)
 MACOS_FRAMEWORK="$BUILD_DIR/macos-framework/BarkFFI.framework"
-mkdir -p "$MACOS_FRAMEWORK/Headers"
-mkdir -p "$MACOS_FRAMEWORK/Modules"
-mkdir -p "$MACOS_FRAMEWORK/Resources"
-cp "$BUILD_DIR/macos/libbark_ffi.dylib" "$MACOS_FRAMEWORK/BarkFFI"
-cp "$BUILD_DIR/swift/barkFFI.h" "$MACOS_FRAMEWORK/Headers/"
-cp "$BUILD_DIR/swift/barkFFI.modulemap" "$MACOS_FRAMEWORK/Modules/module.modulemap"
-cp "$SCRIPT_DIR/resources/Info-macOS.plist" "$MACOS_FRAMEWORK/Resources/Info.plist"
+mkdir -p "$MACOS_FRAMEWORK/Versions/A/Headers"
+mkdir -p "$MACOS_FRAMEWORK/Versions/A/Modules"
+mkdir -p "$MACOS_FRAMEWORK/Versions/A/Resources"
+cp "$BUILD_DIR/macos/libbark_ffi.dylib" "$MACOS_FRAMEWORK/Versions/A/BarkFFI"
+cp "$BUILD_DIR/swift/barkFFI.h" "$MACOS_FRAMEWORK/Versions/A/Headers/"
+cp "$BUILD_DIR/swift/barkFFI.modulemap" "$MACOS_FRAMEWORK/Versions/A/Modules/module.modulemap"
+cp "$SCRIPT_DIR/resources/Info-macOS.plist" "$MACOS_FRAMEWORK/Versions/A/Resources/Info.plist"
+
+# Create symlinks for versioned framework structure
+ln -s A "$MACOS_FRAMEWORK/Versions/Current"
+ln -s Versions/Current/BarkFFI "$MACOS_FRAMEWORK/BarkFFI"
+ln -s Versions/Current/Headers "$MACOS_FRAMEWORK/Headers"
+ln -s Versions/Current/Modules "$MACOS_FRAMEWORK/Modules"
+ln -s Versions/Current/Resources "$MACOS_FRAMEWORK/Resources"
 
 # Create XCFramework
 echo "📦 Creating XCFramework..."
