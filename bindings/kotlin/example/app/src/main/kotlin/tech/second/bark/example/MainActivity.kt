@@ -94,6 +94,7 @@ class MainActivity : AppCompatActivity() {
                 is BarkException.NotFound -> output.appendLine("   Not found: ${e.errorMessage}")
                 is BarkException.ServerConnection -> output.appendLine("   Server connection: ${e.errorMessage}")
                 is BarkException.Internal -> output.appendLine("   Internal: ${e.errorMessage}")
+                is BarkException.OnchainWalletRequired -> output.appendLine("   Onchain wallet required: ${e.errorMessage}")
             }
         } catch (e: Exception) {
             output.appendLine("❌ Error: ${e.message}")
