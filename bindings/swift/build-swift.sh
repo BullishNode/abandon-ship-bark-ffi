@@ -69,11 +69,13 @@ echo "📦 Creating framework structures..."
 
 # iOS device framework
 IOS_DEVICE_FRAMEWORK="$BUILD_DIR/ios-device/BarkFFI.framework"
+mkdir -p "$IOS_DEVICE_FRAMEWORK"
 cp "$PROJECT_ROOT/target/aarch64-apple-ios/release/libbark_ffi.a" "$IOS_DEVICE_FRAMEWORK/BarkFFI"
 cp "$SCRIPT_DIR/resources/Info-iOS.plist" "$IOS_DEVICE_FRAMEWORK/Info.plist"
 
 # iOS simulator framework
 IOS_SIM_FRAMEWORK="$BUILD_DIR/ios-simulator-framework/BarkFFI.framework"
+mkdir -p "$IOS_SIM_FRAMEWORK"
 cp "$BUILD_DIR/ios-simulator/libbark_ffi.a" "$IOS_SIM_FRAMEWORK/BarkFFI"
 cp "$SCRIPT_DIR/resources/Info-iOSSimulator.plist" "$IOS_SIM_FRAMEWORK/Info.plist"
 
@@ -95,43 +97,56 @@ echo "🦀 Generating Swift bindings..."
 
 # Generate headers and modulemaps for iOS device
 echo "📱 Generating iOS device bindings..."
-cargo run --bin uniffi-bindgen -- \
+cargo run --bin uniffi-bindgen-swift -- \
     "$PROJECT_ROOT/target/aarch64-apple-ios/release/libbark_ffi.a" \
-    "$IOS_DEVICE_FRAMEWORK" \
-    --language swift \
-    --headers \
-    --modulemap \
+    "$IOS_DEVICE_FRAMEWORK/Headers" \
+    --headers
+
+cargo run --bin uniffi-bindgen-swift -- \
+    "$PROJECT_ROOT/target/aarch64-apple-ios/release/libbark_ffi.a" \
+    "$IOS_DEVICE_FRAMEWORK/Modules" \
     --xcframework \
+    --modulemap \
+    --module-name barkFFI \
     --modulemap-filename module.modulemap
 
 # Generate headers and modulemaps for iOS simulator
 echo "📱 Generating iOS simulator bindings..."
-cargo run --bin uniffi-bindgen -- \
-    "$BUILD_DIR/ios-simulator/libbark_ffi.a" \
-    "$IOS_SIM_FRAMEWORK" \
-    --language swift \
-    --headers \
-    --modulemap \
+cargo run --bin uniffi-bindgen-swift -- \
+    "$PROJECT_ROOT/target/aarch64-apple-ios-sim/release/libbark_ffi.a" \
+    "$IOS_SIM_FRAMEWORK/Headers" \
+    --headers
+
+cargo run --bin uniffi-bindgen-swift -- \
+    "$PROJECT_ROOT/target/aarch64-apple-ios-sim/release/libbark_ffi.a" \
+    "$IOS_SIM_FRAMEWORK/Modules" \
     --xcframework \
+    --modulemap \
+    --module-name barkFFI \
     --modulemap-filename module.modulemap
 
 # Generate headers and modulemaps for macOS
 echo "💻 Generating macOS bindings..."
-cargo run --bin uniffi-bindgen -- \
-    "$BUILD_DIR/macos/libbark_ffi.dylib" \
-    "$MACOS_FRAMEWORK/Versions/A" \
-    --language swift \
-    --headers \
-    --modulemap \
+cargo run --bin uniffi-bindgen-swift -- \
+    "$PROJECT_ROOT/target/aarch64-apple-darwin/release/libbark_ffi.dylib" \
+    "$MACOS_FRAMEWORK/Versions/A/Headers" \
+    --headers
+
+cargo run --bin uniffi-bindgen-swift -- \
+    "$PROJECT_ROOT/target/aarch64-apple-darwin/release/libbark_ffi.dylib" \
+    "$MACOS_FRAMEWORK/Versions/A/Modules" \
     --xcframework \
+    --modulemap \
+    --module-name barkFFI \
     --modulemap-filename module.modulemap
 
 # Generate Swift source files (only need once)
 echo "📝 Generating Swift source files..."
-cargo run --bin uniffi-bindgen -- \
+SOURCES_DIR="$SCRIPT_DIR/Sources/Bark"
+mkdir -p "$SOURCES_DIR"
+cargo run --bin uniffi-bindgen-swift -- \
     "$PROJECT_ROOT/target/aarch64-apple-darwin/release/libbark_ffi.dylib" \
-    "$BUILD_DIR/swift" \
-    --language swift \
+    "$SOURCES_DIR" \
     --swift-sources
 
 # Create XCFramework
@@ -141,12 +156,6 @@ xcodebuild -create-xcframework \
     -framework "$IOS_SIM_FRAMEWORK" \
     -framework "$MACOS_FRAMEWORK" \
     -output "$XCFRAMEWORK_DIR/BarkFFI.xcframework"
-
-# Copy Swift source files to Sources directory
-echo "📝 Copying Swift source files..."
-SOURCES_DIR="$SCRIPT_DIR/Sources/Bark"
-mkdir -p "$SOURCES_DIR"
-cp "$BUILD_DIR/swift/bark.swift" "$SOURCES_DIR/"
 
 # Note: Package.swift must be at repository root for SPM to work
 echo "ℹ️  Note: Ensure Package.swift is at repository root (not in bindings/swift/)"

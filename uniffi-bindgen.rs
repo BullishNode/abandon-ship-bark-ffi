@@ -49,9 +49,6 @@ fn main() {
             )
             .expect("Failed to generate dart bindings");
         }
-        Some(lang) if lang == "swift" => {
-            uniffi::uniffi_bindgen_swift()
-        }
         _ => uniffi::uniffi_bindgen_main(),
     }
 }

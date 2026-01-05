@@ -8,5 +8,5 @@ package_name = "bark"
 
 [bindings.swift]
 cdylib_name = "bark_ffi"
-module_name = "BarkFFI"
+module_name = "Bark"
 ffi_module_name = "barkFFI"
