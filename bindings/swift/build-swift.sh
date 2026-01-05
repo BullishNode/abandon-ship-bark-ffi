@@ -64,46 +64,23 @@ lipo -create \
     "$PROJECT_ROOT/target/x86_64-apple-darwin/release/libbark_ffi.dylib" \
     -output "$BUILD_DIR/macos/libbark_ffi.dylib"
 
-# Generate Swift bindings using uniffi-bindgen
-echo "🦀 Generating Swift bindings..."
-cargo run --bin uniffi-bindgen -- generate \
-    --library "$PROJECT_ROOT/target/aarch64-apple-darwin/release/libbark_ffi.dylib" \
-    --language swift \
-    --out-dir "$BUILD_DIR/swift"
-
-# Fix modulemap to use framework module
-echo "🔧 Fixing modulemap..."
-sed -i '' 's/^module barkFFI {/framework module barkFFI {/' "$BUILD_DIR/swift/barkFFI.modulemap"
-
 # Create framework structure for each platform
 echo "📦 Creating framework structures..."
 
 # iOS device framework
 IOS_DEVICE_FRAMEWORK="$BUILD_DIR/ios-device/BarkFFI.framework"
-mkdir -p "$IOS_DEVICE_FRAMEWORK/Headers"
-mkdir -p "$IOS_DEVICE_FRAMEWORK/Modules"
 cp "$PROJECT_ROOT/target/aarch64-apple-ios/release/libbark_ffi.a" "$IOS_DEVICE_FRAMEWORK/BarkFFI"
-cp "$BUILD_DIR/swift/barkFFI.h" "$IOS_DEVICE_FRAMEWORK/Headers/"
-cp "$BUILD_DIR/swift/barkFFI.modulemap" "$IOS_DEVICE_FRAMEWORK/Modules/module.modulemap"
 cp "$SCRIPT_DIR/resources/Info-iOS.plist" "$IOS_DEVICE_FRAMEWORK/Info.plist"
 
 # iOS simulator framework
 IOS_SIM_FRAMEWORK="$BUILD_DIR/ios-simulator-framework/BarkFFI.framework"
-mkdir -p "$IOS_SIM_FRAMEWORK/Headers"
-mkdir -p "$IOS_SIM_FRAMEWORK/Modules"
 cp "$BUILD_DIR/ios-simulator/libbark_ffi.a" "$IOS_SIM_FRAMEWORK/BarkFFI"
-cp "$BUILD_DIR/swift/barkFFI.h" "$IOS_SIM_FRAMEWORK/Headers/"
-cp "$BUILD_DIR/swift/barkFFI.modulemap" "$IOS_SIM_FRAMEWORK/Modules/module.modulemap"
 cp "$SCRIPT_DIR/resources/Info-iOSSimulator.plist" "$IOS_SIM_FRAMEWORK/Info.plist"
 
 # macOS framework (versioned bundle layout)
 MACOS_FRAMEWORK="$BUILD_DIR/macos-framework/BarkFFI.framework"
-mkdir -p "$MACOS_FRAMEWORK/Versions/A/Headers"
-mkdir -p "$MACOS_FRAMEWORK/Versions/A/Modules"
 mkdir -p "$MACOS_FRAMEWORK/Versions/A/Resources"
 cp "$BUILD_DIR/macos/libbark_ffi.dylib" "$MACOS_FRAMEWORK/Versions/A/BarkFFI"
-cp "$BUILD_DIR/swift/barkFFI.h" "$MACOS_FRAMEWORK/Versions/A/Headers/"
-cp "$BUILD_DIR/swift/barkFFI.modulemap" "$MACOS_FRAMEWORK/Versions/A/Modules/module.modulemap"
 cp "$SCRIPT_DIR/resources/Info-macOS.plist" "$MACOS_FRAMEWORK/Versions/A/Resources/Info.plist"
 
 # Create symlinks for versioned framework structure
@@ -112,6 +89,50 @@ ln -s Versions/Current/BarkFFI "$MACOS_FRAMEWORK/BarkFFI"
 ln -s Versions/Current/Headers "$MACOS_FRAMEWORK/Headers"
 ln -s Versions/Current/Modules "$MACOS_FRAMEWORK/Modules"
 ln -s Versions/Current/Resources "$MACOS_FRAMEWORK/Resources"
+
+# Generate Swift bindings using uniffi-bindgen-swift
+echo "🦀 Generating Swift bindings..."
+
+# Generate headers and modulemaps for iOS device
+echo "📱 Generating iOS device bindings..."
+cargo run --bin uniffi-bindgen -- \
+    "$PROJECT_ROOT/target/aarch64-apple-ios/release/libbark_ffi.a" \
+    "$IOS_DEVICE_FRAMEWORK" \
+    --language swift \
+    --headers \
+    --modulemap \
+    --xcframework \
+    --modulemap-filename module.modulemap
+
+# Generate headers and modulemaps for iOS simulator
+echo "📱 Generating iOS simulator bindings..."
+cargo run --bin uniffi-bindgen -- \
+    "$BUILD_DIR/ios-simulator/libbark_ffi.a" \
+    "$IOS_SIM_FRAMEWORK" \
+    --language swift \
+    --headers \
+    --modulemap \
+    --xcframework \
+    --modulemap-filename module.modulemap
+
+# Generate headers and modulemaps for macOS
+echo "💻 Generating macOS bindings..."
+cargo run --bin uniffi-bindgen -- \
+    "$BUILD_DIR/macos/libbark_ffi.dylib" \
+    "$MACOS_FRAMEWORK/Versions/A" \
+    --language swift \
+    --headers \
+    --modulemap \
+    --xcframework \
+    --modulemap-filename module.modulemap
+
+# Generate Swift source files (only need once)
+echo "📝 Generating Swift source files..."
+cargo run --bin uniffi-bindgen -- \
+    "$PROJECT_ROOT/target/aarch64-apple-darwin/release/libbark_ffi.dylib" \
+    "$BUILD_DIR/swift" \
+    --language swift \
+    --swift-sources
 
 # Create XCFramework
 echo "📦 Creating XCFramework..."
