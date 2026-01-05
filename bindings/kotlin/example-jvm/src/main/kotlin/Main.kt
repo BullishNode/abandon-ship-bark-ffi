@@ -93,6 +93,7 @@ fun main() {
             is BarkException.NotFound -> System.err.println("   Not found: ${e.errorMessage}")
             is BarkException.ServerConnection -> System.err.println("   Server connection: ${e.errorMessage}")
             is BarkException.Internal -> System.err.println("   Internal error: ${e.errorMessage}")
+            is BarkException.OnchainWalletRequired -> System.err.println("   Onchain wallet required: ${e.errorMessage}")
         }
         exitProcess(1)
     } catch (e: Exception) {

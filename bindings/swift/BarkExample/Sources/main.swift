@@ -68,6 +68,7 @@ do {
     case .NotFound(let errorMessage): print("   Not found: \(errorMessage)")
     case .ServerConnection(let errorMessage): print("   Server connection: \(errorMessage)")
     case .Internal(let errorMessage): print("   Internal: \(errorMessage)")
+    case .OnchainWalletRequired(let errorMessage): print("   Onchain wallet required: \(errorMessage)")
     }
 } catch {
     print("❌ Error: \(error)")
