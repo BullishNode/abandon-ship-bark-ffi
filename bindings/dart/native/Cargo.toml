@@ -15,6 +15,10 @@ name = "bark_ffi"
 name = "uniffi-bindgen"
 path = "uniffi-bindgen.rs"
 
+[[bin]]
+name = "uniffi-bindgen-swift"
+path = "uniffi-bindgen-swift.rs"
+
 [dependencies]
 # Bark dependencies from GitLab (using kumulynja fork with lazy_static 1.5.0 fix)
 # Pinned to commit 7f625dff to avoid breaking API changes

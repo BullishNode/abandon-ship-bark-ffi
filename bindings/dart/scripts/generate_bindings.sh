@@ -91,6 +91,7 @@ rsync -a --delete "$BARK_FFI_DIR/" "$NATIVE_DIR/" \
     --include='LICENSE' \
     --include='rust-toolchain.toml' \
     --include='uniffi-bindgen.rs' \
+    --include='uniffi-bindgen-swift.rs' \
     --include='uniffi.toml' \
     --exclude='*'
 

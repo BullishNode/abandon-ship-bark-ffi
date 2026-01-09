@@ -322,10 +322,7 @@ impl Wallet {
 
             let amount = amount_sats.map(bitcoin::Amount::from_sat);
 
-            let lightning_send = self
-                .inner
-                .pay_lightning_invoice(invoice, amount)
-                .await?;
+            let lightning_send = self.inner.pay_lightning_invoice(invoice, amount).await?;
 
             Ok(lightning_send.into())
         })
@@ -439,12 +436,7 @@ impl Wallet {
 
     /// Get all wallet movements (transaction history)
     pub fn history(&self) -> Result<Vec<Movement>, BarkError> {
-        Ok(self
-            .inner
-            .history()?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        Ok(self.inner.history()?.into_iter().map(Into::into).collect())
     }
 
     // ------------------------------------------------------------------------
@@ -609,13 +601,12 @@ impl Wallet {
         amount_sats: Option<u64>,
     ) -> Result<crate::LightningSend, BarkError> {
         TOKIO_RT.block_on(async {
-            use std::str::FromStr;
             use ark_lib::lightning::Offer;
+            use std::str::FromStr;
 
-            let offer_obj = Offer::from_str(&offer)
-                .map_err(|e| BarkError::InvalidInvoice {
-                    error_message: format!("Invalid BOLT12 offer: {:?}", e),
-                })?;
+            let offer_obj = Offer::from_str(&offer).map_err(|e| BarkError::InvalidInvoice {
+                error_message: format!("Invalid BOLT12 offer: {:?}", e),
+            })?;
 
             let amount = amount_sats.map(bitcoin::Amount::from_sat);
 
@@ -641,11 +632,11 @@ impl Wallet {
         wait: bool,
     ) -> Result<Option<String>, BarkError> {
         TOKIO_RT.block_on(async {
-            use bitcoin::hex::FromHex;
             use ark_lib::lightning::PaymentHash;
+            use bitcoin::hex::FromHex;
 
-            let hash_bytes = <[u8; 32]>::from_hex(&payment_hash)
-                .map_err(|e| BarkError::InvalidInvoice {
+            let hash_bytes =
+                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
                     error_message: format!("Invalid payment hash: {}", e),
                 })?;
 
@@ -669,11 +660,11 @@ impl Wallet {
         &self,
         payment_hash: String,
     ) -> Result<Option<crate::LightningReceive>, BarkError> {
-        use bitcoin::hex::FromHex;
         use ark_lib::lightning::PaymentHash;
+        use bitcoin::hex::FromHex;
 
-        let hash_bytes = <[u8; 32]>::from_hex(&payment_hash)
-            .map_err(|e| BarkError::InvalidInvoice {
+        let hash_bytes =
+            <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
                 error_message: format!("Invalid payment hash: {}", e),
             })?;
 
@@ -697,11 +688,11 @@ impl Wallet {
         wait: bool,
     ) -> Result<(), BarkError> {
         TOKIO_RT.block_on(async {
-            use bitcoin::hex::FromHex;
             use ark_lib::lightning::PaymentHash;
+            use bitcoin::hex::FromHex;
 
-            let hash_bytes = <[u8; 32]>::from_hex(&payment_hash)
-                .map_err(|e| BarkError::InvalidInvoice {
+            let hash_bytes =
+                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
                     error_message: format!("Invalid payment hash: {}", e),
                 })?;
 
@@ -1121,11 +1112,7 @@ impl Wallet {
     pub fn get_exit_vtxos(&self) -> Result<Vec<crate::ExitVtxo>, BarkError> {
         TOKIO_RT.block_on(async {
             let exit_guard = self.inner.exit.read().await;
-            Ok(exit_guard
-                .get_exit_vtxos()
-                .iter()
-                .map(Into::into)
-                .collect())
+            Ok(exit_guard.get_exit_vtxos().iter().map(Into::into).collect())
         })
     }
 
@@ -1171,10 +1158,12 @@ impl Wallet {
         include_transactions: bool,
     ) -> Result<Option<crate::ExitTransactionStatus>, BarkError> {
         TOKIO_RT.block_on(async {
-            let vtxo_id_parsed = vtxo_id.parse::<ark_lib::VtxoId>()
-                .map_err(|e| BarkError::InvalidAddress {
-                    error_message: format!("invalid vtxo id: {}", e),
-                })?;
+            let vtxo_id_parsed =
+                vtxo_id
+                    .parse::<ark_lib::VtxoId>()
+                    .map_err(|e| BarkError::InvalidAddress {
+                        error_message: format!("invalid vtxo id: {}", e),
+                    })?;
 
             let exit_guard = self.inner.exit.read().await;
             let status = exit_guard
@@ -1431,11 +1420,12 @@ impl Wallet {
             use bitcoin::base64::prelude::*;
             use bitcoin::psbt::Psbt;
 
-            let psbt_bytes = BASE64_STANDARD
-                .decode(&psbt_base64)
-                .map_err(|e| BarkError::Internal {
-                    error_message: format!("Invalid base64: {}", e),
-                })?;
+            let psbt_bytes =
+                BASE64_STANDARD
+                    .decode(&psbt_base64)
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Invalid base64: {}", e),
+                    })?;
 
             let mut psbt = Psbt::deserialize(&psbt_bytes).map_err(|e| BarkError::Internal {
                 error_message: format!("Invalid PSBT: {}", e),
@@ -1450,6 +1440,56 @@ impl Wallet {
 
             let signed_psbt_bytes = psbt.serialize();
             Ok(BASE64_STANDARD.encode(&signed_psbt_bytes))
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    // Transaction Broadcasting
+    // ------------------------------------------------------------------------
+
+    /// Broadcast a signed transaction to the Bitcoin network
+    ///
+    /// Takes a hex-encoded transaction and broadcasts it via the wallet's chain source.
+    /// This is useful after extracting a transaction from a PSBT.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx_hex` - Hex-encoded signed transaction
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let psbt = wallet.drain_exits(vtxo_ids, address, None)?;
+    /// let tx_hex = extract_tx_from_psbt(psbt.psbt_base64)?;
+    /// let txid = wallet.broadcast_tx(tx_hex)?;
+    /// ```
+    ///
+    /// Returns the transaction ID (txid) of the broadcasted transaction
+    pub fn broadcast_tx(&self, tx_hex: String) -> Result<String, BarkError> {
+        TOKIO_RT.block_on(async {
+            use bitcoin::consensus::encode::deserialize_hex;
+            use bitcoin::Transaction;
+
+            let tx: Transaction =
+                deserialize_hex(&tx_hex).map_err(|e| BarkError::InvalidTransaction {
+                    error_message: format!("{}", e),
+                })?;
+
+            let txid = tx.compute_txid();
+
+            eprintln!("[BROADCAST] Broadcasting transaction: {}", txid);
+
+            self.inner
+                .chain
+                .broadcast_tx(&tx)
+                .await
+                .map_err(|e| BarkError::Network {
+                    error_message: format!("Broadcast failed: {}", e),
+                })?;
+
+            eprintln!("[BROADCAST] Transaction broadcasted successfully");
+
+            Ok(txid.to_string())
         })
     }
 }

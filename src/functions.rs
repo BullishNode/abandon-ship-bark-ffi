@@ -32,3 +32,31 @@ pub fn validate_ark_address(address: String) -> Result<bool, BarkError> {
         Err(_) => Ok(false),
     }
 }
+
+/// Extract a signed transaction from a PSBT
+///
+/// Takes a base64-encoded PSBT and extracts the final signed transaction.
+/// This is useful after signing a PSBT (e.g., from drain_exits) before broadcasting.
+///
+/// # Arguments
+///
+/// * `psbt_base64` - Base64-encoded PSBT string
+///
+/// # Returns
+///
+/// Hex-encoded signed transaction ready for broadcasting
+pub fn extract_tx_from_psbt(psbt_base64: String) -> Result<String, BarkError> {
+    use bitcoin::consensus::encode::serialize_hex;
+    use bitcoin::psbt::Psbt;
+    use std::str::FromStr;
+
+    let psbt = Psbt::from_str(&psbt_base64).map_err(|e| BarkError::InvalidPsbt {
+        error_message: format!("{}", e),
+    })?;
+
+    let tx = psbt.extract_tx().map_err(|e| BarkError::Internal {
+        error_message: format!("Failed to extract transaction: {}", e),
+    })?;
+
+    Ok(serialize_hex(&tx))
+}

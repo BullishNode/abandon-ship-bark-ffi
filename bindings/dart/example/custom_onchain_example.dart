@@ -505,6 +505,10 @@ Future<void> customOnchainExample() async {
       }
     }
 
+    // Sync exits to update state
+    print("\nSyncing exits...");
+    await wallet.syncExits(onchainWallet);
+
     // Progress the exits (broadcast txs, fee bump, advance state machine)
     print("\nProgressing exits...");
     try {
@@ -559,7 +563,8 @@ Future<void> customOnchainExample() async {
         print("  PSBT (base64): ${claimTx.psbtBase64.substring(0, 64)}...");
         print("\nTo complete the exit, broadcast this PSBT");
         print("  The funds will be sent to: $drainAddress");
-        final txId = customWallet.broadcastPsbt(claimTx.psbtBase64);
+        final txHex = BarkUtils.extractTxFromPsbt(claimTx.psbtBase64);
+        final txId = await wallet.broadcastTx(txHex);
         print("  PSBT broadcasted successfully with txid: $txId");
       } catch (e) {
         print("Drain exits failed: $e");

@@ -90,6 +90,8 @@ class MainActivity : AppCompatActivity() {
                 is BarkException.InvalidMnemonic -> output.appendLine("   Invalid mnemonic: ${e.errorMessage}")
                 is BarkException.InvalidAddress -> output.appendLine("   Invalid address: ${e.errorMessage}")
                 is BarkException.InvalidInvoice -> output.appendLine("   Invalid invoice: ${e.errorMessage}")
+                is BarkException.InvalidPsbt -> output.appendLine("   Invalid PSBT: ${e.errorMessage}")
+                is BarkException.InvalidTransaction -> output.appendLine("   Invalid transaction: ${e.errorMessage}")
                 is BarkException.InsufficientFunds -> output.appendLine("   Insufficient funds: ${e.errorMessage}")
                 is BarkException.NotFound -> output.appendLine("   Not found: ${e.errorMessage}")
                 is BarkException.ServerConnection -> output.appendLine("   Server connection: ${e.errorMessage}")
