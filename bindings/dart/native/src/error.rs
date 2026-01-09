@@ -18,6 +18,12 @@ pub enum BarkError {
     #[error("Invalid invoice: {error_message}")]
     InvalidInvoice { error_message: String },
 
+    #[error("Invalid PSBT: {error_message}")]
+    InvalidPsbt { error_message: String },
+
+    #[error("Invalid transaction: {error_message}")]
+    InvalidTransaction { error_message: String },
+
     #[error("Insufficient funds: {error_message}")]
     InsufficientFunds { error_message: String },
 
@@ -42,6 +48,8 @@ impl BarkError {
             BarkError::InvalidMnemonic { error_message } => error_message.clone(),
             BarkError::InvalidAddress { error_message } => error_message.clone(),
             BarkError::InvalidInvoice { error_message } => error_message.clone(),
+            BarkError::InvalidPsbt { error_message } => error_message.clone(),
+            BarkError::InvalidTransaction { error_message } => error_message.clone(),
             BarkError::InsufficientFunds { error_message } => error_message.clone(),
             BarkError::NotFound { error_message } => error_message.clone(),
             BarkError::ServerConnection { error_message } => error_message.clone(),

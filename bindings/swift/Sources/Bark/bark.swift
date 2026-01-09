@@ -808,6 +808,20 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func bolt11Invoice(amountSats: UInt64) throws  -> LightningInvoice
     
     /**
+     * Broadcast a signed transaction to the Bitcoin network
+     *
+     * Takes a hex-encoded transaction and broadcasts it via the wallet's chain source.
+     * This is useful after extracting a transaction from a PSBT using extract_tx_from_psbt.
+     *
+     * # Arguments
+     *
+     * * `tx_hex` - Hex-encoded signed transaction
+     *
+     * Returns the transaction ID (txid) of the broadcasted transaction
+     */
+    func broadcastTx(txHex: String) throws  -> String
+    
+    /**
      * Cancel all pending rounds
      */
     func cancelAllPendingRounds() throws 
@@ -1294,6 +1308,27 @@ open func bolt11Invoice(amountSats: UInt64)throws  -> LightningInvoice  {
     uniffi_bark_ffi_fn_method_wallet_bolt11_invoice(
             self.uniffiCloneHandle(),
         FfiConverterUInt64.lower(amountSats),$0
+    )
+})
+}
+    
+    /**
+     * Broadcast a signed transaction to the Bitcoin network
+     *
+     * Takes a hex-encoded transaction and broadcasts it via the wallet's chain source.
+     * This is useful after extracting a transaction from a PSBT using extract_tx_from_psbt.
+     *
+     * # Arguments
+     *
+     * * `tx_hex` - Hex-encoded signed transaction
+     *
+     * Returns the transaction ID (txid) of the broadcasted transaction
+     */
+open func broadcastTx(txHex: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_method_wallet_broadcast_tx(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(txHex),$0
     )
 })
 }
@@ -3990,6 +4025,10 @@ public enum BarkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     )
     case InvalidInvoice(errorMessage: String
     )
+    case InvalidPsbt(errorMessage: String
+    )
+    case InvalidTransaction(errorMessage: String
+    )
     case InsufficientFunds(errorMessage: String
     )
     case NotFound(errorMessage: String
@@ -4042,19 +4081,25 @@ public struct FfiConverterTypeBarkError: FfiConverterRustBuffer {
         case 5: return .InvalidInvoice(
             errorMessage: try FfiConverterString.read(from: &buf)
             )
-        case 6: return .InsufficientFunds(
+        case 6: return .InvalidPsbt(
             errorMessage: try FfiConverterString.read(from: &buf)
             )
-        case 7: return .NotFound(
+        case 7: return .InvalidTransaction(
             errorMessage: try FfiConverterString.read(from: &buf)
             )
-        case 8: return .ServerConnection(
+        case 8: return .InsufficientFunds(
             errorMessage: try FfiConverterString.read(from: &buf)
             )
-        case 9: return .Internal(
+        case 9: return .NotFound(
             errorMessage: try FfiConverterString.read(from: &buf)
             )
-        case 10: return .OnchainWalletRequired(
+        case 10: return .ServerConnection(
+            errorMessage: try FfiConverterString.read(from: &buf)
+            )
+        case 11: return .Internal(
+            errorMessage: try FfiConverterString.read(from: &buf)
+            )
+        case 12: return .OnchainWalletRequired(
             errorMessage: try FfiConverterString.read(from: &buf)
             )
 
@@ -4094,28 +4139,38 @@ public struct FfiConverterTypeBarkError: FfiConverterRustBuffer {
             FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .InsufficientFunds(errorMessage):
+        case let .InvalidPsbt(errorMessage):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .NotFound(errorMessage):
+        case let .InvalidTransaction(errorMessage):
             writeInt(&buf, Int32(7))
             FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .ServerConnection(errorMessage):
+        case let .InsufficientFunds(errorMessage):
             writeInt(&buf, Int32(8))
             FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .Internal(errorMessage):
+        case let .NotFound(errorMessage):
             writeInt(&buf, Int32(9))
             FfiConverterString.write(errorMessage, into: &buf)
             
         
-        case let .OnchainWalletRequired(errorMessage):
+        case let .ServerConnection(errorMessage):
             writeInt(&buf, Int32(10))
+            FfiConverterString.write(errorMessage, into: &buf)
+            
+        
+        case let .Internal(errorMessage):
+            writeInt(&buf, Int32(11))
+            FfiConverterString.write(errorMessage, into: &buf)
+            
+        
+        case let .OnchainWalletRequired(errorMessage):
+            writeInt(&buf, Int32(12))
             FfiConverterString.write(errorMessage, into: &buf)
             
         }
@@ -5081,6 +5136,13 @@ fileprivate struct FfiConverterSequenceTypeVtxo: FfiConverterRustBuffer {
         return seq
     }
 }
+public func extractTxFromPsbt(psbtBase64: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
+    uniffi_bark_ffi_fn_func_extract_tx_from_psbt(
+        FfiConverterString.lower(psbtBase64),$0
+    )
+})
+}
 public func generateMnemonic()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeBarkError_lift) {
     uniffi_bark_ffi_fn_func_generate_mnemonic($0
@@ -5116,6 +5178,9 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_bark_ffi_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_bark_ffi_checksum_func_extract_tx_from_psbt() != 6799) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_func_generate_mnemonic() != 49933) {
         return InitializationResult.apiChecksumMismatch
@@ -5157,6 +5222,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_bolt11_invoice() != 64551) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_bark_ffi_checksum_method_wallet_broadcast_tx() != 32920) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_bark_ffi_checksum_method_wallet_cancel_all_pending_rounds() != 8095) {

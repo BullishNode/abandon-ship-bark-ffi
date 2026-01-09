@@ -64,6 +64,8 @@ do {
     case .InvalidMnemonic(let errorMessage): print("   Invalid mnemonic: \(errorMessage)")
     case .InvalidAddress(let errorMessage): print("   Invalid address: \(errorMessage)")
     case .InvalidInvoice(let errorMessage): print("   Invalid invoice: \(errorMessage)")
+    case .InvalidPsbt(let errorMessage): print("   Invalid PSBT: \(errorMessage)")
+    case .InvalidTransaction(let errorMessage): print("   Invalid transaction: \(errorMessage)")
     case .InsufficientFunds(let errorMessage): print("   Insufficient funds: \(errorMessage)")
     case .NotFound(let errorMessage): print("   Not found: \(errorMessage)")
     case .ServerConnection(let errorMessage): print("   Server connection: \(errorMessage)")

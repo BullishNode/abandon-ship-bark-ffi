@@ -10,6 +10,8 @@ extension BarkExceptionMessage on BarkException {
       InvalidMnemonicBarkException(:final errorMessage) => errorMessage,
       InvalidAddressBarkException(:final errorMessage) => errorMessage,
       InvalidInvoiceBarkException(:final errorMessage) => errorMessage,
+      InvalidPsbtBarkException(:final errorMessage) => errorMessage,
+      InvalidTransactionBarkException(:final errorMessage) => errorMessage,
       InsufficientFundsBarkException(:final errorMessage) => errorMessage,
       NotFoundBarkException(:final errorMessage) => errorMessage,
       ServerConnectionBarkException(:final errorMessage) => errorMessage,

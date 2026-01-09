@@ -8,6 +8,9 @@ namespace bark {
 
     [Throws=BarkError]
     boolean validate_ark_address(string address);
+
+    [Throws=BarkError]
+    string extract_tx_from_psbt(string psbt_base64);
 };
 
 // ============================================================================
@@ -30,6 +33,8 @@ interface BarkError {
     InvalidMnemonic(string error_message);
     InvalidAddress(string error_message);
     InvalidInvoice(string error_message);
+    InvalidPsbt(string error_message);
+    InvalidTransaction(string error_message);
     InsufficientFunds(string error_message);
     NotFound(string error_message);
     ServerConnection(string error_message);
@@ -980,4 +985,21 @@ interface Wallet {
     /// Returns the signed PSBT
     [Throws=BarkError]
     string sign_exit_claim_inputs(string psbt_base64);
+
+    // ------------------------------------------------------------------------
+    // Transaction Broadcasting
+    // ------------------------------------------------------------------------
+
+    /// Broadcast a signed transaction to the Bitcoin network
+    ///
+    /// Takes a hex-encoded transaction and broadcasts it via the wallet's chain source.
+    /// This is useful after extracting a transaction from a PSBT using extract_tx_from_psbt.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx_hex` - Hex-encoded signed transaction
+    ///
+    /// Returns the transaction ID (txid) of the broadcasted transaction
+    [Throws=BarkError]
+    string broadcast_tx(string tx_hex);
 };

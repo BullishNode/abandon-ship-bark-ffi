@@ -89,6 +89,8 @@ fun main() {
             is BarkException.InvalidMnemonic -> System.err.println("   Invalid mnemonic: ${e.errorMessage}")
             is BarkException.InvalidAddress -> System.err.println("   Invalid address: ${e.errorMessage}")
             is BarkException.InvalidInvoice -> System.err.println("   Invalid invoice: ${e.errorMessage}")
+            is BarkException.InvalidPsbt -> System.err.println("   Invalid PSBT: ${e.errorMessage}")
+            is BarkException.InvalidTransaction -> System.err.println("   Invalid transaction: ${e.errorMessage}")
             is BarkException.InsufficientFunds -> System.err.println("   Insufficient funds: ${e.errorMessage}")
             is BarkException.NotFound -> System.err.println("   Not found: ${e.errorMessage}")
             is BarkException.ServerConnection -> System.err.println("   Server connection: ${e.errorMessage}")

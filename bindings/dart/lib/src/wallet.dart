@@ -819,4 +819,31 @@ class Wallet {
   Future<String> signExitClaimInputs(String psbtBase64) async {
     return Isolate.run(() => _inner.signExitClaimInputs(psbtBase64));
   }
+
+  // ------------------------------------------------------------------------
+  // Transaction Broadcasting
+  // ------------------------------------------------------------------------
+
+  /// Broadcast a signed transaction to the Bitcoin network
+  ///
+  /// Takes a hex-encoded transaction and broadcasts it via the wallet's chain source.
+  /// This is useful after extracting a transaction from a PSBT using
+  /// [BarkUtils.extractTxFromPsbt].
+  ///
+  /// Parameters:
+  /// - `txHex`: Hex-encoded signed transaction
+  ///
+  /// Example:
+  /// ```dart
+  /// final exitClaim = await wallet.drainExits(vtxoIds, address, null);
+  /// final txHex = BarkUtils.extractTxFromPsbt(exitClaim.psbtBase64);
+  /// final txid = await wallet.broadcastTx(txHex);
+  /// ```
+  ///
+  /// Returns the transaction ID (txid) of the broadcasted transaction.
+  ///
+  /// Throws [BarkException] if the transaction is invalid or broadcast fails.
+  Future<String> broadcastTx(String txHex) async {
+    return Isolate.run(() => _inner.broadcastTx(txHex));
+  }
 }

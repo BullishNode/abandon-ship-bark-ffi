@@ -28,4 +28,19 @@ class BarkUtils {
   static bool validateArkAddress(String address) {
     return ffi.validateArkAddress(address);
   }
+
+  /// Extract a signed transaction from a PSBT.
+  ///
+  /// Takes a base64-encoded PSBT and extracts the final signed transaction.
+  /// This is useful after signing a PSBT (e.g., from drainExits) before broadcasting.
+  ///
+  /// Parameters:
+  /// - `psbtBase64`: Base64-encoded PSBT string
+  ///
+  /// Returns hex-encoded signed transaction ready for broadcasting.
+  ///
+  /// Throws [BarkException] if the PSBT is invalid or extraction fails.
+  static String extractTxFromPsbt(String psbtBase64) {
+    return ffi.extractTxFromPsbt(psbtBase64);
+  }
 }
