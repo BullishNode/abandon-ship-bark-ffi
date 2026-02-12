@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use bitcoin::{
     address::NetworkChecked, Amount, BlockHash, FeeRate, OutPoint, Psbt, Transaction, Txid,
 };
@@ -186,8 +187,9 @@ impl PreparePsbt for CallbackWalletAdapter {
 }
 
 // Implement SignPsbt trait
+#[async_trait]
 impl SignPsbt for CallbackWalletAdapter {
-    fn finish_tx(&mut self, psbt: Psbt) -> anyhow::Result<Transaction> {
+    async fn finish_tx(&mut self, psbt: Psbt) -> anyhow::Result<Transaction> {
         // Serialize PSBT to base64
         use base64::Engine;
         let psbt_bytes = psbt.serialize();
@@ -260,6 +262,7 @@ impl GetSpendingTx for CallbackWalletAdapter {
 }
 
 // Implement MakeCpfp trait
+#[async_trait]
 impl MakeCpfp for CallbackWalletAdapter {
     fn make_signed_p2a_cpfp(
         &mut self,
@@ -303,7 +306,7 @@ impl MakeCpfp for CallbackWalletAdapter {
         Ok(cpfp_tx)
     }
 
-    fn store_signed_p2a_cpfp(&mut self, tx: &Transaction) -> Result<(), CpfpError> {
+    async fn store_signed_p2a_cpfp(&mut self, tx: &Transaction) -> Result<(), CpfpError> {
         let tx_hex = hex::encode(bitcoin::consensus::serialize(tx));
 
         self.callbacks
