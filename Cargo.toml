@@ -12,16 +12,16 @@ crate-type = ["lib", "staticlib", "cdylib"]
 name = "bark_ffi"
 
 [dependencies]
-bark = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-wallet", rev = "bark-0.1.0-beta.6", default-features = false, features = [
+bark = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-wallet", rev = "bark-0.1.0-beta.7", default-features = false, features = [
     "tls-webpki-roots",
     "onchain_bdk",
 ] }
-ark-lib = { git = "https://gitlab.com/ark-bitcoin/bark", package = "ark-lib", rev = "bark-0.1.0-beta.6", default-features = false }
-bark-bitcoin-ext = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-bitcoin-ext", rev = "bark-0.1.0-beta.6", default-features = false }
+ark-lib = { git = "https://gitlab.com/ark-bitcoin/bark", package = "ark-lib", rev = "bark-0.1.0-beta.7", default-features = false }
+bark-bitcoin-ext = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-bitcoin-ext", rev = "bark-0.1.0-beta.7", default-features = false }
 # External dependencies
-bitcoin = { version = "0.32", features = ["serde", "rand", "rand-std"] }
+bitcoin = { version = "0.32.7", features = ["serde", "rand", "rand-std"] }
 bip39 = { version = "2.0.0", features = ["rand"] }
-lightning-invoice = { version = "0.33.2", features = ["std", "serde"] }
+lightning-invoice = { version = "0.34.0", features = ["std", "serde"] }
 lnurl-rs = { version = "0.9.0", features = [
     "async",
     "async-https-rustls",
