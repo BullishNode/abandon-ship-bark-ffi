@@ -1270,10 +1270,8 @@ impl Wallet {
                 })
                 .collect();
 
-            let ids = ids?;
-
             let mut vtxos = Vec::new();
-            for id in ids {
+            for id in ids? {
                 let vtxo =
                     self.inner
                         .get_vtxo_by_id(id)
