@@ -80,7 +80,8 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     ///
     /// # Returns
     /// Block reference with height and hash, or null if unconfirmed
-    fn get_wallet_tx_confirmed_block(&self, txid: String) -> Result<Option<FfiBlockRef>, BarkError>;
+    fn get_wallet_tx_confirmed_block(&self, txid: String)
+        -> Result<Option<FfiBlockRef>, BarkError>;
 
     /// Find transaction that spends a given output
     ///
@@ -124,7 +125,10 @@ impl GetBalance for CallbackWalletAdapter {
         match self.callbacks.get_balance() {
             Ok(sats) => Amount::from_sat(sats),
             Err(e) => {
-                eprintln!("[ERROR] CustomOnchainWalletCallbacks::get_balance failed: {}", e.message());
+                eprintln!(
+                    "[ERROR] CustomOnchainWalletCallbacks::get_balance failed: {}",
+                    e.message()
+                );
                 eprintln!("[ERROR] Returning 0 balance - this may cause unexpected behavior!");
                 eprintln!("[ERROR] Please fix the wallet implementation to ensure get_balance never fails");
                 Amount::ZERO
@@ -306,7 +310,7 @@ impl MakeCpfp for CallbackWalletAdapter {
         Ok(cpfp_tx)
     }
 
-    async fn store_signed_p2a_cpfp(&mut self, tx: &Transaction) -> Result<(), CpfpError> {
+    async fn store_signed_p2a_cpfp(&mut self, tx: &Transaction) -> anyhow::Result<(), CpfpError> {
         let tx_hex = hex::encode(bitcoin::consensus::serialize(tx));
 
         self.callbacks

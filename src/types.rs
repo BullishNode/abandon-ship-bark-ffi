@@ -467,7 +467,9 @@ impl From<bark::exit::ExitTransactionStatus> for ExitTransactionStatus {
         Self {
             vtxo_id: ets.vtxo_id.to_string(),
             state: format!("{:?}", ets.state),
-            history: ets.history.map(|h| h.iter().map(|s| format!("{:?}", s)).collect()),
+            history: ets
+                .history
+                .map(|h| h.iter().map(|s| format!("{:?}", s)).collect()),
             transaction_count: ets.transactions.len() as u32,
         }
     }

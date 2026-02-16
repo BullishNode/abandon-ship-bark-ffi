@@ -1,12 +1,3 @@
 [package]
 name = "bark_ffi"
 namespace = "bark_ffi"
-
-[bindings.dart]
-cdylib_name = "bark_ffi"
-package_name = "bark"
-
-[bindings.swift]
-cdylib_name = "bark_ffi"
-module_name = "Bark"
-ffi_module_name = "barkFFI"
