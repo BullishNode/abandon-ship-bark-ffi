@@ -405,7 +405,7 @@ impl From<&bark::ark::ArkInfo> for ArkInfo {
 // Exit Types
 // ============================================================================
 
-use bark::exit::models::ExitProgressStatus as BarkExitProgressStatus;
+use bark::exit::ExitProgressStatus as BarkExitProgressStatus;
 use bark::exit::ExitVtxo as BarkExitVtxo;
 
 /// A VTXO that is being unilaterally exited
@@ -462,12 +462,14 @@ pub struct ExitTransactionStatus {
     pub transaction_count: u32,
 }
 
-impl From<bark::exit::models::ExitTransactionStatus> for ExitTransactionStatus {
-    fn from(ets: bark::exit::models::ExitTransactionStatus) -> Self {
+impl From<bark::exit::ExitTransactionStatus> for ExitTransactionStatus {
+    fn from(ets: bark::exit::ExitTransactionStatus) -> Self {
         Self {
             vtxo_id: ets.vtxo_id.to_string(),
             state: format!("{:?}", ets.state),
-            history: ets.history.map(|h| h.iter().map(|s| format!("{:?}", s)).collect()),
+            history: ets
+                .history
+                .map(|h| h.iter().map(|s| format!("{:?}", s)).collect()),
             transaction_count: ets.transactions.len() as u32,
         }
     }
