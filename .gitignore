@@ -22,3 +22,6 @@ target
 
 .DS_Store
 .idea
+
+# Claude
+.claude/settings.local.json

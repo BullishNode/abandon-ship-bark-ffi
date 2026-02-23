@@ -661,6 +661,13 @@ interface Wallet {
     string send_arkoor_payment(string ark_address, u64 amount_sats);
 
     // ------------------------------------------------------------------------
+    // On-chain Sends
+    // ------------------------------------------------------------------------
+
+    [Throws=BarkError]
+    string send_onchain(string address, u64 amount_sats);
+
+    // ------------------------------------------------------------------------
     // Extended Address Management
     // ------------------------------------------------------------------------
 

@@ -474,6 +474,33 @@ impl Wallet {
     }
 
     // ------------------------------------------------------------------------
+    // On-chain Sends
+    // ------------------------------------------------------------------------
+
+    /// Send to an onchain address using your offchain balance
+    ///
+    /// Returns the transaction ID (txid)
+    pub fn send_onchain(
+        &self,
+        address: String,
+        amount_sats: u64,
+    ) -> Result<String, BarkError> {
+        TOKIO_RT.block_on(async {
+            let addr = address
+                .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+                .map_err(|e| BarkError::InvalidAddress {
+                    error_message: e.to_string(),
+                })?
+                .assume_checked();
+
+            let amount = bitcoin::Amount::from_sat(amount_sats);
+
+            let txid = self.inner.send_onchain(addr, amount).await?;
+            Ok(txid.to_string())
+        })
+    }
+
+    // ------------------------------------------------------------------------
     // Extended Address Management
     // ------------------------------------------------------------------------
 
