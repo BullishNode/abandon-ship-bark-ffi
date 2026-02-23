@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::Context;
+use bark::lightning_invoice::Bolt11Invoice;
 use bark::Wallet as InnerWallet;
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;
-use lightning_invoice::Bolt11Invoice;
 use lnurl::lightning_address::LightningAddress;
 
 use crate::error::BarkError;
@@ -199,15 +199,6 @@ impl Wallet {
     }
 
     // ------------------------------------------------------------------------
-    // Wallet Properties
-    // ------------------------------------------------------------------------
-
-    /// Get read-only wallet properties
-    pub fn properties(&self) -> Result<WalletProperties, BarkError> {
-        Ok(self.inner.properties()?.into())
-    }
-
-    // ------------------------------------------------------------------------
     // Synchronization & Maintenance
     // ------------------------------------------------------------------------
 
@@ -223,7 +214,7 @@ impl Wallet {
             eprintln!("[SYNC] Sync completed");
 
             // Log balance after sync
-            if let Ok(balance) = self.inner.balance() {
+            if let Ok(balance) = self.inner.balance().await {
                 eprintln!(
                     "[SYNC] Balance after sync: spendable={}, pending_board={}",
                     balance.spendable.to_sat(),
@@ -232,7 +223,7 @@ impl Wallet {
             }
 
             // Log VTXO count
-            if let Ok(vtxos) = self.inner.vtxos() {
+            if let Ok(vtxos) = self.inner.vtxos().await {
                 eprintln!("[SYNC] VTXOs after sync: {} total", vtxos.len());
                 for (i, vtxo) in vtxos.iter().enumerate().take(3) {
                     eprintln!(
@@ -256,6 +247,73 @@ impl Wallet {
         })
     }
 
+    /// Perform full maintenance including onchain sync
+    ///
+    /// This is more thorough than `maintenance()` as it also syncs the onchain wallet
+    /// and the exit system.
+    ///
+    /// # Arguments
+    ///
+    /// * `onchain_wallet` - The onchain wallet to sync
+    pub fn maintenance_with_onchain(
+        &self,
+        onchain_wallet: Arc<crate::OnchainWallet>,
+    ) -> Result<(), BarkError> {
+        TOKIO_RT.block_on(async {
+            if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
+                let mut onchain = bdk_wallet.lock().await;
+                self.inner.maintenance_with_onchain(&mut *onchain).await?;
+            } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
+                let mut onchain = callback_adapter.lock().await;
+                self.inner.maintenance_with_onchain(&mut *onchain).await?;
+            } else {
+                return Err(BarkError::OnchainWalletRequired {
+                    error_message: "Invalid onchain wallet".to_string(),
+                });
+            }
+            Ok(())
+        })
+    }
+
+    /// Perform maintenance in delegated (non-interactive) mode
+    ///
+    /// This schedules refresh operations but doesn't wait for completion.
+    /// Use this when you want to queue operations without blocking.
+    pub fn maintenance_delegated(&self) -> Result<(), BarkError> {
+        TOKIO_RT.block_on(async {
+            self.inner.maintenance_delegated().await?;
+            Ok(())
+        })
+    }
+
+    /// Perform maintenance with onchain wallet in delegated mode
+    pub fn maintenance_with_onchain_delegated(
+        &self,
+        onchain_wallet: Arc<crate::OnchainWallet>,
+    ) -> Result<(), BarkError> {
+        TOKIO_RT.block_on(async {
+            // Implementation similar to maintenance_with_onchain but calls
+            // maintenance_with_onchain_delegated on inner wallet
+            // Need to handle BDK vs Callback wallet types
+            if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
+                let mut onchain_inner = bdk_wallet.lock().await;
+                self.inner
+                    .maintenance_with_onchain_delegated(&mut *onchain_inner)
+                    .await?;
+            } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
+                let mut onchain_inner = callback_adapter.lock().await;
+                self.inner
+                    .maintenance_with_onchain_delegated(&mut *onchain_inner)
+                    .await?;
+            } else {
+                return Err(BarkError::Internal {
+                    error_message: "Invalid onchain wallet state".to_string(),
+                });
+            }
+            Ok(())
+        })
+    }
+
     // ------------------------------------------------------------------------
     // Address Generation
     // ------------------------------------------------------------------------
@@ -274,12 +332,20 @@ impl Wallet {
 
     /// Get detailed wallet balance
     pub fn balance(&self) -> Result<Balance, BarkError> {
-        Ok(self.inner.balance()?.into())
+        TOKIO_RT.block_on(async { Ok(self.inner.balance().await?.into()) })
     }
 
     /// List all unspent VTXOs in the wallet
     pub fn vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
-        Ok(self.inner.vtxos()?.into_iter().map(Into::into).collect())
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .vtxos()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
     }
 
     // ------------------------------------------------------------------------
@@ -408,6 +474,33 @@ impl Wallet {
     }
 
     // ------------------------------------------------------------------------
+    // On-chain Sends
+    // ------------------------------------------------------------------------
+
+    /// Send to an onchain address using your offchain balance
+    ///
+    /// Returns the transaction ID (txid)
+    pub fn send_onchain(
+        &self,
+        address: String,
+        amount_sats: u64,
+    ) -> Result<String, BarkError> {
+        TOKIO_RT.block_on(async {
+            let addr = address
+                .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+                .map_err(|e| BarkError::InvalidAddress {
+                    error_message: e.to_string(),
+                })?
+                .assume_checked();
+
+            let amount = bitcoin::Amount::from_sat(amount_sats);
+
+            let txid = self.inner.send_onchain(addr, amount).await?;
+            Ok(txid.to_string())
+        })
+    }
+
+    // ------------------------------------------------------------------------
     // Extended Address Management
     // ------------------------------------------------------------------------
 
@@ -436,7 +529,15 @@ impl Wallet {
 
     /// Get all wallet movements (transaction history)
     pub fn history(&self) -> Result<Vec<Movement>, BarkError> {
-        Ok(self.inner.history()?.into_iter().map(Into::into).collect())
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .history()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
     }
 
     // ------------------------------------------------------------------------
@@ -445,30 +546,38 @@ impl Wallet {
 
     /// Get a specific VTXO by ID
     pub fn get_vtxo_by_id(&self, vtxo_id: String) -> Result<Vtxo, BarkError> {
-        let id = vtxo_id.parse().map_err(|e| BarkError::InvalidAddress {
-            error_message: format!("invalid vtxo id: {}", e),
-        })?;
-        Ok(self.inner.get_vtxo_by_id(id)?.into())
+        TOKIO_RT.block_on(async {
+            let id = vtxo_id.parse().map_err(|e| BarkError::InvalidAddress {
+                error_message: format!("invalid vtxo id: {}", e),
+            })?;
+            Ok(self.inner.get_vtxo_by_id(id).await?.into())
+        })
     }
 
     /// Get all spendable VTXOs
     pub fn spendable_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
-        Ok(self
-            .inner
-            .spendable_vtxos()?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .spendable_vtxos()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
     }
 
     /// Get all VTXOs (including spent)
     pub fn all_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
-        Ok(self
-            .inner
-            .all_vtxos()?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .all_vtxos()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
     }
 
     /// Get VTXOs expiring within threshold blocks
@@ -560,33 +669,72 @@ impl Wallet {
         })
     }
 
+    /// Refresh VTXOs in delegated (non-interactive) mode
+    ///
+    /// Returns the round state ID if a refresh was scheduled, None otherwise.
+    pub fn refresh_vtxos_delegated(
+        &self,
+        vtxo_ids: Vec<String>,
+    ) -> Result<Option<RoundState>, BarkError> {
+        TOKIO_RT.block_on(async {
+            // Parse vtxo IDs similar to refresh_vtxos
+            let ids: Result<Vec<_>, _> = vtxo_ids
+                .iter()
+                .map(|s| s.parse::<ark_lib::VtxoId>())
+                .collect();
+            let ids = ids.map_err(|e| BarkError::InvalidVtxoId {
+                error_message: e.to_string(),
+            })?;
+
+            let state = self
+                .inner
+                .refresh_vtxos_delegated(ids)
+                .await
+                .map_err(BarkError::from)?;
+
+            Ok(state.map(|s| s.into()))
+        })
+    }
+
     // ------------------------------------------------------------------------
     // Extended Lightning
     // ------------------------------------------------------------------------
 
     /// Get all pending lightning sends
     pub fn pending_lightning_sends(&self) -> Result<Vec<LightningSend>, BarkError> {
-        Ok(self
-            .inner
-            .pending_lightning_sends()?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .pending_lightning_sends()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
     }
 
     /// Get all pending lightning receives
     pub fn pending_lightning_receives(&self) -> Result<Vec<LightningReceive>, BarkError> {
-        Ok(self
-            .inner
-            .pending_lightning_receives()?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .pending_lightning_receives()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
     }
 
     /// Get claimable lightning receive balance
     pub fn claimable_lightning_receive_balance_sats(&self) -> Result<u64, BarkError> {
-        Ok(self.inner.claimable_lightning_receive_balance()?.to_sat())
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .claimable_lightning_receive_balance()
+                .await?
+                .to_sat())
+        })
     }
 
     /// Pay a BOLT12 lightning offer
@@ -660,20 +808,23 @@ impl Wallet {
         &self,
         payment_hash: String,
     ) -> Result<Option<crate::LightningReceive>, BarkError> {
-        use ark_lib::lightning::PaymentHash;
-        use bitcoin::hex::FromHex;
+        TOKIO_RT.block_on(async {
+            use ark_lib::lightning::PaymentHash;
+            use bitcoin::hex::FromHex;
 
-        let hash_bytes =
-            <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
-                error_message: format!("Invalid payment hash: {}", e),
-            })?;
+            let hash_bytes =
+                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+                    error_message: format!("Invalid payment hash: {}", e),
+                })?;
 
-        let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
+            let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
-        Ok(self
-            .inner
-            .lightning_receive_status(payment_hash_obj)?
-            .map(Into::into))
+            Ok(self
+                .inner
+                .lightning_receive_status(payment_hash_obj)
+                .await?
+                .map(Into::into))
+        })
     }
 
     /// Try to claim a specific lightning receive by payment hash
@@ -707,33 +858,69 @@ impl Wallet {
     }
 
     // ------------------------------------------------------------------------
-    // Onchain Payments
+    // Info
     // ------------------------------------------------------------------------
 
-    /// Send an onchain payment during a round
-    pub fn send_round_onchain_payment(
-        &self,
-        address: String,
-        amount_sats: u64,
-    ) -> Result<String, BarkError> {
+    /// Get read-only wallet properties
+    pub fn properties(&self) -> Result<WalletProperties, BarkError> {
+        TOKIO_RT.block_on(async { Ok(self.inner.properties().await?.into()) })
+    }
+
+    /// Get the wallet's BIP32 fingerprint
+    pub fn fingerprint(&self) -> String {
+        self.inner.fingerprint().to_string()
+    }
+
+    /// Get the Bitcoin network this wallet is using
+    pub fn network(&self) -> Result<Network, BarkError> {
+        TOKIO_RT.block_on(async { Ok(self.inner.network().await?.into()) })
+    }
+
+    /// Get wallet config
+    pub fn config(&self) -> Config {
         TOKIO_RT.block_on(async {
-            let addr = address
-                .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-                .map_err(|e| BarkError::InvalidAddress {
-                    error_message: e.to_string(),
-                })?
-                .assume_checked();
-
-            let amount = bitcoin::Amount::from_sat(amount_sats);
-            let status = self.inner.send_round_onchain_payment(addr, amount).await?;
-
-            Ok(format!("{:?}", status))
+            let cfg = self.inner.config();
+            let props = self.inner.properties().await.unwrap();
+            Config {
+                server_address: cfg.server_address.clone(),
+                esplora_address: cfg.esplora_address.clone(),
+                bitcoind_address: cfg.bitcoind_address.clone(),
+                bitcoind_cookiefile: cfg
+                    .bitcoind_cookiefile
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string()),
+                bitcoind_user: cfg.bitcoind_user.clone(),
+                bitcoind_pass: cfg.bitcoind_pass.clone(),
+                network: props.network.into(),
+                vtxo_refresh_expiry_threshold: Some(cfg.vtxo_refresh_expiry_threshold),
+                vtxo_exit_margin: Some(cfg.vtxo_exit_margin),
+                htlc_recv_claim_delta: Some(cfg.htlc_recv_claim_delta),
+                fallback_fee_rate: cfg.fallback_fee_rate.map(|r| r.to_sat_per_kwu()),
+                round_tx_required_confirmations: Some(cfg.round_tx_required_confirmations),
+            }
         })
     }
 
-    // ------------------------------------------------------------------------
-    // Info
-    // ------------------------------------------------------------------------
+    /// Get the mailbox identifier for push notifications
+    ///
+    /// This identifier can be registered with a push notification service
+    /// to receive alerts when VTXOs arrive in your mailbox. The mailbox
+    /// receives all incoming VTXOs regardless of source (arkoor payments,
+    /// Lightning receives, or round outputs).
+    ///
+    /// Returns the mailbox identifier as a hex-encoded public key.
+    pub fn mailbox_identifier(&self) -> Result<String, BarkError> {
+        let keypair = self
+            .inner
+            .mailbox_keypair()
+            .map_err(|e| BarkError::Internal {
+                error_message: format!("Failed to get mailbox keypair: {}", e),
+            })?;
+
+        let identifier = ark_lib::mailbox::MailboxIdentifier::from_pubkey(keypair.public_key());
+        Ok(hex::encode(identifier.to_vec()))
+    }
+
     /// Get Ark server info
     pub fn ark_info(&self) -> Option<ArkInfo> {
         TOKIO_RT.block_on(async {
@@ -744,27 +931,16 @@ impl Wallet {
         })
     }
 
-    /// Get wallet config
-    pub fn config(&self) -> Config {
-        let cfg = self.inner.config();
-        let props = self.inner.properties().unwrap();
-        Config {
-            server_address: cfg.server_address.clone(),
-            esplora_address: cfg.esplora_address.clone(),
-            bitcoind_address: cfg.bitcoind_address.clone(),
-            bitcoind_cookiefile: cfg
-                .bitcoind_cookiefile
-                .as_ref()
-                .map(|p| p.to_string_lossy().to_string()),
-            bitcoind_user: cfg.bitcoind_user.clone(),
-            bitcoind_pass: cfg.bitcoind_pass.clone(),
-            network: props.network.into(),
-            vtxo_refresh_expiry_threshold: Some(cfg.vtxo_refresh_expiry_threshold),
-            vtxo_exit_margin: Some(cfg.vtxo_exit_margin),
-            htlc_recv_claim_delta: Some(cfg.htlc_recv_claim_delta),
-            fallback_fee_rate: cfg.fallback_fee_rate.map(|r| r.to_sat_per_kwu()),
-            round_tx_required_confirmations: Some(cfg.round_tx_required_confirmations),
-        }
+    /// Get the timestamp when the next round will start (Unix timestamp in seconds)
+    /// Returns an error if the server hasn't provided round timing info
+    pub fn next_round_start_time(&self) -> Result<u64, BarkError> {
+        TOKIO_RT.block_on(async {
+            let system_time = self.inner.next_round_start_time().await?;
+            Ok(system_time
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("next round time should be after Unix epoch")
+                .as_secs())
+        })
     }
 
     // ------------------------------------------------------------------------
@@ -906,6 +1082,58 @@ impl Wallet {
         })
     }
 
+    /// Get all pending board operations
+    pub fn pending_boards(&self) -> Result<Vec<PendingBoard>, BarkError> {
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .pending_boards()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+    }
+
+    /// Get all VTXOs that are part of pending boards
+    pub fn pending_board_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .pending_board_vtxos()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+    }
+
+    /// Get VTXOs being used as inputs in pending rounds
+    pub fn pending_round_input_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .pending_round_input_vtxos()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+    }
+
+    /// Get VTXOs locked in pending Lightning sends
+    pub fn pending_lightning_send_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .pending_lightning_send_vtxos()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+    }
+
     // ------------------------------------------------------------------------
     // Unilateral Exits (requires onchain wallet)
     // ------------------------------------------------------------------------
@@ -1013,7 +1241,7 @@ impl Wallet {
                     .exit
                     .write()
                     .await
-                    .progress_exits(&mut *onchain, fee_rate)
+                    .progress_exits(&self.inner, &mut *onchain, fee_rate)
                     .await
                     .map_err(|e| BarkError::Internal {
                         error_message: format!("Progress exits failed: {}", e),
@@ -1024,7 +1252,7 @@ impl Wallet {
                     .exit
                     .write()
                     .await
-                    .progress_exits(&mut *onchain, fee_rate)
+                    .progress_exits(&self.inner, &mut *onchain, fee_rate)
                     .await
                     .map_err(|e| BarkError::Internal {
                         error_message: format!("Progress exits failed: {}", e),
@@ -1069,13 +1297,17 @@ impl Wallet {
                 })
                 .collect();
 
-            let vtxos: Vec<_> = ids?
-                .into_iter()
-                .map(|id| self.inner.get_vtxo_by_id(id))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| BarkError::NotFound {
-                    error_message: format!("VTXO not found: {}", e),
-                })?;
+            let mut vtxos = Vec::new();
+            for id in ids? {
+                let vtxo =
+                    self.inner
+                        .get_vtxo_by_id(id)
+                        .await
+                        .map_err(|e| BarkError::NotFound {
+                            error_message: format!("VTXO not found: {}", e),
+                        })?;
+                vtxos.push(vtxo);
+            }
 
             let vtxo_refs: Vec<&ark_lib::Vtxo> = vtxos.iter().map(|v| &v.vtxo).collect();
 
@@ -1264,12 +1496,15 @@ impl Wallet {
 
     /// Get all pending round states
     pub fn pending_round_states(&self) -> Result<Vec<crate::RoundState>, BarkError> {
-        Ok(self
-            .inner
-            .pending_round_states()?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        TOKIO_RT.block_on(async {
+            Ok(self
+                .inner
+                .pending_round_states()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
     }
 
     /// Cancel a specific pending round
@@ -1341,34 +1576,6 @@ impl Wallet {
         })
     }
 
-    /// Perform full maintenance including onchain sync
-    ///
-    /// This is more thorough than `maintenance()` as it also syncs the onchain wallet
-    /// and the exit system.
-    ///
-    /// # Arguments
-    ///
-    /// * `onchain_wallet` - The onchain wallet to sync
-    pub fn maintenance_with_onchain(
-        &self,
-        onchain_wallet: Arc<crate::OnchainWallet>,
-    ) -> Result<(), BarkError> {
-        TOKIO_RT.block_on(async {
-            if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
-                self.inner.maintenance_with_onchain(&mut *onchain).await?;
-            } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
-                self.inner.maintenance_with_onchain(&mut *onchain).await?;
-            } else {
-                return Err(BarkError::OnchainWalletRequired {
-                    error_message: "Invalid onchain wallet".to_string(),
-                });
-            }
-            Ok(())
-        })
-    }
-
     // ------------------------------------------------------------------------
     // VTXO Expiry & Refresh Scheduling
     // ------------------------------------------------------------------------
@@ -1377,7 +1584,7 @@ impl Wallet {
     ///
     /// Returns None if there are no spendable VTXOs.
     pub fn get_first_expiring_vtxo_blockheight(&self) -> Result<Option<u32>, BarkError> {
-        Ok(self.inner.get_first_expiring_vtxo_blockheight()?)
+        TOKIO_RT.block_on(async { Ok(self.inner.get_first_expiring_vtxo_blockheight().await?) })
     }
 
     /// Get the next block height when a refresh should be performed
@@ -1385,7 +1592,7 @@ impl Wallet {
     /// This is calculated as the first expiring VTXO height minus the refresh threshold.
     /// Returns None if there are no VTXOs to refresh.
     pub fn get_next_required_refresh_blockheight(&self) -> Result<Option<u32>, BarkError> {
-        Ok(self.inner.get_next_required_refresh_blockheight()?)
+        TOKIO_RT.block_on(async { Ok(self.inner.get_next_required_refresh_blockheight().await?) })
     }
 
     /// Schedule a maintenance refresh if VTXOs need refreshing
@@ -1434,6 +1641,7 @@ impl Wallet {
             let exit_guard = self.inner.exit.read().await;
             exit_guard
                 .sign_exit_claim_inputs(&mut psbt, &self.inner)
+                .await
                 .map_err(|e| BarkError::Internal {
                     error_message: format!("Sign exit claim inputs failed: {}", e),
                 })?;

@@ -40,6 +40,7 @@ interface BarkError {
     ServerConnection(string error_message);
     Internal(string error_message);
     OnchainWalletRequired(string error_message);
+    InvalidVtxoId(string error_message);
 };
 
 // ============================================================================
@@ -581,13 +582,6 @@ interface Wallet {
     );
 
     // ------------------------------------------------------------------------
-    // Wallet Properties
-    // ------------------------------------------------------------------------
-
-    [Throws=BarkError]
-    WalletProperties properties();
-
-    // ------------------------------------------------------------------------
     // Synchronization & Maintenance
     // ------------------------------------------------------------------------
 
@@ -599,6 +593,17 @@ interface Wallet {
 
     [Throws=BarkError]
     void maintenance();
+
+    /// Perform maintenance in delegated (non-interactive) mode
+    ///
+    /// This schedules refresh operations but doesn't wait for completion.
+    /// Use this when you want to queue operations without blocking.
+    [Throws=BarkError]
+    void maintenance_delegated();
+
+    /// Perform maintenance with onchain wallet in delegated mode
+    [Throws=BarkError]
+    void maintenance_with_onchain_delegated(OnchainWallet onchain_wallet);
 
     // ------------------------------------------------------------------------
     // Address Generation
@@ -654,6 +659,13 @@ interface Wallet {
 
     [Throws=BarkError]
     string send_arkoor_payment(string ark_address, u64 amount_sats);
+
+    // ------------------------------------------------------------------------
+    // On-chain Sends
+    // ------------------------------------------------------------------------
+
+    [Throws=BarkError]
+    string send_onchain(string address, u64 amount_sats);
 
     // ------------------------------------------------------------------------
     // Extended Address Management
@@ -719,6 +731,12 @@ interface Wallet {
     [Throws=BarkError]
     string? maintenance_refresh();
 
+    /// Refresh VTXOs in delegated (non-interactive) mode
+    ///
+    /// Returns the round state if a refresh was scheduled, null otherwise.
+    [Throws=BarkError]
+    RoundState? refresh_vtxos_delegated(sequence<string> vtxo_ids);
+
     // ------------------------------------------------------------------------
     // Extended Lightning
     // ------------------------------------------------------------------------
@@ -773,22 +791,41 @@ interface Wallet {
     void try_claim_lightning_receive(string payment_hash, boolean wait);
 
     // ------------------------------------------------------------------------
-    // Onchain Payments
-    // ------------------------------------------------------------------------
-
-    /// Send an onchain payment during a round
-    [Throws=BarkError]
-    string send_round_onchain_payment(string address, u64 amount_sats);
-
-    // ------------------------------------------------------------------------
     // Connection & Info
     // ------------------------------------------------------------------------
 
     /// Get Ark server info (null if not connected)
     ArkInfo? ark_info();
 
+    /// Get wallet properties
+    [Throws=BarkError]
+    WalletProperties properties();
+
     /// Get wallet config
     Config config();
+
+    /// Get the wallet's BIP32 fingerprint
+    string fingerprint();
+
+    /// Get the Bitcoin network this wallet is using
+    [Throws=BarkError]
+    Network network();
+
+    /// Get the mailbox identifier for push notifications
+    ///
+    /// This identifier can be registered with a push notification service
+    /// to receive alerts when VTXOs arrive in your mailbox. The mailbox
+    /// receives all incoming VTXOs regardless of source (arkoor payments,
+    /// Lightning receives, or round outputs).
+    ///
+    /// Returns the mailbox identifier as a hex-encoded public key.
+    [Throws=BarkError]
+    string mailbox_identifier();
+
+    /// Get the timestamp when the next round will start (Unix timestamp in seconds)
+    /// Returns an error if the server hasn't provided round timing info
+    [Throws=BarkError]
+    u64 next_round_start_time();
 
     // ------------------------------------------------------------------------
     // Boarding (requires onchain wallet)
@@ -805,6 +842,22 @@ interface Wallet {
     /// Sync pending board transactions
     [Throws=BarkError]
     void sync_pending_boards();
+
+    /// Get all pending board operations
+    [Throws=BarkError]
+    sequence<PendingBoard> pending_boards();
+
+    /// Get all VTXOs that are part of pending boards
+    [Throws=BarkError]
+    sequence<Vtxo> pending_board_vtxos();
+
+    /// Get VTXOs being used as inputs in pending rounds
+    [Throws=BarkError]
+    sequence<Vtxo> pending_round_input_vtxos();
+
+    /// Get VTXOs locked in pending Lightning sends
+    [Throws=BarkError]
+    sequence<Vtxo> pending_lightning_send_vtxos();
 
     // ------------------------------------------------------------------------
     // Unilateral Exits (requires onchain wallet)

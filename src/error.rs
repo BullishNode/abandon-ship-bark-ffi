@@ -38,6 +38,9 @@ pub enum BarkError {
 
     #[error("Onchain wallet required: {error_message}")]
     OnchainWalletRequired { error_message: String },
+
+    #[error("Invalid VTXO ID: {error_message}")]
+    InvalidVtxoId { error_message: String },
 }
 
 impl BarkError {
@@ -55,6 +58,7 @@ impl BarkError {
             BarkError::ServerConnection { error_message } => error_message.clone(),
             BarkError::Internal { error_message } => error_message.clone(),
             BarkError::OnchainWalletRequired { error_message } => error_message.clone(),
+            BarkError::InvalidVtxoId { error_message } => error_message.clone(),
         }
     }
 }

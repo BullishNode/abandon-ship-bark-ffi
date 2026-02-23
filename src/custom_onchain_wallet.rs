@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use bitcoin::{
     address::NetworkChecked, Amount, BlockHash, FeeRate, OutPoint, Psbt, Transaction, Txid,
 };
@@ -79,7 +80,8 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     ///
     /// # Returns
     /// Block reference with height and hash, or null if unconfirmed
-    fn get_wallet_tx_confirmed_block(&self, txid: String) -> Result<Option<FfiBlockRef>, BarkError>;
+    fn get_wallet_tx_confirmed_block(&self, txid: String)
+        -> Result<Option<FfiBlockRef>, BarkError>;
 
     /// Find transaction that spends a given output
     ///
@@ -123,7 +125,10 @@ impl GetBalance for CallbackWalletAdapter {
         match self.callbacks.get_balance() {
             Ok(sats) => Amount::from_sat(sats),
             Err(e) => {
-                eprintln!("[ERROR] CustomOnchainWalletCallbacks::get_balance failed: {}", e.message());
+                eprintln!(
+                    "[ERROR] CustomOnchainWalletCallbacks::get_balance failed: {}",
+                    e.message()
+                );
                 eprintln!("[ERROR] Returning 0 balance - this may cause unexpected behavior!");
                 eprintln!("[ERROR] Please fix the wallet implementation to ensure get_balance never fails");
                 Amount::ZERO
@@ -186,8 +191,9 @@ impl PreparePsbt for CallbackWalletAdapter {
 }
 
 // Implement SignPsbt trait
+#[async_trait]
 impl SignPsbt for CallbackWalletAdapter {
-    fn finish_tx(&mut self, psbt: Psbt) -> anyhow::Result<Transaction> {
+    async fn finish_tx(&mut self, psbt: Psbt) -> anyhow::Result<Transaction> {
         // Serialize PSBT to base64
         use base64::Engine;
         let psbt_bytes = psbt.serialize();
@@ -260,6 +266,7 @@ impl GetSpendingTx for CallbackWalletAdapter {
 }
 
 // Implement MakeCpfp trait
+#[async_trait]
 impl MakeCpfp for CallbackWalletAdapter {
     fn make_signed_p2a_cpfp(
         &mut self,
@@ -303,7 +310,7 @@ impl MakeCpfp for CallbackWalletAdapter {
         Ok(cpfp_tx)
     }
 
-    fn store_signed_p2a_cpfp(&mut self, tx: &Transaction) -> Result<(), CpfpError> {
+    async fn store_signed_p2a_cpfp(&mut self, tx: &Transaction) -> anyhow::Result<(), CpfpError> {
         let tx_hex = hex::encode(bitcoin::consensus::serialize(tx));
 
         self.callbacks

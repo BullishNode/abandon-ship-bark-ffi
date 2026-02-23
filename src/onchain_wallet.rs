@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use bark::onchain::{ChainSource, ChainSourceSpec, ChainSync, OnchainWallet as BarkOnchainWallet};
+use bark::chain::{ChainSource, ChainSourceSpec};
+use bark::onchain::{ChainSync, OnchainWallet as BarkOnchainWallet};
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;
 
@@ -53,7 +54,7 @@ impl OnchainWallet {
             );
 
             // Create the onchain wallet
-            let onchain = BarkOnchainWallet::load_or_create(btc_network, seed, db.clone())?;
+            let onchain = BarkOnchainWallet::load_or_create(btc_network, seed, db.clone()).await?;
 
             // Build ChainSource from config - prioritize same as Bark wallet
             let chain_spec = if let Some(url) = config.bitcoind_address.as_ref() {
@@ -174,7 +175,7 @@ impl OnchainWallet {
         match &self.inner {
             OnchainWalletInner::Bdk { wallet, .. } => TOKIO_RT.block_on(async {
                 let mut w = wallet.lock().await;
-                let addr = w.address().map_err(|e| BarkError::Internal {
+                let addr = w.address().await.map_err(|e| BarkError::Internal {
                     error_message: format!("Failed to generate address: {}", e),
                 })?;
                 Ok(addr.to_string())

@@ -24,8 +24,8 @@ For the actual bindings, go to [bark-ffi-bindings](https://gitlab.com/ark-bitcoi
 Because [uniffi-bindgen-react-native](https://github.com/jhugman/uniffi-bindgen-react-native) only supports uniffi v0.29 for now, this repo maintains different branches, for example:
 
 ```
-v0.1.0-beta.5-uniffi-v0.30.0
-v0.1.0-beta.5-uniffi-v0.29.3
+v0.1.0-beta.7-uniffi-v0.30.0
+v0.1.0-beta.7-uniffi-v0.29.3
 ```
 
 Bindings from [bark-ffi-bindings](https://gitlab.com/ark-bitcoin/bark-ffi-bindings) can tap into these branches to generate their own bindings:
@@ -34,6 +34,6 @@ Bindings from [bark-ffi-bindings](https://gitlab.com/ark-bitcoin/bark-ffi-bindin
 # react-native/rust/Cargo.toml
 
 [dependencies]
-bark-ffi = { git = "https://gitlab.com/ark-bitcoin/bark-ffi", branch = "v0.1.0-beta.5-uniffi-v0.29.3" }
+bark-ffi = { git = "https://gitlab.com/ark-bitcoin/bark-ffi", branch = "v0.1.0-beta.7-uniffi-v0.29.3" }
 uniffi = { version = "=0.29.3", features = ["cli"] }
 ```
