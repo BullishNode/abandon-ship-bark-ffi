@@ -41,6 +41,9 @@ pub enum BarkError {
 
     #[error("Invalid VTXO ID: {error_message}")]
     InvalidVtxoId { error_message: String },
+
+    #[error("Server pubkey changed: {error_message}")]
+    ServerPubkeyChanged { error_message: String },
 }
 
 impl BarkError {
@@ -59,6 +62,7 @@ impl BarkError {
             BarkError::Internal { error_message } => error_message.clone(),
             BarkError::OnchainWalletRequired { error_message } => error_message.clone(),
             BarkError::InvalidVtxoId { error_message } => error_message.clone(),
+            BarkError::ServerPubkeyChanged { error_message } => error_message.clone(),
         }
     }
 }
@@ -84,6 +88,8 @@ impl From<anyhow::Error> for BarkError {
             || msg.contains("cannot find")
         {
             BarkError::NotFound { error_message: msg }
+        } else if msg.contains("Server public key has changed") {
+            BarkError::ServerPubkeyChanged { error_message: msg }
         } else if msg.contains("server") || msg.contains("connection") || msg.contains("connect") {
             BarkError::ServerConnection { error_message: msg }
         } else if msg.contains("network") || msg.contains("Network") {

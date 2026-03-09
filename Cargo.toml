@@ -1,6 +1,6 @@
 [package]
 name = "bark-ffi"
-version = "0.1.0-beta.7"
+version = "0.1.0-beta.8"
 edition = "2021"
 license = "MIT"
 authors = ["Team Second <hello@second.tech>"]
@@ -12,12 +12,13 @@ crate-type = ["lib", "staticlib", "cdylib"]
 name = "bark_ffi"
 
 [dependencies]
-bark = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-wallet", rev = "bark-0.1.0-beta.7", default-features = false, features = [
+bark = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-wallet", rev = "bark-0.1.0-beta.8", default-features = false, features = [
     "tls-webpki-roots",
     "onchain_bdk",
+    "sqlite",
 ] }
-ark-lib = { git = "https://gitlab.com/ark-bitcoin/bark", package = "ark-lib", rev = "bark-0.1.0-beta.7", default-features = false }
-bark-bitcoin-ext = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-bitcoin-ext", rev = "bark-0.1.0-beta.7", default-features = false }
+ark-lib = { git = "https://gitlab.com/ark-bitcoin/bark", package = "ark-lib", rev = "bark-0.1.0-beta.8", default-features = false }
+bark-bitcoin-ext = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-bitcoin-ext", rev = "bark-0.1.0-beta.8", default-features = false }
 # External dependencies
 bitcoin = { version = "0.32.7", features = ["serde", "rand", "rand-std"] }
 bip39 = { version = "2.0.0", features = ["rand"] }
@@ -40,6 +41,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 base64 = "0.22"
 hex = "0.4"
+chrono = "0.4"
 # Add rusqlite directly with bundled feature for mobile platform support
 rusqlite = { version = "0.31.0", features = ["bundled", "chrono"] }
 
