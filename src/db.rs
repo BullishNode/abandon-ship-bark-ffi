@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Weak};
 
-use bark::SqliteClient;
+use bark::persist::sqlite::SqliteClient;
 
 /// Global cache of database connections keyed by database path.
 /// Uses weak references to allow connections to be dropped when no longer in use.

@@ -1514,7 +1514,7 @@ impl Wallet {
     /// * `round_id` - The ID of the round to cancel
     pub fn cancel_pending_round(&self, round_id: u32) -> Result<(), BarkError> {
         TOKIO_RT.block_on(async {
-            use bark::persist::RoundStateId;
+            use bark::persist::models::RoundStateId;
             self.inner
                 .cancel_pending_round(RoundStateId(round_id))
                 .await?;
@@ -1698,6 +1698,164 @@ impl Wallet {
             eprintln!("[BROADCAST] Transaction broadcasted successfully");
 
             Ok(txid.to_string())
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    // Mailbox Authorization
+    // ------------------------------------------------------------------------
+
+    /// Create a new authorization for your server mailbox
+    pub fn mailbox_authorization(&self) -> Result<String, BarkError> {
+        use ark_lib::ProtocolEncoding;
+
+        // Default expiry: 24 hours from now
+        let expiry = chrono::Local::now() + chrono::Duration::hours(24);
+
+        let auth = self
+            .inner
+            .mailbox_authorization(expiry)
+            .map_err(|e| BarkError::Internal {
+                error_message: format!("Failed to create mailbox authorization: {}", e),
+            })?;
+
+        Ok(hex::encode(auth.serialize()))
+    }
+
+    // ------------------------------------------------------------------------
+    // VTXO Import
+    // ------------------------------------------------------------------------
+
+    /// Import a serialized VTXO into the wallet
+    pub fn import_vtxo(&self, vtxo_base64: String) -> Result<(), BarkError> {
+        TOKIO_RT.block_on(async {
+            use ark_lib::ProtocolEncoding;
+            use base64::Engine;
+
+            let vtxo_bytes =
+                base64::engine::general_purpose::STANDARD
+                    .decode(&vtxo_base64)
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Invalid base64: {}", e),
+                    })?;
+
+            let vtxo =
+                ark_lib::Vtxo::deserialize(&vtxo_bytes).map_err(|e| BarkError::Internal {
+                    error_message: format!("Invalid VTXO data: {}", e),
+                })?;
+
+            self.inner
+                .import_vtxo(&vtxo)
+                .await
+                .map_err(|e| BarkError::Internal {
+                    error_message: format!("Failed to import VTXO: {}", e),
+                })?;
+
+            eprintln!("[IMPORT] VTXO imported successfully");
+            Ok(())
+        })
+    }
+
+    // ------------------------------------------------------------------------
+    // Fee Estimation
+    // ------------------------------------------------------------------------
+
+    /// Estimate the fee for a board operation
+    pub fn estimate_board_fee(&self, amount_sats: u64) -> Result<u64, BarkError> {
+        TOKIO_RT.block_on(async {
+            let amount = bitcoin::Amount::from_sat(amount_sats);
+            let fee = self
+                .inner
+                .estimate_board_offchain_fee(amount)
+                .await
+                .map_err(BarkError::from)?;
+            Ok(fee.fee.to_sat())
+        })
+    }
+
+    /// Estimate the fee for an offboard operation
+    pub fn estimate_offboard_fee(&self, _amount_sats: u64) -> Result<u64, BarkError> {
+        TOKIO_RT.block_on(async {
+            // Note: upstream API takes vtxos + address, not amount.
+            // We use spendable VTXOs for estimation.
+            let vtxos = self.inner.spendable_vtxos().await?;
+
+            // We need a dummy address for estimation; use the wallet's own address
+            let addr = self.inner.new_address().await?;
+            let btc_addr = addr
+                .to_string()
+                .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+                .map_err(|e| BarkError::Internal {
+                    error_message: format!("Failed to parse address: {}", e),
+                })?
+                .assume_checked();
+
+            let fee = self
+                .inner
+                .estimate_offboard(&btc_addr, &vtxos)
+                .await
+                .map_err(BarkError::from)?;
+            Ok(fee.fee.to_sat())
+        })
+    }
+
+    /// Estimate the fee for a refresh operation
+    pub fn estimate_refresh_fee(&self, vtxo_ids: Vec<String>) -> Result<u64, BarkError> {
+        TOKIO_RT.block_on(async {
+            let ids: Result<Vec<_>, _> = vtxo_ids
+                .iter()
+                .map(|id| {
+                    id.parse::<ark_lib::VtxoId>()
+                        .map_err(|e| BarkError::InvalidVtxoId {
+                            error_message: format!("invalid vtxo id: {}", e),
+                        })
+                })
+                .collect();
+            let ids = ids?;
+
+            // Look up the actual VTXOs from the wallet
+            let mut vtxos = Vec::new();
+            for id in ids {
+                let vtxo = self.inner.get_vtxo_by_id(id).await.map_err(|e| {
+                    BarkError::NotFound {
+                        error_message: format!("VTXO not found: {}", e),
+                    }
+                })?;
+                vtxos.push(vtxo);
+            }
+
+            let fee = self
+                .inner
+                .estimate_refresh_fee(&vtxos)
+                .await
+                .map_err(BarkError::from)?;
+            Ok(fee.fee.to_sat())
+        })
+    }
+
+    /// Estimate the fee for a lightning send
+    pub fn estimate_lightning_send_fee(&self, amount_sats: u64) -> Result<u64, BarkError> {
+        TOKIO_RT.block_on(async {
+            let amount = bitcoin::Amount::from_sat(amount_sats);
+            let fee = self
+                .inner
+                .estimate_lightning_send_fee(amount)
+                .await
+                .map_err(BarkError::from)?;
+            Ok(fee.fee.to_sat())
+        })
+    }
+
+    /// Estimate the fee for a lightning receive
+    pub fn estimate_lightning_receive_fee(&self, amount_sats: u64) -> Result<u64, BarkError> {
+        TOKIO_RT.block_on(async {
+            let amount = bitcoin::Amount::from_sat(amount_sats);
+            let fee = self
+                .inner
+                .estimate_lightning_receive_fee(amount)
+                .await
+                .map_err(BarkError::from)?;
+            Ok(fee.fee.to_sat())
         })
     }
 }

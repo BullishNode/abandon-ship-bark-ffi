@@ -217,7 +217,7 @@ impl From<bark::persist::models::LightningReceive> for LightningReceive {
                 .amount_milli_satoshis()
                 .map(|a| bitcoin::Amount::from_msat_floor(a).to_sat())
                 .unwrap_or(0),
-            has_htlc_vtxos: r.htlc_vtxos.is_some(),
+            has_htlc_vtxos: !r.htlc_vtxos.is_empty(),
             preimage_revealed: r.preimage_revealed_at.is_some(),
         }
     }
@@ -371,11 +371,17 @@ pub struct ArkInfo {
     pub min_board_amount_sats: u64,
     pub offboard_feerate_sat_per_vb: u64,
     pub ln_receive_anti_dos_required: bool,
+    /// Fee schedule as JSON string (contains board, offboard, refresh, lightning fees)
+    pub fee_schedule_json: String,
 }
 
 impl From<&bark::ark::ArkInfo> for ArkInfo {
     fn from(info: &bark::ark::ArkInfo) -> Self {
         use bitcoin::hex::DisplayHex;
+
+        let fee_schedule_json =
+            serde_json::to_string(&info.fees).unwrap_or_else(|_| "{}".to_string());
+
         Self {
             network: match info.network {
                 BtcNetwork::Bitcoin => Network::Bitcoin,
@@ -397,6 +403,7 @@ impl From<&bark::ark::ArkInfo> for ArkInfo {
             min_board_amount_sats: info.min_board_amount.to_sat(),
             offboard_feerate_sat_per_vb: info.offboard_feerate.to_sat_per_vb_ceil(),
             ln_receive_anti_dos_required: info.ln_receive_anti_dos_required,
+            fee_schedule_json,
         }
     }
 }
@@ -479,7 +486,7 @@ impl From<bark::exit::ExitTransactionStatus> for ExitTransactionStatus {
 // Round Types
 // ============================================================================
 
-use bark::persist::StoredRoundState;
+use bark::persist::models::{StoredRoundState, Unlocked};
 
 /// A pending round state
 #[derive(Clone, Debug)]
@@ -489,11 +496,11 @@ pub struct RoundState {
     pub ongoing: bool,
 }
 
-impl From<StoredRoundState> for RoundState {
-    fn from(rs: StoredRoundState) -> Self {
+impl From<StoredRoundState<Unlocked>> for RoundState {
+    fn from(rs: StoredRoundState<Unlocked>) -> Self {
         Self {
-            id: rs.id.0,
-            ongoing: rs.state.ongoing_participation(),
+            id: rs.id().0,
+            ongoing: rs.state().ongoing_participation(),
         }
     }
 }

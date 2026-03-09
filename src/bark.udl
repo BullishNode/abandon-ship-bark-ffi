@@ -41,6 +41,7 @@ interface BarkError {
     Internal(string error_message);
     OnchainWalletRequired(string error_message);
     InvalidVtxoId(string error_message);
+    ServerPubkeyChanged(string error_message);
 };
 
 // ============================================================================
@@ -308,6 +309,11 @@ dictionary ArkInfo {
 
     /// Whether the Ark server requires anti-DoS measures for lightning receives
     boolean ln_receive_anti_dos_required;
+
+    /// Fee schedule as JSON string
+    /// Contains board, offboard, refresh, lightning send/receive fee details.
+    /// Parse this JSON to access the full fee schedule for all operations.
+    string fee_schedule_json;
 };
 
 // ============================================================================
@@ -1055,4 +1061,86 @@ interface Wallet {
     /// Returns the transaction ID (txid) of the broadcasted transaction
     [Throws=BarkError]
     string broadcast_tx(string tx_hex);
+
+    // ------------------------------------------------------------------------
+    // Mailbox Authorization
+    // ------------------------------------------------------------------------
+
+    /// Create a new authorization for your server mailbox
+    ///
+    /// This generates an authorization token that can be used to manage
+    /// your server mailbox. Useful for delegating mailbox access.
+    ///
+    /// Returns the mailbox authorization as a hex-encoded string.
+    [Throws=BarkError]
+    string mailbox_authorization();
+
+    // ------------------------------------------------------------------------
+    // VTXO Import
+    // ------------------------------------------------------------------------
+
+    /// Import a serialized VTXO into the wallet
+    ///
+    /// Allows recovering VTXOs by importing their serialized form.
+    /// The VTXO data should be base64-encoded.
+    ///
+    /// # Arguments
+    ///
+    /// * `vtxo_base64` - Base64-encoded serialized VTXO
+    [Throws=BarkError]
+    void import_vtxo(string vtxo_base64);
+
+    // ------------------------------------------------------------------------
+    // Fee Estimation
+    // ------------------------------------------------------------------------
+
+    /// Estimate the fee for a board operation
+    ///
+    /// # Arguments
+    ///
+    /// * `amount_sats` - Amount to board in sats
+    ///
+    /// Returns the estimated fee in sats
+    [Throws=BarkError]
+    u64 estimate_board_fee(u64 amount_sats);
+
+    /// Estimate the fee for an offboard operation
+    ///
+    /// # Arguments
+    ///
+    /// * `amount_sats` - Amount to offboard in sats
+    ///
+    /// Returns the estimated fee in sats
+    [Throws=BarkError]
+    u64 estimate_offboard_fee(u64 amount_sats);
+
+    /// Estimate the fee for a refresh operation
+    ///
+    /// # Arguments
+    ///
+    /// * `vtxo_ids` - VTXOs to refresh
+    ///
+    /// Returns the estimated fee in sats
+    [Throws=BarkError]
+    u64 estimate_refresh_fee(sequence<string> vtxo_ids);
+
+    /// Estimate the fee for a lightning send
+    ///
+    /// # Arguments
+    ///
+    /// * `amount_sats` - Amount to send in sats
+    ///
+    /// Returns the estimated fee in sats
+    [Throws=BarkError]
+    u64 estimate_lightning_send_fee(u64 amount_sats);
+
+    /// Estimate the fee for a lightning receive
+    ///
+    /// # Arguments
+    ///
+    /// * `amount_sats` - Amount to receive in sats
+    ///
+    /// Returns the estimated fee in sats
+    [Throws=BarkError]
+    u64 estimate_lightning_receive_fee(u64 amount_sats);
 };
