@@ -1872,4 +1872,24 @@ impl Wallet {
             Ok(fee.fee.to_sat())
         })
     }
+
+    /// Estimate the fee for a send onchain operation
+    pub fn estimate_send_onchain_fee(&self, address: String, amount_sats: u64) -> Result<u64, BarkError> {
+        TOKIO_RT.block_on(async {
+            let btc_addr = address
+                .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+                .map_err(|e| BarkError::Internal {
+                    error_message: format!("Failed to parse address: {}", e),
+                })?
+                .assume_checked();
+
+            let amount = bitcoin::Amount::from_sat(amount_sats);
+            let fee = self
+                .inner
+                .estimate_send_onchain(&btc_addr, amount)
+                .await
+                .map_err(BarkError::from)?;
+            Ok(fee.fee.to_sat())
+        })
+    }
 }
