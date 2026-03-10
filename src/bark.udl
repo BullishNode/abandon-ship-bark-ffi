@@ -1144,4 +1144,15 @@ interface Wallet {
     /// Returns the estimated fee in sats
     [Throws=BarkError]
     u64 estimate_lightning_receive_fee(u64 amount_sats);
+
+    /// Estimate the fee for a send onchain operation
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - Destination address
+    /// * `amount_sats` - Amount to send in sats
+    ///
+    /// Returns the estimated fee in sats
+    [Throws=BarkError]
+    u64 estimate_send_onchain_fee(string address, u64 amount_sats);
 };
