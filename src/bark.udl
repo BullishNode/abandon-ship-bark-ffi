@@ -1108,11 +1108,12 @@ interface Wallet {
     ///
     /// # Arguments
     ///
-    /// * `amount_sats` - Amount to offboard in sats
+    /// * `address` - Destination address for the offboard
+    /// * `vtxo_ids` - VTXOs to offboard
     ///
     /// Returns the estimated fee in sats
     [Throws=BarkError]
-    u64 estimate_offboard_fee(u64 amount_sats);
+    u64 estimate_offboard_fee(string address, sequence<string> vtxo_ids);
 
     /// Estimate the fee for a refresh operation
     ///

@@ -1774,21 +1774,35 @@ impl Wallet {
     }
 
     /// Estimate the fee for an offboard operation
-    pub fn estimate_offboard_fee(&self, _amount_sats: u64) -> Result<u64, BarkError> {
+    pub fn estimate_offboard_fee(&self, address: String, vtxo_ids: Vec<String>) -> Result<u64, BarkError> {
         TOKIO_RT.block_on(async {
-            // Note: upstream API takes vtxos + address, not amount.
-            // We use spendable VTXOs for estimation.
-            let vtxos = self.inner.spendable_vtxos().await?;
-
-            // We need a dummy address for estimation; use the wallet's own address
-            let addr = self.inner.new_address().await?;
-            let btc_addr = addr
-                .to_string()
+            let btc_addr = address
                 .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
                 .map_err(|e| BarkError::Internal {
                     error_message: format!("Failed to parse address: {}", e),
                 })?
                 .assume_checked();
+
+            let ids: Result<Vec<_>, _> = vtxo_ids
+                .iter()
+                .map(|id| {
+                    id.parse::<ark_lib::VtxoId>()
+                        .map_err(|e| BarkError::InvalidVtxoId {
+                            error_message: format!("invalid vtxo id: {}", e),
+                        })
+                })
+                .collect();
+            let ids = ids?;
+
+            let mut vtxos = Vec::new();
+            for id in ids {
+                let vtxo = self.inner.get_vtxo_by_id(id).await.map_err(|e| {
+                    BarkError::NotFound {
+                        error_message: format!("VTXO not found: {}", e),
+                    }
+                })?;
+                vtxos.push(vtxo);
+            }
 
             let fee = self
                 .inner
