@@ -438,10 +438,10 @@ impl Wallet {
     }
 
     /// Try to claim all pending Lightning receives
-    pub fn try_claim_all_lightning_receives(&self, wait: bool) -> Result<(), BarkError> {
+    pub fn try_claim_all_lightning_receives(&self, wait: bool) -> Result<Vec<LightningReceive>, BarkError> {
         TOKIO_RT.block_on(async {
-            self.inner.try_claim_all_lightning_receives(wait).await?;
-            Ok(())
+            let receives = self.inner.try_claim_all_lightning_receives(wait).await?;
+            Ok(receives.into_iter().map(Into::into).collect())
         })
     }
 
