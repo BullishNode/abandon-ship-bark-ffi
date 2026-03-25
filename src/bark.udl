@@ -697,6 +697,15 @@ interface Wallet {
     [Throws=BarkError]
     sequence<Movement> history();
 
+    /// Get wallet movements filtered by payment method
+    ///
+    /// # Arguments
+    ///
+    /// * `payment_method_type` - Type (e.g. "ark", "bitcoin", "invoice", "offer", "lightning_address", "custom")
+    /// * `payment_method_value` - Value (e.g. an address or invoice string)
+    [Throws=BarkError]
+    sequence<Movement> history_by_payment_method(string payment_method_type, string payment_method_value);
+
     // ------------------------------------------------------------------------
     // Extended VTXO Queries
     // ------------------------------------------------------------------------

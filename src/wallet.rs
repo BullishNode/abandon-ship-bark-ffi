@@ -549,6 +549,36 @@ impl Wallet {
         })
     }
 
+    /// Get wallet movements filtered by payment method
+    ///
+    /// # Arguments
+    ///
+    /// * `payment_method_type` - Type of payment method (e.g. "ark", "bitcoin", "invoice", "offer", "lightning_address", "custom")
+    /// * `payment_method_value` - Value of the payment method (e.g. an address or invoice string)
+    pub fn history_by_payment_method(
+        &self,
+        payment_method_type: String,
+        payment_method_value: String,
+    ) -> Result<Vec<Movement>, BarkError> {
+        TOKIO_RT.block_on(async {
+            let payment_method = bark::movement::PaymentMethod::from_type_value(
+                &payment_method_type,
+                &payment_method_value,
+            )
+            .map_err(|e| BarkError::Internal {
+                error_message: format!("Invalid payment method: {}", e),
+            })?;
+
+            Ok(self
+                .inner
+                .history_by_payment_method(&payment_method)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+    }
+
     // ------------------------------------------------------------------------
     // Extended VTXO Queries
     // ------------------------------------------------------------------------
