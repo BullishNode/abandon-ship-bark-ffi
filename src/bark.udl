@@ -657,7 +657,7 @@ interface Wallet {
     LightningInvoice bolt11_invoice(u64 amount_sats);
 
     [Throws=BarkError]
-    void try_claim_all_lightning_receives(boolean wait);
+    sequence<LightningReceive> try_claim_all_lightning_receives(boolean wait);
 
     // ------------------------------------------------------------------------
     // Arkoor Payments (Out-of-round Ark payments)
