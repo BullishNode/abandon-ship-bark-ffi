@@ -25,6 +25,17 @@ enum Network {
     "Regtest",
 };
 
+/// A notification event from the wallet
+[Enum]
+interface WalletNotification {
+    /// A new movement was created
+    MovementCreated(Movement movement);
+    /// An existing movement was updated
+    MovementUpdated(Movement movement);
+    /// The notification channel is lagging (some notifications were dropped)
+    ChannelLagging();
+};
+
 /// Error types that can occur when using the Bark wallet
 [Error]
 interface BarkError {
@@ -508,6 +519,42 @@ callback interface CustomOnchainWalletCallbacks {
     /// * `tx_hex` - Hex-encoded transaction
     [Throws=BarkError]
     void store_signed_p2a_cpfp(string tx_hex);
+};
+
+// ============================================================================
+// Wallet Notifications
+// ============================================================================
+
+/// Callback interface for receiving real-time wallet notifications.
+///
+/// Implement this in your language (Swift, Kotlin, Dart, Go, etc.)
+/// to receive wallet events as they happen.
+///
+/// All callbacks are invoked from a background thread.
+callback interface WalletNotificationListener {
+    /// Called when a new movement is created
+    void on_movement_created(Movement movement);
+
+    /// Called when an existing movement is updated
+    void on_movement_updated(Movement movement);
+
+    /// Called when the notification channel is lagging (some notifications were dropped)
+    void on_channel_lagging();
+
+    /// Called when an error occurs in the notification stream
+    void on_error(string error);
+};
+
+/// Handle to a notification subscription.
+///
+/// Call `cancel()` to stop receiving notifications.
+/// The subscription is also cancelled when this object is dropped/deallocated.
+interface NotificationSubscription {
+    /// Cancel the notification subscription
+    void cancel();
+
+    /// Check if the subscription is still active
+    boolean is_active();
 };
 
 // ============================================================================
@@ -1168,4 +1215,17 @@ interface Wallet {
     /// Returns the estimated fee in sats
     [Throws=BarkError]
     u64 estimate_send_onchain_fee(string address, u64 amount_sats);
+
+    // ------------------------------------------------------------------------
+    // Notifications
+    // ------------------------------------------------------------------------
+
+    /// Subscribe to real-time wallet notifications.
+    ///
+    /// Returns a subscription handle. Call `cancel()` on the handle or
+    /// drop/deallocate it to stop receiving notifications.
+    ///
+    /// Multiple subscriptions can be active simultaneously; each receives
+    /// an independent copy of every notification.
+    NotificationSubscription subscribe_notifications(WalletNotificationListener listener);
 };

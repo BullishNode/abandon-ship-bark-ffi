@@ -180,6 +180,7 @@ dependencies = [
  "bip39",
  "bitcoin",
  "chrono",
+ "futures-util",
  "hex",
  "lightning-invoice",
  "lnurl-rs",

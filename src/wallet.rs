@@ -8,6 +8,7 @@ use bitcoin::Network as BtcNetwork;
 use lnurl::lightning_address::LightningAddress;
 
 use crate::error::BarkError;
+use crate::notification::{self, NotificationSubscription, WalletNotificationListener};
 use crate::runtime::TOKIO_RT;
 use crate::types::*;
 
@@ -1901,6 +1902,26 @@ impl Wallet {
             Ok(fee.fee.to_sat())
         })
     }
+
+    // ------------------------------------------------------------------------
+    // Notifications
+    // ------------------------------------------------------------------------
+
+    /// Subscribe to real-time wallet notifications.
+    ///
+    /// Returns a subscription handle. Call `cancel()` on the handle or drop it
+    /// to stop receiving notifications. The listener callbacks are invoked from
+    /// a background thread — make sure your implementation is thread-safe.
+    pub fn subscribe_notifications(
+        &self,
+        listener: Box<dyn WalletNotificationListener>,
+    ) -> Arc<NotificationSubscription> {
+        notification::spawn_notification_listener(&self.inner, listener)
+    }
+
+    // ------------------------------------------------------------------------
+    // Fee Estimation
+    // ------------------------------------------------------------------------
 
     /// Estimate the fee for a send onchain operation
     pub fn estimate_send_onchain_fee(&self, address: String, amount_sats: u64) -> Result<u64, BarkError> {
