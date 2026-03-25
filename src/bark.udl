@@ -683,6 +683,10 @@ interface Wallet {
 
     /// Peek at an address at a specific index
     [Throws=BarkError]
+    string peek_address(u32 index);
+
+    /// DEPRECATED: use `peek_address` instead
+    [Throws=BarkError]
     string peak_address(u32 index);
 
     // ------------------------------------------------------------------------

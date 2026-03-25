@@ -14,20 +14,20 @@ name = "bark_ffi"
 [dependencies.bark]
 git = "https://gitlab.com/ark-bitcoin/bark"
 package = "bark-wallet"
-rev = "bark-0.1.0-beta.8"
+rev = "bark-0.1.0-beta.9"
 default-features = false
-features = [ "tls-webpki-roots", "onchain_bdk", "sqlite" ]
+features = [ "native", "tls-webpki-roots", "onchain-bdk", "sqlite" ]
 
 [dependencies.ark-lib]
 git = "https://gitlab.com/ark-bitcoin/bark"
 package = "ark-lib"
-rev = "bark-0.1.0-beta.8"
+rev = "bark-0.1.0-beta.9"
 default-features = false
 
 [dependencies.bark-bitcoin-ext]
 git = "https://gitlab.com/ark-bitcoin/bark"
 package = "bark-bitcoin-ext"
-rev = "bark-0.1.0-beta.8"
+rev = "bark-0.1.0-beta.9"
 default-features = false
 
 [dependencies]

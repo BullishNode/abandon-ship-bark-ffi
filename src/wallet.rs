@@ -516,9 +516,18 @@ impl Wallet {
     }
 
     /// Peek at an address at a specific index
+    pub fn peek_address(&self, index: u32) -> Result<String, BarkError> {
+        TOKIO_RT.block_on(async {
+            let addr = self.inner.peek_address(index).await?;
+            Ok(addr.to_string())
+        })
+    }
+
+    /// Peek at an address at a specific index
+	#[deprecated(since = "0.1.0-beta.9", note = "use peek_address")]
     pub fn peak_address(&self, index: u32) -> Result<String, BarkError> {
         TOKIO_RT.block_on(async {
-            let addr = self.inner.peak_address(index).await?;
+            let addr = self.inner.peek_address(index).await?;
             Ok(addr.to_string())
         })
     }
@@ -790,12 +799,12 @@ impl Wallet {
 
             let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
-            let preimage = self
+            let payment = self
                 .inner
                 .check_lightning_payment(payment_hash_obj, wait)
                 .await?;
 
-            Ok(preimage.map(|p| p.to_string()))
+            Ok(payment.and_then(|p| p.preimage).map(|p| p.to_string()))
         })
     }
 
@@ -910,12 +919,7 @@ impl Wallet {
     ///
     /// Returns the mailbox identifier as a hex-encoded public key.
     pub fn mailbox_identifier(&self) -> Result<String, BarkError> {
-        let keypair = self
-            .inner
-            .mailbox_keypair()
-            .map_err(|e| BarkError::Internal {
-                error_message: format!("Failed to get mailbox keypair: {}", e),
-            })?;
+        let keypair = self.inner.mailbox_keypair();
 
         let identifier = ark_lib::mailbox::MailboxIdentifier::from_pubkey(keypair.public_key());
         Ok(hex::encode(identifier.to_vec()))
@@ -1712,12 +1716,7 @@ impl Wallet {
         // Default expiry: 24 hours from now
         let expiry = chrono::Local::now() + chrono::Duration::hours(24);
 
-        let auth = self
-            .inner
-            .mailbox_authorization(expiry)
-            .map_err(|e| BarkError::Internal {
-                error_message: format!("Failed to create mailbox authorization: {}", e),
-            })?;
+        let auth = self.inner.mailbox_authorization(expiry);
 
         Ok(hex::encode(auth.serialize()))
     }
