@@ -18,7 +18,7 @@ mod wallet;
 pub use custom_onchain_wallet::CustomOnchainWalletCallbacks;
 pub use error::BarkError;
 pub use functions::*;
-pub use notification::{NotificationSubscription, WalletNotificationListener};
+pub use notification::NotificationHolder;
 pub use onchain_wallet::OnchainWallet;
 pub use types::*;
 pub use wallet::Wallet;

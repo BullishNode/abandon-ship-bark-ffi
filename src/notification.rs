@@ -1,93 +1,130 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use crate::runtime::TOKIO_RT;
+use futures_util::StreamExt;
+use tokio::sync::oneshot;
+
+use crate::error::BarkError;
 use crate::types::WalletNotification;
 
-/// Callback interface for receiving wallet notifications.
+/// Pull-based notification handle exposed over FFI.
 ///
-/// Implement this in your language (Swift, Kotlin, Dart, Go, etc.)
-/// to receive real-time wallet events.
-pub trait WalletNotificationListener: Send + Sync + 'static {
-    /// Called when a new movement is created
-    fn on_movement_created(&self, movement: crate::types::Movement);
-
-    /// Called when an existing movement is updated
-    fn on_movement_updated(&self, movement: crate::types::Movement);
-
-    /// Called when the notification channel is lagging (some notifications were dropped)
-    fn on_channel_lagging(&self);
-
-    /// Called when an error occurs in the notification stream
-    fn on_error(&self, error: String);
-}
-
-/// Handle to a notification subscription.
+/// Obtain via `Wallet::notifications()`. Call `next_notification()` in a loop
+/// to receive events. Call `cancel_next_notification_wait()` to unblock a
+/// pending wait without destroying the underlying stream.
 ///
-/// Drop or call `cancel()` to stop receiving notifications.
-pub struct NotificationSubscription {
-    cancelled: Arc<AtomicBool>,
+/// Each call to `Wallet::notifications()` creates an independent stream backed
+/// by a new broadcast receiver — existing holders are unaffected.
+///
+/// This holder is intended for a single consumer loop. Concurrent calls to
+/// `next_notification()` on the same holder are not supported and will return
+/// `None` immediately.
+pub struct NotificationHolder {
+    /// The bark notification stream. Held in a tokio Mutex because we need to
+    /// hold it across the `.await` point inside `next_notification()`.
+    stream: tokio::sync::Mutex<bark::NotificationStream>,
+
+    /// Sender half of the per-wait cancellation one-shot channel.
+    /// Replaced on every `next_notification()` call, so cancellation is scoped
+    /// to exactly one wait cycle. A std Mutex suffices here because
+    /// `cancel_next_notification_wait()` is synchronous and never held across
+    /// an await point.
+    cancel: Mutex<Option<oneshot::Sender<()>>>,
+
+    /// Guards against concurrent `next_notification()` calls on the same holder.
+    /// Reset via a RAII guard so it is always cleared even if the async body panics.
+    wait_in_progress: AtomicBool,
 }
 
-impl NotificationSubscription {
-    pub(crate) fn new(cancelled: Arc<AtomicBool>) -> Self {
-        Self { cancelled }
-    }
+/// RAII guard that clears `wait_in_progress` on drop, including on panic.
+struct WaitGuard<'a>(&'a AtomicBool);
 
-    /// Cancel the notification subscription
-    pub fn cancel(&self) {
-        self.cancelled.store(true, Ordering::Relaxed);
-    }
-
-    /// Check if the subscription is still active
-    pub fn is_active(&self) -> bool {
-        !self.cancelled.load(Ordering::Relaxed)
-    }
-}
-
-impl Drop for NotificationSubscription {
+impl Drop for WaitGuard<'_> {
     fn drop(&mut self) {
-        self.cancel();
+        self.0.store(false, Ordering::Release);
     }
 }
 
-/// Start a notification subscription on the given wallet.
-///
-/// Spawns a background tokio task that reads from the wallet's
-/// notification stream and dispatches events to the listener.
-pub(crate) fn spawn_notification_listener(
-    wallet: &bark::Wallet,
-    listener: Box<dyn WalletNotificationListener>,
-) -> Arc<NotificationSubscription> {
-    use futures_util::StreamExt;
+impl NotificationHolder {
+    pub(crate) fn new(wallet: &bark::Wallet) -> Arc<Self> {
+        Arc::new(Self {
+            stream: tokio::sync::Mutex::new(wallet.subscribe_notifications()),
+            cancel: Mutex::new(None),
+            wait_in_progress: AtomicBool::new(false),
+        })
+    }
 
-    let cancelled = Arc::new(AtomicBool::new(false));
-    let cancelled_clone = cancelled.clone();
-
-    let mut stream = wallet.subscribe_notifications();
-
-    TOKIO_RT.spawn(async move {
-        while !cancelled_clone.load(Ordering::Relaxed) {
-            match stream.next().await {
-                Some(notification) => {
-                    let ffi_notification = WalletNotification::from(notification);
-                    match ffi_notification {
-                        WalletNotification::MovementCreated { movement } => {
-                            listener.on_movement_created(movement);
-                        },
-                        WalletNotification::MovementUpdated { movement } => {
-                            listener.on_movement_updated(movement);
-                        },
-                        WalletNotification::ChannelLagging => {
-                            listener.on_channel_lagging();
-                        },
-                    }
-                },
-                // Stream ended
-                None => break,
-            }
+    /// Wait for the next wallet notification.
+    ///
+    /// Returns `None` when:
+    /// - `cancel_next_notification_wait()` was called while this was pending
+    ///   (cancellation only affects the current wait; the stream lives on)
+    /// - The wallet's notification source was shut down permanently
+    ///
+    /// Returns `Err(BarkError::Internal)` if called concurrently on the same holder.
+    ///
+    /// After a cancellation this method can be called again normally — the
+    /// underlying `NotificationStream` is preserved in `self.stream` and a
+    /// fresh per-wait cancel channel is created on every entry.
+    pub async fn next_notification(
+        self: Arc<Self>,
+    ) -> Result<Option<WalletNotification>, BarkError> {
+        // Enforce single-consumer: reject concurrent calls with an explicit error.
+        if self
+            .wait_in_progress
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Err(BarkError::Internal {
+                error_message: "next_notification() called concurrently on the same holder".into(),
+            });
         }
-    });
 
-    Arc::new(NotificationSubscription::new(cancelled))
+        // RAII guard resets wait_in_progress on exit, even on panic.
+        let _guard = WaitGuard(&self.wait_in_progress);
+
+        // Create a fresh one-shot cancel channel for this specific wait cycle.
+        // Once consumed — either by cancellation or by next_notification
+        // returning — it is discarded. The next call creates a new channel.
+        let (tx, rx) = oneshot::channel::<()>();
+        {
+            let mut cancel = self.cancel.lock().unwrap();
+            debug_assert!(cancel.is_none(), "cancel slot should be empty on entry");
+            *cancel = Some(tx);
+        }
+
+        let result = {
+            let mut stream = self.stream.lock().await;
+            tokio::select! {
+                // Normal case: a notification arrived on the stream.
+                notification = stream.next() => {
+                    notification.map(WalletNotification::from)
+                }
+                // Cancellation case: cancel_next_notification_wait() sent on
+                // `tx`. The stream itself is completely unaffected — only this
+                // wait is interrupted. The next call to next_notification()
+                // acquires the lock again and waits from where the stream left off.
+                _ = rx => None,
+            }
+        };
+
+        // Clear the cancel slot. Safe: wait_in_progress ensures we are the
+        // sole active waiter, so no concurrent call can own this slot.
+        *self.cancel.lock().unwrap() = None;
+
+        Ok(result)
+    }
+
+    /// Cancel the currently pending `next_notification()` wait.
+    ///
+    /// Causes a blocked `next_notification()` to return `None`.
+    /// Has no effect if no wait is currently active.
+    ///
+    /// This does NOT destroy the underlying `NotificationStream`; a subsequent
+    /// call to `next_notification()` will work normally and wait for new events.
+    pub fn cancel_next_notification_wait(&self) {
+        if let Some(tx) = self.cancel.lock().unwrap().take() {
+            let _ = tx.send(());
+        }
+    }
 }

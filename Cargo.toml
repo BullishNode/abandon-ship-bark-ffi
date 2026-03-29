@@ -16,7 +16,7 @@ git = "https://gitlab.com/ark-bitcoin/bark"
 package = "bark-wallet"
 rev = "bark-0.1.0-beta.9"
 default-features = false
-features = [ "native", "tls-webpki-roots", "onchain-bdk", "sqlite" ]
+features = ["native", "tls-webpki-roots", "onchain-bdk", "sqlite"]
 
 [dependencies.ark-lib]
 git = "https://gitlab.com/ark-bitcoin/bark"

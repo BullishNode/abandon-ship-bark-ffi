@@ -525,36 +525,35 @@ callback interface CustomOnchainWalletCallbacks {
 // Wallet Notifications
 // ============================================================================
 
-/// Callback interface for receiving real-time wallet notifications.
+/// Pull-based handle for consuming wallet notifications.
 ///
-/// Implement this in your language (Swift, Kotlin, Dart, Go, etc.)
-/// to receive wallet events as they happen.
+/// Obtain via `Wallet.notifications()`. Call `next_notification()` in a loop
+/// to receive events. Call `cancel_next_notification_wait()` to unblock a
+/// pending wait without destroying the underlying stream.
 ///
-/// All callbacks are invoked from a background thread.
-callback interface WalletNotificationListener {
-    /// Called when a new movement is created
-    void on_movement_created(Movement movement);
+/// Each call to `Wallet.notifications()` creates an independent stream backed
+/// by a new broadcast receiver. Only one consumer loop per holder is assumed.
+interface NotificationHolder {
+    /// Wait for the next notification.
+    ///
+    /// Returns null if the wait was cancelled via `cancel_next_notification_wait()`
+    /// or if the wallet's notification source was shut down permanently.
+    ///
+    /// After a cancellation this method can be called again normally — the
+    /// underlying stream is preserved and a fresh cancel channel is set up on
+    /// every entry.
+    ///
+    /// Throws `BarkError.Internal` if called concurrently on the same holder.
+    [Async, Throws=BarkError]
+    WalletNotification? next_notification();
 
-    /// Called when an existing movement is updated
-    void on_movement_updated(Movement movement);
-
-    /// Called when the notification channel is lagging (some notifications were dropped)
-    void on_channel_lagging();
-
-    /// Called when an error occurs in the notification stream
-    void on_error(string error);
-};
-
-/// Handle to a notification subscription.
-///
-/// Call `cancel()` to stop receiving notifications.
-/// The subscription is also cancelled when this object is dropped/deallocated.
-interface NotificationSubscription {
-    /// Cancel the notification subscription
-    void cancel();
-
-    /// Check if the subscription is still active
-    boolean is_active();
+    /// Cancel the currently pending `next_notification()` wait.
+    ///
+    /// Causes a blocked `next_notification()` to return null.
+    /// Has no effect when no wait is active.
+    /// Does NOT destroy the underlying stream; subsequent calls to
+    /// `next_notification()` will still work.
+    void cancel_next_notification_wait();
 };
 
 // ============================================================================
@@ -1220,12 +1219,10 @@ interface Wallet {
     // Notifications
     // ------------------------------------------------------------------------
 
-    /// Subscribe to real-time wallet notifications.
+    /// Get a pull-based notification holder for this wallet.
     ///
-    /// Returns a subscription handle. Call `cancel()` on the handle or
-    /// drop/deallocate it to stop receiving notifications.
-    ///
-    /// Multiple subscriptions can be active simultaneously; each receives
-    /// an independent copy of every notification.
-    NotificationSubscription subscribe_notifications(WalletNotificationListener listener);
+    /// Call `next_notification()` in a loop to receive events.
+    /// Call `cancel_next_notification_wait()` to unblock a pending wait without
+    /// destroying the stream.
+    NotificationHolder notifications();
 };
