@@ -25,6 +25,17 @@ enum Network {
     "Regtest",
 };
 
+/// A notification event from the wallet
+[Enum]
+interface WalletNotification {
+    /// A new movement was created
+    MovementCreated(Movement movement);
+    /// An existing movement was updated
+    MovementUpdated(Movement movement);
+    /// The notification channel is lagging (some notifications were dropped)
+    ChannelLagging();
+};
+
 /// Error types that can occur when using the Bark wallet
 [Error]
 interface BarkError {
@@ -511,6 +522,41 @@ callback interface CustomOnchainWalletCallbacks {
 };
 
 // ============================================================================
+// Wallet Notifications
+// ============================================================================
+
+/// Pull-based handle for consuming wallet notifications.
+///
+/// Obtain via `Wallet.notifications()`. Call `next_notification()` in a loop
+/// to receive events. Call `cancel_next_notification_wait()` to unblock a
+/// pending wait without destroying the underlying stream.
+///
+/// Each call to `Wallet.notifications()` creates an independent stream backed
+/// by a new broadcast receiver. Only one consumer loop per holder is assumed.
+interface NotificationHolder {
+    /// Wait for the next notification.
+    ///
+    /// Returns null if the wait was cancelled via `cancel_next_notification_wait()`
+    /// or if the wallet's notification source was shut down permanently.
+    ///
+    /// After a cancellation this method can be called again normally — the
+    /// underlying stream is preserved and a fresh cancel channel is set up on
+    /// every entry.
+    ///
+    /// Throws `BarkError.Internal` if called concurrently on the same holder.
+    [Async, Throws=BarkError]
+    WalletNotification? next_notification();
+
+    /// Cancel the currently pending `next_notification()` wait.
+    ///
+    /// Causes a blocked `next_notification()` to return null.
+    /// Has no effect when no wait is active.
+    /// Does NOT destroy the underlying stream; subsequent calls to
+    /// `next_notification()` will still work.
+    void cancel_next_notification_wait();
+};
+
+// ============================================================================
 // Onchain Wallet Interface
 // ============================================================================
 
@@ -657,7 +703,7 @@ interface Wallet {
     LightningInvoice bolt11_invoice(u64 amount_sats);
 
     [Throws=BarkError]
-    void try_claim_all_lightning_receives(boolean wait);
+    sequence<LightningReceive> try_claim_all_lightning_receives(boolean wait);
 
     // ------------------------------------------------------------------------
     // Arkoor Payments (Out-of-round Ark payments)
@@ -683,6 +729,10 @@ interface Wallet {
 
     /// Peek at an address at a specific index
     [Throws=BarkError]
+    string peek_address(u32 index);
+
+    /// DEPRECATED: use `peek_address` instead
+    [Throws=BarkError]
     string peak_address(u32 index);
 
     // ------------------------------------------------------------------------
@@ -692,6 +742,15 @@ interface Wallet {
     /// Get all wallet movements (transaction history)
     [Throws=BarkError]
     sequence<Movement> history();
+
+    /// Get wallet movements filtered by payment method
+    ///
+    /// # Arguments
+    ///
+    /// * `payment_method_type` - Type (e.g. "ark", "bitcoin", "invoice", "offer", "lightning_address", "custom")
+    /// * `payment_method_value` - Value (e.g. an address or invoice string)
+    [Throws=BarkError]
+    sequence<Movement> history_by_payment_method(string payment_method_type, string payment_method_value);
 
     // ------------------------------------------------------------------------
     // Extended VTXO Queries
@@ -1155,4 +1214,15 @@ interface Wallet {
     /// Returns the estimated fee in sats
     [Throws=BarkError]
     u64 estimate_send_onchain_fee(string address, u64 amount_sats);
+
+    // ------------------------------------------------------------------------
+    // Notifications
+    // ------------------------------------------------------------------------
+
+    /// Get a pull-based notification holder for this wallet.
+    ///
+    /// Call `next_notification()` in a loop to receive events.
+    /// Call `cancel_next_notification_wait()` to unblock a pending wait without
+    /// destroying the stream.
+    NotificationHolder notifications();
 };

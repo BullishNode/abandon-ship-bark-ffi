@@ -8,15 +8,26 @@ use bitcoin::Network as BtcNetwork;
 use lnurl::lightning_address::LightningAddress;
 
 use crate::error::BarkError;
+use crate::notification::NotificationHolder;
 use crate::runtime::TOKIO_RT;
 use crate::types::*;
 
 /// The main Bark wallet interface
 pub struct Wallet {
-    inner: InnerWallet,
+    inner: Arc<InnerWallet>,
+    mailbox_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl Wallet {
+    fn from_inner(inner: InnerWallet) -> Self {
+        let inner = Arc::new(inner);
+        let mailbox_task = Some(Self::start_mailbox_processor(inner.clone()));
+        Self {
+            inner,
+            mailbox_task,
+        }
+    }
+
     /// Create a new Bark wallet
     pub fn create(
         mnemonic: String,
@@ -26,7 +37,8 @@ impl Wallet {
     ) -> Result<Self, BarkError> {
         let inner =
             TOKIO_RT.block_on(Self::create_async(mnemonic, config, datadir, force_rescan))?;
-        Ok(Self { inner })
+
+        Ok(Self::from_inner(inner))
     }
 
     async fn create_async(
@@ -57,7 +69,8 @@ impl Wallet {
     /// Open an existing Bark wallet
     pub fn open(mnemonic: String, config: Config, datadir: String) -> Result<Self, BarkError> {
         let inner = TOKIO_RT.block_on(Self::open_async(mnemonic, config, datadir))?;
-        Ok(Self { inner })
+
+        Ok(Self::from_inner(inner))
     }
 
     async fn open_async(
@@ -145,7 +158,7 @@ impl Wallet {
 
             eprintln!("[CREATE] ✅ Bark wallet with onchain created successfully");
 
-            Ok(Self { inner })
+            Ok(Self::from_inner(inner))
         })
     }
 
@@ -194,7 +207,7 @@ impl Wallet {
 
             eprintln!("[OPEN] ✅ Bark wallet with onchain opened successfully");
 
-            Ok(Self { inner })
+            Ok(Self::from_inner(inner))
         })
     }
 
@@ -438,10 +451,13 @@ impl Wallet {
     }
 
     /// Try to claim all pending Lightning receives
-    pub fn try_claim_all_lightning_receives(&self, wait: bool) -> Result<(), BarkError> {
+    pub fn try_claim_all_lightning_receives(
+        &self,
+        wait: bool,
+    ) -> Result<Vec<LightningReceive>, BarkError> {
         TOKIO_RT.block_on(async {
-            self.inner.try_claim_all_lightning_receives(wait).await?;
-            Ok(())
+            let receives = self.inner.try_claim_all_lightning_receives(wait).await?;
+            Ok(receives.into_iter().map(Into::into).collect())
         })
     }
 
@@ -480,11 +496,7 @@ impl Wallet {
     /// Send to an onchain address using your offchain balance
     ///
     /// Returns the transaction ID (txid)
-    pub fn send_onchain(
-        &self,
-        address: String,
-        amount_sats: u64,
-    ) -> Result<String, BarkError> {
+    pub fn send_onchain(&self, address: String, amount_sats: u64) -> Result<String, BarkError> {
         TOKIO_RT.block_on(async {
             let addr = address
                 .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
@@ -516,9 +528,18 @@ impl Wallet {
     }
 
     /// Peek at an address at a specific index
+    pub fn peek_address(&self, index: u32) -> Result<String, BarkError> {
+        TOKIO_RT.block_on(async {
+            let addr = self.inner.peek_address(index).await?;
+            Ok(addr.to_string())
+        })
+    }
+
+    /// Peek at an address at a specific index
+    #[deprecated(since = "0.1.0-beta.9", note = "use peek_address")]
     pub fn peak_address(&self, index: u32) -> Result<String, BarkError> {
         TOKIO_RT.block_on(async {
-            let addr = self.inner.peak_address(index).await?;
+            let addr = self.inner.peek_address(index).await?;
             Ok(addr.to_string())
         })
     }
@@ -533,6 +554,36 @@ impl Wallet {
             Ok(self
                 .inner
                 .history()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+    }
+
+    /// Get wallet movements filtered by payment method
+    ///
+    /// # Arguments
+    ///
+    /// * `payment_method_type` - Type of payment method (e.g. "ark", "bitcoin", "invoice", "offer", "lightning_address", "custom")
+    /// * `payment_method_value` - Value of the payment method (e.g. an address or invoice string)
+    pub fn history_by_payment_method(
+        &self,
+        payment_method_type: String,
+        payment_method_value: String,
+    ) -> Result<Vec<Movement>, BarkError> {
+        TOKIO_RT.block_on(async {
+            let payment_method = bark::movement::PaymentMethod::from_type_value(
+                &payment_method_type,
+                &payment_method_value,
+            )
+            .map_err(|e| BarkError::Internal {
+                error_message: format!("Invalid payment method: {}", e),
+            })?;
+
+            Ok(self
+                .inner
+                .history_by_payment_method(&payment_method)
                 .await?
                 .into_iter()
                 .map(Into::into)
@@ -790,12 +841,12 @@ impl Wallet {
 
             let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
-            let preimage = self
+            let payment = self
                 .inner
                 .check_lightning_payment(payment_hash_obj, wait)
                 .await?;
 
-            Ok(preimage.map(|p| p.to_string()))
+            Ok(payment.and_then(|p| p.preimage).map(|p| p.to_string()))
         })
     }
 
@@ -899,26 +950,6 @@ impl Wallet {
                 round_tx_required_confirmations: Some(cfg.round_tx_required_confirmations),
             }
         })
-    }
-
-    /// Get the mailbox identifier for push notifications
-    ///
-    /// This identifier can be registered with a push notification service
-    /// to receive alerts when VTXOs arrive in your mailbox. The mailbox
-    /// receives all incoming VTXOs regardless of source (arkoor payments,
-    /// Lightning receives, or round outputs).
-    ///
-    /// Returns the mailbox identifier as a hex-encoded public key.
-    pub fn mailbox_identifier(&self) -> Result<String, BarkError> {
-        let keypair = self
-            .inner
-            .mailbox_keypair()
-            .map_err(|e| BarkError::Internal {
-                error_message: format!("Failed to get mailbox keypair: {}", e),
-            })?;
-
-        let identifier = ark_lib::mailbox::MailboxIdentifier::from_pubkey(keypair.public_key());
-        Ok(hex::encode(identifier.to_vec()))
     }
 
     /// Get Ark server info
@@ -1702,8 +1733,21 @@ impl Wallet {
     }
 
     // ------------------------------------------------------------------------
-    // Mailbox Authorization
+    // Mailbox
     // ------------------------------------------------------------------------
+    /// Get the mailbox identifier for push notifications
+    ///
+    /// This identifier can be registered with a push notification service
+    /// to receive alerts when VTXOs arrive in your mailbox. The mailbox
+    /// receives all incoming VTXOs regardless of source (arkoor payments,
+    /// Lightning receives, or round outputs).
+    ///
+    /// Returns the mailbox identifier as a hex-encoded public key.
+    pub fn mailbox_identifier(&self) -> Result<String, BarkError> {
+        let identifier = self.inner.mailbox_identifier();
+
+        Ok(hex::encode(identifier.to_vec()))
+    }
 
     /// Create a new authorization for your server mailbox
     pub fn mailbox_authorization(&self) -> Result<String, BarkError> {
@@ -1712,14 +1756,32 @@ impl Wallet {
         // Default expiry: 24 hours from now
         let expiry = chrono::Local::now() + chrono::Duration::hours(24);
 
-        let auth = self
-            .inner
-            .mailbox_authorization(expiry)
-            .map_err(|e| BarkError::Internal {
-                error_message: format!("Failed to create mailbox authorization: {}", e),
-            })?;
+        let auth = self.inner.mailbox_authorization(expiry);
 
         Ok(hex::encode(auth.serialize()))
+    }
+
+    fn start_mailbox_processor(inner: Arc<InnerWallet>) -> tokio::task::JoinHandle<()> {
+        TOKIO_RT.spawn(async move {
+            let mut retry_delay = 1;
+
+            loop {
+                match inner.subscribe_process_mailbox_messages(None).await {
+                    Ok(_) => {
+                        eprintln!("[MAILBOX] stream ended, restarting...");
+                        retry_delay = 1; // reset
+                    }
+                    Err(e) => {
+                        eprintln!("[MAILBOX] error: {:?}, retrying in {}s", e, retry_delay);
+                        tokio::time::sleep(std::time::Duration::from_secs(retry_delay)).await;
+                        retry_delay = (retry_delay * 2).min(30); // exponential backoff
+                        continue;
+                    }
+                }
+
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        })
     }
 
     // ------------------------------------------------------------------------
@@ -1732,12 +1794,11 @@ impl Wallet {
             use ark_lib::ProtocolEncoding;
             use base64::Engine;
 
-            let vtxo_bytes =
-                base64::engine::general_purpose::STANDARD
-                    .decode(&vtxo_base64)
-                    .map_err(|e| BarkError::Internal {
-                        error_message: format!("Invalid base64: {}", e),
-                    })?;
+            let vtxo_bytes = base64::engine::general_purpose::STANDARD
+                .decode(&vtxo_base64)
+                .map_err(|e| BarkError::Internal {
+                    error_message: format!("Invalid base64: {}", e),
+                })?;
 
             let vtxo =
                 ark_lib::Vtxo::deserialize(&vtxo_bytes).map_err(|e| BarkError::Internal {
@@ -1774,7 +1835,11 @@ impl Wallet {
     }
 
     /// Estimate the fee for an offboard operation
-    pub fn estimate_offboard_fee(&self, address: String, vtxo_ids: Vec<String>) -> Result<u64, BarkError> {
+    pub fn estimate_offboard_fee(
+        &self,
+        address: String,
+        vtxo_ids: Vec<String>,
+    ) -> Result<u64, BarkError> {
         TOKIO_RT.block_on(async {
             let btc_addr = address
                 .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
@@ -1796,11 +1861,13 @@ impl Wallet {
 
             let mut vtxos = Vec::new();
             for id in ids {
-                let vtxo = self.inner.get_vtxo_by_id(id).await.map_err(|e| {
-                    BarkError::NotFound {
-                        error_message: format!("VTXO not found: {}", e),
-                    }
-                })?;
+                let vtxo =
+                    self.inner
+                        .get_vtxo_by_id(id)
+                        .await
+                        .map_err(|e| BarkError::NotFound {
+                            error_message: format!("VTXO not found: {}", e),
+                        })?;
                 vtxos.push(vtxo);
             }
 
@@ -1830,11 +1897,13 @@ impl Wallet {
             // Look up the actual VTXOs from the wallet
             let mut vtxos = Vec::new();
             for id in ids {
-                let vtxo = self.inner.get_vtxo_by_id(id).await.map_err(|e| {
-                    BarkError::NotFound {
-                        error_message: format!("VTXO not found: {}", e),
-                    }
-                })?;
+                let vtxo =
+                    self.inner
+                        .get_vtxo_by_id(id)
+                        .await
+                        .map_err(|e| BarkError::NotFound {
+                            error_message: format!("VTXO not found: {}", e),
+                        })?;
                 vtxos.push(vtxo);
             }
 
@@ -1873,8 +1942,32 @@ impl Wallet {
         })
     }
 
+    // ------------------------------------------------------------------------
+    // Notifications
+    // ------------------------------------------------------------------------
+
+    /// Get a notification stream holder for this wallet.
+    ///
+    /// Call `next_notification()` on the holder in a loop to receive events.
+    /// Call `cancel_next_notification_wait()` to unblock a pending wait without
+    /// destroying the stream.
+    ///
+    /// Each call creates an independent broadcast receiver; existing holders
+    /// are unaffected.
+    pub fn notifications(&self) -> Arc<NotificationHolder> {
+        NotificationHolder::new(&self.inner)
+    }
+
+    // ------------------------------------------------------------------------
+    // Fee Estimation
+    // ------------------------------------------------------------------------
+
     /// Estimate the fee for a send onchain operation
-    pub fn estimate_send_onchain_fee(&self, address: String, amount_sats: u64) -> Result<u64, BarkError> {
+    pub fn estimate_send_onchain_fee(
+        &self,
+        address: String,
+        amount_sats: u64,
+    ) -> Result<u64, BarkError> {
         TOKIO_RT.block_on(async {
             let btc_addr = address
                 .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
@@ -1891,5 +1984,13 @@ impl Wallet {
                 .map_err(BarkError::from)?;
             Ok(fee.fee.to_sat())
         })
+    }
+}
+
+impl Drop for Wallet {
+    fn drop(&mut self) {
+        if let Some(handle) = self.mailbox_task.take() {
+            handle.abort();
+        }
     }
 }

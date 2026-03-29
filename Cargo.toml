@@ -1,6 +1,6 @@
 [package]
 name = "bark-ffi"
-version = "0.1.0-beta.8"
+version = "0.1.0-beta.9"
 edition = "2021"
 license = "MIT"
 authors = ["Team Second <hello@second.tech>"]
@@ -11,14 +11,27 @@ description = "Language-agnostic Rust FFI implementation for Bark SDK bindings u
 crate-type = ["lib", "staticlib", "cdylib"]
 name = "bark_ffi"
 
+[dependencies.bark]
+git = "https://gitlab.com/ark-bitcoin/bark"
+package = "bark-wallet"
+rev = "bark-0.1.0-beta.9"
+default-features = false
+features = ["native", "tls-webpki-roots", "onchain-bdk", "sqlite"]
+
+[dependencies.ark-lib]
+git = "https://gitlab.com/ark-bitcoin/bark"
+package = "ark-lib"
+rev = "bark-0.1.0-beta.9"
+default-features = false
+
+[dependencies.bark-bitcoin-ext]
+git = "https://gitlab.com/ark-bitcoin/bark"
+package = "bark-bitcoin-ext"
+rev = "bark-0.1.0-beta.9"
+default-features = false
+
 [dependencies]
-bark = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-wallet", rev = "bark-0.1.0-beta.8", default-features = false, features = [
-    "tls-webpki-roots",
-    "onchain_bdk",
-    "sqlite",
-] }
-ark-lib = { git = "https://gitlab.com/ark-bitcoin/bark", package = "ark-lib", rev = "bark-0.1.0-beta.8", default-features = false }
-bark-bitcoin-ext = { git = "https://gitlab.com/ark-bitcoin/bark", package = "bark-bitcoin-ext", rev = "bark-0.1.0-beta.8", default-features = false }
+
 # External dependencies
 bitcoin = { version = "0.32.7", features = ["serde", "rand", "rand-std"] }
 bip39 = { version = "2.0.0", features = ["rand"] }
@@ -30,6 +43,7 @@ lnurl-rs = { version = "0.9.0", features = [
 anyhow = { version = "1.0", features = ["backtrace"] }
 thiserror = { version = "2.0.12" }
 async-trait = "0.1.83"
+futures-util = "0.3"
 tokio = { version = "1.35", default-features = false, features = [
     "rt-multi-thread",
     "fs",

@@ -538,3 +538,36 @@ pub struct CpfpParams {
     pub effective_fee_rate_sat_per_vb: u64,
     pub current_package_fee_sats: Option<u64>,
 }
+
+// ============================================================================
+// WalletNotification
+// ============================================================================
+
+/// A notification event from the wallet
+#[derive(Clone, Debug)]
+pub enum WalletNotification {
+    /// A new movement was created
+    MovementCreated { movement: Movement },
+    /// An existing movement was updated
+    MovementUpdated { movement: Movement },
+    /// The notification channel is lagging (notifications were dropped)
+    ChannelLagging,
+}
+
+impl From<bark::WalletNotification> for WalletNotification {
+    fn from(n: bark::WalletNotification) -> Self {
+        match n {
+            bark::WalletNotification::MovementCreated { movement } => {
+                WalletNotification::MovementCreated {
+                    movement: movement.into(),
+                }
+            }
+            bark::WalletNotification::MovementUpdated { movement } => {
+                WalletNotification::MovementUpdated {
+                    movement: movement.into(),
+                }
+            }
+            bark::WalletNotification::ChannelLagging => WalletNotification::ChannelLagging,
+        }
+    }
+}
