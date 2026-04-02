@@ -346,6 +346,11 @@ pub struct Movement {
     pub created_at: String,
     pub updated_at: String,
     pub completed_at: Option<String>,
+
+    // calculated fields
+    pub payment_hash: Option<String>,
+    pub lightning_invoice: Option<String>,
+    pub lightning_offer: Option<String>,
 }
 
 impl From<bark::movement::Movement> for Movement {
@@ -383,6 +388,10 @@ impl From<bark::movement::Movement> for Movement {
             created_at: m.time.created_at.to_rfc3339(),
             updated_at: m.time.updated_at.to_rfc3339(),
             completed_at: m.time.completed_at.map(|t| t.to_rfc3339()),
+
+            payment_hash: m.lightning_payment_hash().map(|h| h.to_string()),
+            lightning_invoice: m.lightning_invoice().map(|i| i.to_string()),
+            lightning_offer: m.lightning_offer().map(|o| o.to_string()),
         }
     }
 }
