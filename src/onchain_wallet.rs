@@ -8,10 +8,11 @@ use bitcoin::Network as BtcNetwork;
 
 use crate::custom_onchain_wallet::CallbackWalletAdapter;
 use crate::error::BarkError;
-use crate::runtime::TOKIO_RT;
+use crate::runtime::run_async;
 use crate::types::{Config, OnchainBalance};
 
 /// Enum to support both BDK and callback-based wallets
+#[derive(Clone)]
 enum OnchainWalletInner {
     Bdk {
         wallet: Arc<Mutex<BarkOnchainWallet>>,
@@ -35,8 +36,12 @@ impl OnchainWallet {
     /// * `mnemonic` - BIP39 mnemonic phrase
     /// * `config` - Wallet configuration (includes network and chain source settings)
     /// * `datadir` - Directory for wallet data (shares database with Bark wallet)
-    pub fn default(mnemonic: String, config: Config, datadir: String) -> Result<Self, BarkError> {
-        TOKIO_RT.block_on(async {
+    pub async fn default(
+        mnemonic: String,
+        config: Config,
+        datadir: String,
+    ) -> Result<Self, BarkError> {
+        run_async(async move {
             let mnemonic =
                 Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
                     error_message: e.to_string(),
@@ -100,6 +105,7 @@ impl OnchainWallet {
                 },
             })
         })
+        .await
     }
 
     /// Create an onchain wallet from custom callbacks
@@ -127,63 +133,75 @@ impl OnchainWallet {
     /// Sync the onchain wallet with the blockchain
     ///
     /// Returns the amount synced in satoshis
-    pub fn sync(&self) -> Result<u64, BarkError> {
-        match &self.inner {
-            OnchainWalletInner::Bdk { wallet, chain } => TOKIO_RT.block_on(async {
-                eprintln!("[ONCHAIN] Starting BDK sync...");
-                let mut w = wallet.lock().await;
-                w.sync(chain).await.map_err(|e| BarkError::Network {
-                    error_message: format!("Sync failed: {}", e),
-                })?;
-                let balance = w.balance();
-                eprintln!(
-                    "[ONCHAIN] BDK sync completed, balance: {} sats",
-                    balance.total().to_sat()
-                );
-                Ok(balance.total().to_sat())
-            }),
-            OnchainWalletInner::Callback { .. } => {
-                eprintln!("[ONCHAIN] Callback wallets manage their own sync");
-                Ok(0)
+    pub async fn sync(&self) -> Result<u64, BarkError> {
+        let inner = self.inner.clone();
+        run_async(async move {
+            match inner {
+                OnchainWalletInner::Bdk { wallet, chain } => {
+                    eprintln!("[ONCHAIN] Starting BDK sync...");
+                    let mut w = wallet.lock().await;
+                    w.sync(&chain).await.map_err(|e| BarkError::Network {
+                        error_message: format!("Sync failed: {}", e),
+                    })?;
+                    let balance = w.balance();
+                    eprintln!(
+                        "[ONCHAIN] BDK sync completed, balance: {} sats",
+                        balance.total().to_sat()
+                    );
+                    Ok(balance.total().to_sat())
+                }
+                OnchainWalletInner::Callback { .. } => {
+                    eprintln!("[ONCHAIN] Callback wallets manage their own sync");
+                    Ok(0)
+                }
             }
-        }
+        })
+        .await
     }
 
     /// Get the onchain wallet balance
-    pub fn balance(&self) -> Result<OnchainBalance, BarkError> {
-        match &self.inner {
-            OnchainWalletInner::Bdk { wallet, .. } => TOKIO_RT.block_on(async {
-                let w = wallet.lock().await;
-                let balance = w.balance();
-                Ok(balance.into())
-            }),
-            OnchainWalletInner::Callback { adapter } => TOKIO_RT.block_on(async {
-                use bark::onchain::GetBalance;
-                let a = adapter.lock().await;
-                let amount = a.get_balance();
-                Ok(OnchainBalance {
-                    confirmed_sats: amount.to_sat(),
-                    pending_sats: 0,
-                    total_sats: amount.to_sat(),
-                })
-            }),
-        }
+    pub async fn balance(&self) -> Result<OnchainBalance, BarkError> {
+        let inner = self.inner.clone();
+        run_async(async move {
+            match inner {
+                OnchainWalletInner::Bdk { wallet, .. } => {
+                    let w = wallet.lock().await;
+                    let balance = w.balance();
+                    Ok(balance.into())
+                }
+                OnchainWalletInner::Callback { adapter } => {
+                    use bark::onchain::GetBalance;
+                    let a = adapter.lock().await;
+                    let amount = a.get_balance();
+                    Ok(OnchainBalance {
+                        confirmed_sats: amount.to_sat(),
+                        pending_sats: 0,
+                        total_sats: amount.to_sat(),
+                    })
+                }
+            }
+        })
+        .await
     }
 
     /// Generate a new Bitcoin address
-    pub fn new_address(&self) -> Result<String, BarkError> {
-        match &self.inner {
-            OnchainWalletInner::Bdk { wallet, .. } => TOKIO_RT.block_on(async {
-                let mut w = wallet.lock().await;
-                let addr = w.address().await.map_err(|e| BarkError::Internal {
-                    error_message: format!("Failed to generate address: {}", e),
-                })?;
-                Ok(addr.to_string())
-            }),
-            OnchainWalletInner::Callback { .. } => Err(BarkError::Internal {
-                error_message: "new_address() not supported for callback wallets".to_string(),
-            }),
-        }
+    pub async fn new_address(&self) -> Result<String, BarkError> {
+        let inner = self.inner.clone();
+        run_async(async move {
+            match inner {
+                OnchainWalletInner::Bdk { wallet, .. } => {
+                    let mut w = wallet.lock().await;
+                    let addr = w.address().await.map_err(|e| BarkError::Internal {
+                        error_message: format!("Failed to generate address: {}", e),
+                    })?;
+                    Ok(addr.to_string())
+                }
+                OnchainWalletInner::Callback { .. } => Err(BarkError::Internal {
+                    error_message: "new_address() not supported for callback wallets".to_string(),
+                }),
+            }
+        })
+        .await
     }
 
     /// Send Bitcoin to an address
@@ -195,15 +213,16 @@ impl OnchainWallet {
     /// * `fee_rate_sat_per_vb` - Fee rate in sats per vbyte
     ///
     /// Returns the transaction ID
-    pub fn send(
+    pub async fn send(
         &self,
         address: String,
         amount_sats: u64,
         fee_rate_sat_per_vb: u64,
     ) -> Result<String, BarkError> {
-        match &self.inner {
-            OnchainWalletInner::Bdk { wallet, chain } => {
-                TOKIO_RT.block_on(async {
+        let inner = self.inner.clone();
+        run_async(async move {
+            match inner {
+                OnchainWalletInner::Bdk { wallet, chain } => {
                     let mut w = wallet.lock().await;
 
                     let addr = address
@@ -225,7 +244,7 @@ impl OnchainWallet {
                         amount_sats, addr, fee_rate_sat_per_vb
                     );
 
-                    let txid = w.send(chain, addr, amount, fee_rate).await.map_err(|e| {
+                    let txid = w.send(&chain, addr, amount, fee_rate).await.map_err(|e| {
                         BarkError::Internal {
                             error_message: format!("Send failed: {}", e),
                         }
@@ -234,12 +253,13 @@ impl OnchainWallet {
                     eprintln!("[ONCHAIN] Transaction broadcast: {}", txid);
 
                     Ok(txid.to_string())
-                })
+                }
+                OnchainWalletInner::Callback { .. } => Err(BarkError::Internal {
+                    error_message: "send() not supported for callback wallets".to_string(),
+                }),
             }
-            OnchainWalletInner::Callback { .. } => Err(BarkError::Internal {
-                error_message: "send() not supported for callback wallets".to_string(),
-            }),
-        }
+        })
+        .await
     }
 
     /// Internal method to get mutable reference to BDK wallet for Wallet operations

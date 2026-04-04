@@ -570,7 +570,7 @@ interface OnchainWallet {
     ///
     /// The wallet uses BDK for onchain operations
     /// and the same chain source configuration as the Bark wallet (esplora_address or bitcoind_*).
-    [Throws=BarkError, Name=default]
+    [Async, Throws=BarkError, Name=default]
     constructor(string mnemonic, Config config, string datadir);
 
     /// Create an onchain wallet using a custom implementation
@@ -583,20 +583,20 @@ interface OnchainWallet {
 
     /// Sync the onchain wallet with the blockchain
     /// Returns the amount synced in satoshis
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u64 sync();
 
     /// Get the onchain wallet balance
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     OnchainBalance balance();
 
     /// Generate a new Bitcoin address
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string new_address();
 
     /// Send Bitcoin to an address
     /// Returns the transaction ID
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string send(string address, u64 amount_sats, u64 fee_rate_sat_per_vb);
 };
 
@@ -607,15 +607,15 @@ interface OnchainWallet {
 /// The main Bark wallet interface for Ark operations
 interface Wallet {
     /// Create a new Bark wallet
-    [Throws=BarkError, Name=create]
+    [Async, Throws=BarkError, Name=create]
     constructor(string mnemonic, Config config, string datadir, boolean force_rescan);
 
     /// Open an existing Bark wallet
-    [Throws=BarkError, Name=open]
+    [Async, Throws=BarkError, Name=open]
     constructor(string mnemonic, Config config, string datadir);
 
     /// Create a new Bark wallet WITH onchain capabilities
-    [Throws=BarkError, Name=create_with_onchain]
+    [Async, Throws=BarkError, Name=create_with_onchain]
     constructor(
         string mnemonic,
         Config config,
@@ -625,7 +625,7 @@ interface Wallet {
     );
 
     /// Open an existing Bark wallet WITH onchain capabilities
-    [Throws=BarkError, Name=open_with_onchain]
+    [Async, Throws=BarkError, Name=open_with_onchain]
     constructor(
         string mnemonic,
         Config config,
@@ -640,55 +640,55 @@ interface Wallet {
     /// Lightweight sync with Ark server and blockchain
     /// Note: Bark's sync() handles errors internally with logging.
     /// The Throws annotation is for forward compatibility only.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void sync();
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void maintenance();
 
     /// Perform maintenance in delegated (non-interactive) mode
     ///
     /// This schedules refresh operations but doesn't wait for completion.
     /// Use this when you want to queue operations without blocking.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void maintenance_delegated();
 
     /// Perform maintenance with onchain wallet in delegated mode
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void maintenance_with_onchain_delegated(OnchainWallet onchain_wallet);
 
     // ------------------------------------------------------------------------
     // Address Generation
     // ------------------------------------------------------------------------
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string new_address();
 
     // ------------------------------------------------------------------------
     // Balance & VTXOs
     // ------------------------------------------------------------------------
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     Balance balance();
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<Vtxo> vtxos();
 
     // ------------------------------------------------------------------------
     // Offboarding (Move funds from Ark to on-chain)
     // ------------------------------------------------------------------------
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     OffboardResult offboard_all(string bitcoin_address);
 
     // ------------------------------------------------------------------------
     // Lightning Payments (Send)
     // ------------------------------------------------------------------------
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     LightningSend pay_lightning_invoice(string invoice, u64? amount_sats);
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     LightningSend pay_lightning_address(
         string lightning_address,
         u64 amount_sats,
@@ -699,24 +699,24 @@ interface Wallet {
     // Lightning Payments (Receive)
     // ------------------------------------------------------------------------
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     LightningInvoice bolt11_invoice(u64 amount_sats);
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<LightningReceive> try_claim_all_lightning_receives(boolean wait);
 
     // ------------------------------------------------------------------------
     // Arkoor Payments (Out-of-round Ark payments)
     // ------------------------------------------------------------------------
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string send_arkoor_payment(string ark_address, u64 amount_sats);
 
     // ------------------------------------------------------------------------
     // On-chain Sends
     // ------------------------------------------------------------------------
 
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string send_onchain(string address, u64 amount_sats);
 
     // ------------------------------------------------------------------------
@@ -724,15 +724,15 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     /// Generate a new address and return it with its index
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     AddressWithIndex new_address_with_index();
 
     /// Peek at an address at a specific index
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string peek_address(u32 index);
 
     /// DEPRECATED: use `peek_address` instead
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string peak_address(u32 index);
 
     // ------------------------------------------------------------------------
@@ -740,7 +740,7 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     /// Get all wallet movements (transaction history)
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<Movement> history();
 
     /// Get wallet movements filtered by payment method
@@ -749,7 +749,7 @@ interface Wallet {
     ///
     /// * `payment_method_type` - Type (e.g. "ark", "bitcoin", "invoice", "offer", "lightning_address", "custom")
     /// * `payment_method_value` - Value (e.g. an address or invoice string)
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<Movement> history_by_payment_method(string payment_method_type, string payment_method_value);
 
     // ------------------------------------------------------------------------
@@ -757,23 +757,23 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     /// Get a specific VTXO by ID
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     Vtxo get_vtxo_by_id(string vtxo_id);
 
     /// Get all spendable VTXOs
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<Vtxo> spendable_vtxos();
 
     /// Get all VTXOs (including spent)
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<Vtxo> all_vtxos();
 
     /// Get VTXOs expiring within threshold blocks
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<Vtxo> get_expiring_vtxos(u32 threshold_blocks);
 
     /// Get VTXOs that should be refreshed
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<Vtxo> get_vtxos_to_refresh();
 
     // ------------------------------------------------------------------------
@@ -781,7 +781,7 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     /// Offboard specific VTXOs to a Bitcoin address
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string offboard_vtxos(sequence<string> vtxo_ids, string bitcoin_address);
 
     // ------------------------------------------------------------------------
@@ -789,17 +789,17 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     /// Refresh specific VTXOs
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string? refresh_vtxos(sequence<string> vtxo_ids);
 
     /// Perform maintenance refresh
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string? maintenance_refresh();
 
     /// Refresh VTXOs in delegated (non-interactive) mode
     ///
     /// Returns the round state if a refresh was scheduled, null otherwise.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     RoundState? refresh_vtxos_delegated(sequence<string> vtxo_ids);
 
     // ------------------------------------------------------------------------
@@ -807,15 +807,15 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     /// Get all pending lightning sends
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<LightningSend> pending_lightning_sends();
 
     /// Get all pending lightning receives
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<LightningReceive> pending_lightning_receives();
 
     /// Get claimable lightning receive balance
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u64 claimable_lightning_receive_balance_sats();
 
     /// Pay a BOLT12 lightning offer
@@ -824,7 +824,7 @@ interface Wallet {
     ///
     /// * `offer` - BOLT12 offer string
     /// * `amount_sats` - Optional amount in sats (required if offer doesn't specify amount)
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     LightningSend pay_lightning_offer(string offer, u64? amount_sats);
 
     /// Check lightning payment status by payment hash
@@ -835,7 +835,7 @@ interface Wallet {
     /// * `wait` - Whether to wait for the payment to complete
     ///
     /// Returns the preimage if payment is successful, null if still pending
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string? check_lightning_payment(string payment_hash, boolean wait);
 
     /// Get lightning receive status by payment hash
@@ -843,7 +843,7 @@ interface Wallet {
     /// # Arguments
     ///
     /// * `payment_hash` - Payment hash as hex string
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     LightningReceive? lightning_receive_status(string payment_hash);
 
     /// Try to claim a specific lightning receive by payment hash
@@ -852,7 +852,7 @@ interface Wallet {
     ///
     /// * `payment_hash` - Payment hash as hex string
     /// * `wait` - Whether to wait for claim to complete
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void try_claim_lightning_receive(string payment_hash, boolean wait);
 
     // ------------------------------------------------------------------------
@@ -860,20 +860,22 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     /// Get Ark server info (null if not connected)
+    [Async]
     ArkInfo? ark_info();
 
     /// Get wallet properties
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     WalletProperties properties();
 
     /// Get wallet config
+    [Async]
     Config config();
 
     /// Get the wallet's BIP32 fingerprint
     string fingerprint();
 
     /// Get the Bitcoin network this wallet is using
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     Network network();
 
     /// Get the mailbox identifier for push notifications
@@ -889,7 +891,7 @@ interface Wallet {
 
     /// Get the timestamp when the next round will start (Unix timestamp in seconds)
     /// Returns an error if the server hasn't provided round timing info
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u64 next_round_start_time();
 
     // ------------------------------------------------------------------------
@@ -897,31 +899,31 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     /// Board a specific amount from onchain wallet into Ark
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     PendingBoard board_amount(OnchainWallet onchain_wallet, u64 amount_sats);
 
     /// Board all funds from onchain wallet into Ark
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     PendingBoard board_all(OnchainWallet onchain_wallet);
 
     /// Sync pending board transactions
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void sync_pending_boards();
 
     /// Get all pending board operations
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<PendingBoard> pending_boards();
 
     /// Get all VTXOs that are part of pending boards
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<Vtxo> pending_board_vtxos();
 
     /// Get VTXOs being used as inputs in pending rounds
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<Vtxo> pending_round_input_vtxos();
 
     /// Get VTXOs locked in pending Lightning sends
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<Vtxo> pending_lightning_send_vtxos();
 
     // ------------------------------------------------------------------------
@@ -929,11 +931,11 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     /// Start unilateral exit for the entire wallet
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void start_exit_for_entire_wallet();
 
     /// Sync exit state (checks status but doesn't progress)
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void sync_exits(OnchainWallet onchain_wallet);
 
     // ------------------------------------------------------------------------
@@ -949,7 +951,7 @@ interface Wallet {
     ///
     /// * `onchain_wallet` - Onchain wallet for building exit transactions
     /// * `fee_rate_sat_per_vb` - Optional fee rate override in sats/vB
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<ExitProgressStatus> progress_exits(
         OnchainWallet onchain_wallet,
         u64? fee_rate_sat_per_vb
@@ -958,31 +960,31 @@ interface Wallet {
     /// Start unilateral exit for specific VTXOs
     ///
     /// Marks specific VTXOs for exit. Call progress_exits() to actually advance them.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void start_exit_for_vtxos(sequence<string> vtxo_ids);
 
     /// List all exits that are claimable
     ///
     /// Returns exits ready to be drained to onchain wallet.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<ExitVtxo> list_claimable_exits();
 
     /// Get all VTXOs currently in exit process
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<ExitVtxo> get_exit_vtxos();
 
     /// Check if any exits are pending
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     boolean has_pending_exits();
 
     /// Get total amount in pending exits (sats)
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u64 pending_exits_total_sats();
 
     /// Get earliest block height when all exits will be claimable
     ///
     /// Returns null if no exits or any exit has undetermined claimability.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u32? all_exits_claimable_at_height();
 
     /// Get detailed exit status for a specific VTXO
@@ -994,7 +996,7 @@ interface Wallet {
     /// * `vtxo_id` - The VTXO ID to check
     /// * `include_history` - Whether to include full state machine history
     /// * `include_transactions` - Whether to include transaction details
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     ExitTransactionStatus? get_exit_status(
         string vtxo_id,
         boolean include_history,
@@ -1011,7 +1013,7 @@ interface Wallet {
     /// * `vtxo_ids` - List of claimable VTXO IDs to drain (empty = drain all)
     /// * `address` - Bitcoin address to send claimed funds to
     /// * `fee_rate_sat_per_vb` - Optional fee rate override in sats/vB
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     ExitClaimTransaction drain_exits(
         sequence<string> vtxo_ids,
         string address,
@@ -1023,21 +1025,21 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     /// Get all pending round states
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     sequence<RoundState> pending_round_states();
 
     /// Cancel a specific pending round
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void cancel_pending_round(u32 round_id);
 
     /// Cancel all pending rounds
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void cancel_all_pending_rounds();
 
     /// Progress pending rounds
     ///
     /// Advances the state of all pending rounds. Call periodically.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void progress_pending_rounds();
 
     // ------------------------------------------------------------------------
@@ -1047,7 +1049,7 @@ interface Wallet {
     /// Refresh the Ark server connection
     ///
     /// Re-establishes connection if it was lost.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void refresh_server();
 
     /// Validate an Ark address against the connected server
@@ -1055,13 +1057,13 @@ interface Wallet {
     /// This performs full validation including checking if the address
     /// belongs to the currently connected Ark server.
     /// For basic format validation only, use validate_ark_address() instead.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     boolean validate_arkoor_address(string address);
 
     /// Full maintenance including onchain wallet sync
     ///
     /// More thorough than maintenance() - also syncs onchain wallet and exits.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void maintenance_with_onchain(OnchainWallet onchain_wallet);
 
     // ------------------------------------------------------------------------
@@ -1071,20 +1073,20 @@ interface Wallet {
     /// Get the block height of the first expiring VTXO
     ///
     /// Returns null if there are no spendable VTXOs.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u32? get_first_expiring_vtxo_blockheight();
 
     /// Get the next block height when a refresh should be performed
     ///
     /// This is calculated as the first expiring VTXO height minus the refresh threshold.
     /// Returns null if there are no VTXOs to refresh.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u32? get_next_required_refresh_blockheight();
 
     /// Schedule a maintenance refresh if VTXOs need refreshing
     ///
     /// Returns the round ID if a refresh was scheduled, null otherwise.
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u32? maybe_schedule_maintenance_refresh();
 
     // ------------------------------------------------------------------------
@@ -1101,7 +1103,7 @@ interface Wallet {
     /// * `psbt_base64` - Base64-encoded PSBT to sign
     ///
     /// Returns the signed PSBT
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string sign_exit_claim_inputs(string psbt_base64);
 
     // ------------------------------------------------------------------------
@@ -1118,7 +1120,7 @@ interface Wallet {
     /// * `tx_hex` - Hex-encoded signed transaction
     ///
     /// Returns the transaction ID (txid) of the broadcasted transaction
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     string broadcast_tx(string tx_hex);
 
     // ------------------------------------------------------------------------
@@ -1146,7 +1148,7 @@ interface Wallet {
     /// # Arguments
     ///
     /// * `vtxo_base64` - Base64-encoded serialized VTXO
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     void import_vtxo(string vtxo_base64);
 
     // ------------------------------------------------------------------------
@@ -1160,7 +1162,7 @@ interface Wallet {
     /// * `amount_sats` - Amount to board in sats
     ///
     /// Returns the estimated fee in sats
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u64 estimate_board_fee(u64 amount_sats);
 
     /// Estimate the fee for an offboard operation
@@ -1171,7 +1173,7 @@ interface Wallet {
     /// * `vtxo_ids` - VTXOs to offboard
     ///
     /// Returns the estimated fee in sats
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u64 estimate_offboard_fee(string address, sequence<string> vtxo_ids);
 
     /// Estimate the fee for a refresh operation
@@ -1181,7 +1183,7 @@ interface Wallet {
     /// * `vtxo_ids` - VTXOs to refresh
     ///
     /// Returns the estimated fee in sats
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u64 estimate_refresh_fee(sequence<string> vtxo_ids);
 
     /// Estimate the fee for a lightning send
@@ -1191,7 +1193,7 @@ interface Wallet {
     /// * `amount_sats` - Amount to send in sats
     ///
     /// Returns the estimated fee in sats
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u64 estimate_lightning_send_fee(u64 amount_sats);
 
     /// Estimate the fee for a lightning receive
@@ -1201,7 +1203,7 @@ interface Wallet {
     /// * `amount_sats` - Amount to receive in sats
     ///
     /// Returns the estimated fee in sats
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u64 estimate_lightning_receive_fee(u64 amount_sats);
 
     /// Estimate the fee for a send onchain operation
@@ -1212,7 +1214,7 @@ interface Wallet {
     /// * `amount_sats` - Amount to send in sats
     ///
     /// Returns the estimated fee in sats
-    [Throws=BarkError]
+    [Async, Throws=BarkError]
     u64 estimate_send_onchain_fee(string address, u64 amount_sats);
 
     // ------------------------------------------------------------------------
