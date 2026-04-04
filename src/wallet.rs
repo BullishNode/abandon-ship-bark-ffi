@@ -1001,6 +1001,8 @@ impl Wallet {
                 htlc_recv_claim_delta: Some(cfg.htlc_recv_claim_delta),
                 fallback_fee_rate: cfg.fallback_fee_rate.map(|r| r.to_sat_per_kwu()),
                 round_tx_required_confirmations: Some(cfg.round_tx_required_confirmations),
+                daemon_fast_sync_interval_secs: Some(cfg.daemon_fast_sync_interval_secs),
+                daemon_slow_sync_interval_secs: Some(cfg.daemon_slow_sync_interval_secs),
             }
         })
         .await
@@ -1929,15 +1931,15 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Estimate the fee for a board operation
-    pub async fn estimate_board_fee(&self, amount_sats: u64) -> Result<u64, BarkError> {
+    pub async fn estimate_board_fee(&self, amount_sats: u64) -> Result<FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
-            let fee = inner
+            let estimate = inner
                 .estimate_board_offchain_fee(amount)
                 .await
                 .map_err(BarkError::from)?;
-            Ok(fee.fee.to_sat())
+            Ok(estimate.into())
         })
         .await
     }
@@ -1947,7 +1949,7 @@ impl Wallet {
         &self,
         address: String,
         vtxo_ids: Vec<String>,
-    ) -> Result<u64, BarkError> {
+    ) -> Result<FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let btc_addr = address
@@ -1979,17 +1981,20 @@ impl Wallet {
                 vtxos.push(vtxo);
             }
 
-            let fee = inner
+            let estimate = inner
                 .estimate_offboard(&btc_addr, &vtxos)
                 .await
                 .map_err(BarkError::from)?;
-            Ok(fee.fee.to_sat())
+            Ok(estimate.into())
         })
         .await
     }
 
     /// Estimate the fee for a refresh operation
-    pub async fn estimate_refresh_fee(&self, vtxo_ids: Vec<String>) -> Result<u64, BarkError> {
+    pub async fn estimate_refresh_fee(
+        &self,
+        vtxo_ids: Vec<String>,
+    ) -> Result<FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let ids: Result<Vec<_>, _> = vtxo_ids
@@ -2015,39 +2020,45 @@ impl Wallet {
                 vtxos.push(vtxo);
             }
 
-            let fee = inner
+            let estimate = inner
                 .estimate_refresh_fee(&vtxos)
                 .await
                 .map_err(BarkError::from)?;
-            Ok(fee.fee.to_sat())
+            Ok(estimate.into())
         })
         .await
     }
 
     /// Estimate the fee for a lightning send
-    pub async fn estimate_lightning_send_fee(&self, amount_sats: u64) -> Result<u64, BarkError> {
+    pub async fn estimate_lightning_send_fee(
+        &self,
+        amount_sats: u64,
+    ) -> Result<FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
-            let fee = inner
+            let estimate = inner
                 .estimate_lightning_send_fee(amount)
                 .await
                 .map_err(BarkError::from)?;
-            Ok(fee.fee.to_sat())
+            Ok(estimate.into())
         })
         .await
     }
 
     /// Estimate the fee for a lightning receive
-    pub async fn estimate_lightning_receive_fee(&self, amount_sats: u64) -> Result<u64, BarkError> {
+    pub async fn estimate_lightning_receive_fee(
+        &self,
+        amount_sats: u64,
+    ) -> Result<FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
-            let fee = inner
+            let estimate = inner
                 .estimate_lightning_receive_fee(amount)
                 .await
                 .map_err(BarkError::from)?;
-            Ok(fee.fee.to_sat())
+            Ok(estimate.into())
         })
         .await
     }
@@ -2072,12 +2083,35 @@ impl Wallet {
     // Fee Estimation
     // ------------------------------------------------------------------------
 
+    /// Estimate the fee for offboarding all spendable VTXOs
+    pub async fn estimate_offboard_all_fee(
+        &self,
+        address: String,
+    ) -> Result<FeeEstimate, BarkError> {
+        let inner = self.inner.clone();
+        run_async(async move {
+            let btc_addr = address
+                .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+                .map_err(|e| BarkError::Internal {
+                    error_message: format!("Failed to parse address: {}", e),
+                })?
+                .assume_checked();
+
+            let estimate = inner
+                .estimate_offboard_all(&btc_addr)
+                .await
+                .map_err(BarkError::from)?;
+            Ok(estimate.into())
+        })
+        .await
+    }
+
     /// Estimate the fee for a send onchain operation
     pub async fn estimate_send_onchain_fee(
         &self,
         address: String,
         amount_sats: u64,
-    ) -> Result<u64, BarkError> {
+    ) -> Result<FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let btc_addr = address
@@ -2088,11 +2122,11 @@ impl Wallet {
                 .assume_checked();
 
             let amount = bitcoin::Amount::from_sat(amount_sats);
-            let fee = inner
+            let estimate = inner
                 .estimate_send_onchain(&btc_addr, amount)
                 .await
                 .map_err(BarkError::from)?;
-            Ok(fee.fee.to_sat())
+            Ok(estimate.into())
         })
         .await
     }
