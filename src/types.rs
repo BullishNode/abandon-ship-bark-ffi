@@ -57,6 +57,8 @@ pub struct Config {
     pub htlc_recv_claim_delta: Option<u16>,
     pub fallback_fee_rate: Option<u64>,
     pub round_tx_required_confirmations: Option<u32>,
+    pub daemon_fast_sync_interval_secs: Option<u64>,
+    pub daemon_slow_sync_interval_secs: Option<u64>,
 }
 
 impl From<Config> for bark::Config {
@@ -85,6 +87,12 @@ impl From<Config> for bark::Config {
         }
         if let Some(confs) = c.round_tx_required_confirmations {
             cfg.round_tx_required_confirmations = confs;
+        }
+        if let Some(secs) = c.daemon_fast_sync_interval_secs {
+            cfg.daemon_fast_sync_interval_secs = secs;
+        }
+        if let Some(secs) = c.daemon_slow_sync_interval_secs {
+            cfg.daemon_slow_sync_interval_secs = secs;
         }
 
         cfg
@@ -305,6 +313,29 @@ impl From<bark::movement::Movement> for Movement {
             created_at: m.time.created_at.to_rfc3339(),
             updated_at: m.time.updated_at.to_rfc3339(),
             completed_at: m.time.completed_at.map(|t| t.to_rfc3339()),
+        }
+    }
+}
+
+// ============================================================================
+// FeeEstimate
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct FeeEstimate {
+    pub gross_amount_sats: u64,
+    pub fee_sats: u64,
+    pub net_amount_sats: u64,
+    pub vtxos_spent: Vec<String>,
+}
+
+impl From<bark::FeeEstimate> for FeeEstimate {
+    fn from(f: bark::FeeEstimate) -> Self {
+        Self {
+            gross_amount_sats: f.gross_amount.to_sat(),
+            fee_sats: f.fee.to_sat(),
+            net_amount_sats: f.net_amount.to_sat(),
+            vtxos_spent: f.vtxos_spent.iter().map(|v| v.to_string()).collect(),
         }
     }
 }

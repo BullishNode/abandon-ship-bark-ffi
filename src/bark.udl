@@ -96,6 +96,12 @@ dictionary Config {
 
     /// Confirmations required before considering a round tx fully confirmed
     u32? round_tx_required_confirmations;
+
+    /// Fast sync interval for daemon tasks (lightning sync) in seconds
+    u64? daemon_fast_sync_interval_secs;
+
+    /// Slow sync interval for daemon tasks (onchain, exits, boards, etc.) in seconds
+    u64? daemon_slow_sync_interval_secs;
 };
 
 /// Read-only properties of the wallet
@@ -251,6 +257,23 @@ dictionary Movement {
 
     /// Completed at timestamp (null if not completed)
     string? completed_at;
+};
+
+/// Result of a fee estimation
+dictionary FeeEstimate {
+    /// The total amount including fees in sats
+    u64 gross_amount_sats;
+
+    /// The fee amount charged by the server in sats
+    u64 fee_sats;
+
+    /// The amount excluding fees in sats.
+    /// For sends, this is the amount the recipient receives.
+    /// For receives, this is the amount the user gets.
+    u64 net_amount_sats;
+
+    /// The VTXO IDs that would be spent for this operation
+    sequence<string> vtxos_spent;
 };
 
 /// Onchain Bitcoin wallet balance
@@ -1160,10 +1183,8 @@ interface Wallet {
     /// # Arguments
     ///
     /// * `amount_sats` - Amount to board in sats
-    ///
-    /// Returns the estimated fee in sats
     [Async, Throws=BarkError]
-    u64 estimate_board_fee(u64 amount_sats);
+    FeeEstimate estimate_board_fee(u64 amount_sats);
 
     /// Estimate the fee for an offboard operation
     ///
@@ -1171,40 +1192,40 @@ interface Wallet {
     ///
     /// * `address` - Destination address for the offboard
     /// * `vtxo_ids` - VTXOs to offboard
-    ///
-    /// Returns the estimated fee in sats
     [Async, Throws=BarkError]
-    u64 estimate_offboard_fee(string address, sequence<string> vtxo_ids);
+    FeeEstimate estimate_offboard_fee(string address, sequence<string> vtxo_ids);
 
     /// Estimate the fee for a refresh operation
     ///
     /// # Arguments
     ///
     /// * `vtxo_ids` - VTXOs to refresh
-    ///
-    /// Returns the estimated fee in sats
     [Async, Throws=BarkError]
-    u64 estimate_refresh_fee(sequence<string> vtxo_ids);
+    FeeEstimate estimate_refresh_fee(sequence<string> vtxo_ids);
 
     /// Estimate the fee for a lightning send
     ///
     /// # Arguments
     ///
     /// * `amount_sats` - Amount to send in sats
-    ///
-    /// Returns the estimated fee in sats
     [Async, Throws=BarkError]
-    u64 estimate_lightning_send_fee(u64 amount_sats);
+    FeeEstimate estimate_lightning_send_fee(u64 amount_sats);
 
     /// Estimate the fee for a lightning receive
     ///
     /// # Arguments
     ///
     /// * `amount_sats` - Amount to receive in sats
-    ///
-    /// Returns the estimated fee in sats
     [Async, Throws=BarkError]
-    u64 estimate_lightning_receive_fee(u64 amount_sats);
+    FeeEstimate estimate_lightning_receive_fee(u64 amount_sats);
+
+    /// Estimate the fee for offboarding all spendable VTXOs
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - Destination address for the offboard
+    [Async, Throws=BarkError]
+    FeeEstimate estimate_offboard_all_fee(string address);
 
     /// Estimate the fee for a send onchain operation
     ///
@@ -1212,10 +1233,8 @@ interface Wallet {
     ///
     /// * `address` - Destination address
     /// * `amount_sats` - Amount to send in sats
-    ///
-    /// Returns the estimated fee in sats
     [Async, Throws=BarkError]
-    u64 estimate_send_onchain_fee(string address, u64 amount_sats);
+    FeeEstimate estimate_send_onchain_fee(string address, u64 amount_sats);
 
     // ------------------------------------------------------------------------
     // Notifications
