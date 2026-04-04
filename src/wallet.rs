@@ -47,25 +47,23 @@ impl Wallet {
         datadir: String,
         force_rescan: bool,
     ) -> Result<InnerWallet, BarkError> {
-		run_async(async move {
-			let network: BtcNetwork = config.network.into();
-			let cfg: bark::Config = config.into();
+        let network: BtcNetwork = config.network.into();
+        let cfg: bark::Config = config.into();
 
-			let mnemonic =
-			Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
-				error_message: e.to_string(),
-			})?;
+        let mnemonic =
+            Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
+                error_message: e.to_string(),
+            })?;
 
-			// Use shared database cache
-			let db = crate::db::get_or_open_db(&datadir)
-			.with_context(|| format!("opening sqlite in {}", datadir))?;
+        // Use shared database cache
+        let db = crate::db::get_or_open_db(&datadir)
+            .with_context(|| format!("opening sqlite in {}", datadir))?;
 
-			let inner = InnerWallet::create(&mnemonic, network, cfg, db, force_rescan)
-			.await
-			.map_err(BarkError::from)?;
+        let inner = InnerWallet::create(&mnemonic, network, cfg, db, force_rescan)
+            .await
+            .map_err(BarkError::from)?;
 
-			Ok(inner)
-		}).await
+        Ok(inner)
     }
 
     /// Open an existing Bark wallet
@@ -81,31 +79,29 @@ impl Wallet {
         config: Config,
         datadir: String,
     ) -> Result<InnerWallet, BarkError> {
-		run_async(async move {
-			let cfg: bark::Config = config.into();
+        let cfg: bark::Config = config.into();
 
-			let mnemonic =
-			Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
-				error_message: e.to_string(),
-			})?;
+        let mnemonic =
+            Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
+                error_message: e.to_string(),
+            })?;
 
-			// Use shared database cache
-			let db = crate::db::get_or_open_db(&datadir)
-			.with_context(|| format!("opening sqlite in {}", datadir))?;
+        // Use shared database cache
+        let db = crate::db::get_or_open_db(&datadir)
+            .with_context(|| format!("opening sqlite in {}", datadir))?;
 
-			let inner = InnerWallet::open(&mnemonic, db, cfg)
-			.await
-			.map_err(BarkError::from)?;
+        let inner = InnerWallet::open(&mnemonic, db, cfg)
+            .await
+            .map_err(BarkError::from)?;
 
-			// Check if server connection was established
-			if inner.ark_info().await.ok().flatten().is_some() {
-			eprintln!("[OPEN] ✅ Server connection established");
-			} else {
-			eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark operations will not work!");
-			}
+        // Check if server connection was established
+        if inner.ark_info().await.ok().flatten().is_some() {
+            eprintln!("[OPEN] ✅ Server connection established");
+        } else {
+            eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark operations will not work!");
+        }
 
-			Ok(inner)
-		}).await
+        Ok(inner)
     }
 
     /// Create a new Bark wallet WITH onchain capabilities
