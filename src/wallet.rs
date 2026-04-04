@@ -23,8 +23,8 @@ impl Wallet {
         let inner = Arc::new(inner);
         let mailbox_task = Some(Self::start_mailbox_processor(inner.clone()));
         Self {
-			inner,
-			mailbox_task,
+            inner,
+            mailbox_task,
         }
     }
 
@@ -38,7 +38,8 @@ impl Wallet {
         run_async(async move {
             let inner = Self::create_async(mnemonic, config, datadir, force_rescan).await?;
             Ok(Self::from_inner(inner))
-        }).await
+        })
+        .await
     }
 
     async fn create_async(
@@ -67,11 +68,16 @@ impl Wallet {
     }
 
     /// Open an existing Bark wallet
-    pub async fn open(mnemonic: String, config: Config, datadir: String) -> Result<Self, BarkError> {
+    pub async fn open(
+        mnemonic: String,
+        config: Config,
+        datadir: String,
+    ) -> Result<Self, BarkError> {
         run_async(async move {
             let inner = Self::open_async(mnemonic, config, datadir).await?;
             Ok(Self::from_inner(inner))
-        }).await
+        })
+        .await
     }
 
     async fn open_async(
@@ -160,7 +166,8 @@ impl Wallet {
             eprintln!("[CREATE] ✅ Bark wallet with onchain created successfully");
 
             Ok(Self::from_inner(inner))
-        }).await
+        })
+        .await
     }
 
     /// Open an existing Bark wallet WITH onchain capabilities
@@ -251,7 +258,8 @@ impl Wallet {
             }
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Full maintenance: sync + refresh VTXOs if necessary
@@ -260,7 +268,8 @@ impl Wallet {
         run_async(async move {
             inner.maintenance().await?;
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Perform full maintenance including onchain sync
@@ -289,7 +298,8 @@ impl Wallet {
                 });
             }
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Perform maintenance in delegated (non-interactive) mode
@@ -301,7 +311,8 @@ impl Wallet {
         run_async(async move {
             inner.maintenance_delegated().await?;
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Perform maintenance with onchain wallet in delegated mode
@@ -330,7 +341,8 @@ impl Wallet {
                 });
             }
             Ok(())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -343,7 +355,8 @@ impl Wallet {
         run_async(async move {
             let addr = inner.new_address().await?;
             Ok(addr.to_string())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -353,22 +366,14 @@ impl Wallet {
     /// Get detailed wallet balance
     pub async fn balance(&self) -> Result<Balance, BarkError> {
         let inner = self.inner.clone();
-        run_async(async move {
-            Ok(inner.balance().await?.into())
-        }).await
+        run_async(async move { Ok(inner.balance().await?.into()) }).await
     }
 
     /// List all unspent VTXOs in the wallet
     pub async fn vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
         let inner = self.inner.clone();
-        run_async(async move {
-            Ok(inner
-                .vtxos()
-                .await?
-                .into_iter()
-                .map(Into::into)
-                .collect())
-        }).await
+        run_async(async move { Ok(inner.vtxos().await?.into_iter().map(Into::into).collect()) })
+            .await
     }
 
     // ------------------------------------------------------------------------
@@ -392,7 +397,8 @@ impl Wallet {
             let round_id = format!("{:?}", status);
 
             Ok(OffboardResult { round_id })
-        }).await
+        })
+        .await
     }
     // ------------------------------------------------------------------------
     // Lightning Payments (Send)
@@ -416,7 +422,8 @@ impl Wallet {
             let lightning_send = inner.pay_lightning_invoice(invoice, amount).await?;
 
             Ok(lightning_send.into())
-        }).await
+        })
+        .await
     }
 
     /// Pay to a Lightning Address (LNURL)
@@ -442,7 +449,8 @@ impl Wallet {
                 .await?;
 
             Ok(lightning_send.into())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -460,7 +468,8 @@ impl Wallet {
                 invoice: invoice.to_string(),
                 amount_sats,
             })
-        }).await
+        })
+        .await
     }
 
     /// Try to claim all pending Lightning receives
@@ -472,7 +481,8 @@ impl Wallet {
         run_async(async move {
             let receives = inner.try_claim_all_lightning_receives(wait).await?;
             Ok(receives.into_iter().map(Into::into).collect())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -501,7 +511,8 @@ impl Wallet {
                 .point()
                 .txid
                 .to_string())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -511,7 +522,11 @@ impl Wallet {
     /// Send to an onchain address using your offchain balance
     ///
     /// Returns the transaction ID (txid)
-    pub async fn send_onchain(&self, address: String, amount_sats: u64) -> Result<String, BarkError> {
+    pub async fn send_onchain(
+        &self,
+        address: String,
+        amount_sats: u64,
+    ) -> Result<String, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let addr = address
@@ -525,7 +540,8 @@ impl Wallet {
 
             let txid = inner.send_onchain(addr, amount).await?;
             Ok(txid.to_string())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -541,7 +557,8 @@ impl Wallet {
                 address: addr.to_string(),
                 index,
             })
-        }).await
+        })
+        .await
     }
 
     /// Peek at an address at a specific index
@@ -550,7 +567,8 @@ impl Wallet {
         run_async(async move {
             let addr = inner.peek_address(index).await?;
             Ok(addr.to_string())
-        }).await
+        })
+        .await
     }
 
     /// Peek at an address at a specific index
@@ -560,7 +578,8 @@ impl Wallet {
         run_async(async move {
             let addr = inner.peek_address(index).await?;
             Ok(addr.to_string())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -570,14 +589,8 @@ impl Wallet {
     /// Get all wallet movements (transaction history)
     pub async fn history(&self) -> Result<Vec<Movement>, BarkError> {
         let inner = self.inner.clone();
-        run_async(async move {
-            Ok(inner
-                .history()
-                .await?
-                .into_iter()
-                .map(Into::into)
-                .collect())
-        }).await
+        run_async(async move { Ok(inner.history().await?.into_iter().map(Into::into).collect()) })
+            .await
     }
 
     /// Get wallet movements filtered by payment method
@@ -607,7 +620,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -622,7 +636,8 @@ impl Wallet {
                 error_message: format!("invalid vtxo id: {}", e),
             })?;
             Ok(inner.get_vtxo_by_id(id).await?.into())
-        }).await
+        })
+        .await
     }
 
     /// Get all spendable VTXOs
@@ -635,7 +650,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     /// Get all VTXOs (including spent)
@@ -648,7 +664,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     /// Get VTXOs expiring within threshold blocks
@@ -661,7 +678,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     /// Get VTXOs that should be refreshed
@@ -674,7 +692,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -708,7 +727,8 @@ impl Wallet {
 
             let status = inner.offboard_vtxos(ids?, addr).await?;
             Ok(format!("{:?}", status))
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -731,7 +751,8 @@ impl Wallet {
 
             let result = inner.refresh_vtxos(ids?).await?;
             Ok(result.map(|s| format!("{:?}", s)))
-        }).await
+        })
+        .await
     }
 
     /// Perform maintenance refresh
@@ -740,7 +761,8 @@ impl Wallet {
         run_async(async move {
             let result = inner.maintenance_refresh().await?;
             Ok(result.map(|s| format!("{:?}", s)))
-        }).await
+        })
+        .await
     }
 
     /// Refresh VTXOs in delegated (non-interactive) mode
@@ -767,7 +789,8 @@ impl Wallet {
                 .map_err(BarkError::from)?;
 
             Ok(state.map(|s| s.into()))
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -784,7 +807,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     /// Get all pending lightning receives
@@ -797,18 +821,15 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     /// Get claimable lightning receive balance
     pub async fn claimable_lightning_receive_balance_sats(&self) -> Result<u64, BarkError> {
         let inner = self.inner.clone();
-        run_async(async move {
-            Ok(inner
-                .claimable_lightning_receive_balance()
-                .await?
-                .to_sat())
-        }).await
+        run_async(async move { Ok(inner.claimable_lightning_receive_balance().await?.to_sat()) })
+            .await
     }
 
     /// Pay a BOLT12 lightning offer
@@ -838,7 +859,8 @@ impl Wallet {
                 .await
                 .map(Into::into)
                 .map_err(Into::into)
-        }).await
+        })
+        .await
     }
 
     /// Check lightning payment status by payment hash
@@ -871,7 +893,8 @@ impl Wallet {
                 .await?;
 
             Ok(payment.and_then(|p| p.preimage).map(|p| p.to_string()))
-        }).await
+        })
+        .await
     }
 
     /// Get lightning receive status by payment hash
@@ -899,7 +922,8 @@ impl Wallet {
                 .lightning_receive_status(payment_hash_obj)
                 .await?
                 .map(Into::into))
-        }).await
+        })
+        .await
     }
 
     /// Try to claim a specific lightning receive by payment hash
@@ -930,7 +954,8 @@ impl Wallet {
                 .await?;
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -940,9 +965,7 @@ impl Wallet {
     /// Get read-only wallet properties
     pub async fn properties(&self) -> Result<WalletProperties, BarkError> {
         let inner = self.inner.clone();
-        run_async(async move {
-            Ok(inner.properties().await?.into())
-        }).await
+        run_async(async move { Ok(inner.properties().await?.into()) }).await
     }
 
     /// Get the wallet's BIP32 fingerprint
@@ -953,9 +976,7 @@ impl Wallet {
     /// Get the Bitcoin network this wallet is using
     pub async fn network(&self) -> Result<Network, BarkError> {
         let inner = self.inner.clone();
-        run_async(async move {
-            Ok(inner.network().await?.into())
-        }).await
+        run_async(async move { Ok(inner.network().await?.into()) }).await
     }
 
     /// Get wallet config
@@ -981,7 +1002,8 @@ impl Wallet {
                 fallback_fee_rate: cfg.fallback_fee_rate.map(|r| r.to_sat_per_kwu()),
                 round_tx_required_confirmations: Some(cfg.round_tx_required_confirmations),
             }
-        }).await
+        })
+        .await
     }
 
     /// Get Ark server info
@@ -992,7 +1014,8 @@ impl Wallet {
                 Ok(Some(info)) => Some((&info).into()),
                 _ => None,
             }
-        }).await
+        })
+        .await
     }
 
     /// Get the timestamp when the next round will start (Unix timestamp in seconds)
@@ -1005,7 +1028,8 @@ impl Wallet {
                 .duration_since(std::time::UNIX_EPOCH)
                 .expect("next round time should be after Unix epoch")
                 .as_secs())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -1147,7 +1171,8 @@ impl Wallet {
             eprintln!("[BOARD] ✅ Pending boards synced");
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Get all pending board operations
@@ -1160,7 +1185,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     /// Get all VTXOs that are part of pending boards
@@ -1173,7 +1199,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     /// Get VTXOs being used as inputs in pending rounds
@@ -1186,7 +1213,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     /// Get VTXOs locked in pending Lightning sends
@@ -1199,7 +1227,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -1235,7 +1264,8 @@ impl Wallet {
             eprintln!("[EXIT] ✅ Exit initiated - call sync_exits() periodically to progress");
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Sync exit state
@@ -1249,7 +1279,10 @@ impl Wallet {
     /// # Arguments
     ///
     /// * `onchain_wallet` - The onchain wallet for checking transaction state
-    pub async fn sync_exits(&self, onchain_wallet: Arc<crate::OnchainWallet>) -> Result<(), BarkError> {
+    pub async fn sync_exits(
+        &self,
+        onchain_wallet: Arc<crate::OnchainWallet>,
+    ) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             eprintln!("[EXIT] Syncing exits...");
@@ -1343,7 +1376,8 @@ impl Wallet {
             eprintln!("[EXIT] ✅ Exits progressed");
 
             Ok(statuses)
-        }).await
+        })
+        .await
     }
 
     /// Start unilateral exit for specific VTXOs
@@ -1371,13 +1405,12 @@ impl Wallet {
 
             let mut vtxos = Vec::new();
             for id in ids? {
-                let vtxo =
-                    inner
-                        .get_vtxo_by_id(id)
-                        .await
-                        .map_err(|e| BarkError::NotFound {
-                            error_message: format!("VTXO not found: {}", e),
-                        })?;
+                let vtxo = inner
+                    .get_vtxo_by_id(id)
+                    .await
+                    .map_err(|e| BarkError::NotFound {
+                        error_message: format!("VTXO not found: {}", e),
+                    })?;
                 vtxos.push(vtxo);
             }
 
@@ -1396,7 +1429,8 @@ impl Wallet {
             eprintln!("[EXIT] ✅ Exit initiated for {} VTXOs", vtxo_ids.len());
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// List all claimable exits
@@ -1408,7 +1442,8 @@ impl Wallet {
             let exit_guard = inner.exit.read().await;
             let claimable = exit_guard.list_claimable();
             Ok(claimable.into_iter().map(Into::into).collect())
-        }).await
+        })
+        .await
     }
 
     /// Get all exit VTXOs
@@ -1419,7 +1454,8 @@ impl Wallet {
         run_async(async move {
             let exit_guard = inner.exit.read().await;
             Ok(exit_guard.get_exit_vtxos().iter().map(Into::into).collect())
-        }).await
+        })
+        .await
     }
 
     /// Check if there are any pending exits
@@ -1428,7 +1464,8 @@ impl Wallet {
         run_async(async move {
             let exit_guard = inner.exit.read().await;
             Ok(exit_guard.has_pending_exits())
-        }).await
+        })
+        .await
     }
 
     /// Get total amount in pending exits (in sats)
@@ -1437,7 +1474,8 @@ impl Wallet {
         run_async(async move {
             let exit_guard = inner.exit.read().await;
             Ok(exit_guard.pending_total().to_sat())
-        }).await
+        })
+        .await
     }
 
     /// Get earliest block height when all exits will be claimable
@@ -1448,7 +1486,8 @@ impl Wallet {
         run_async(async move {
             let exit_guard = inner.exit.read().await;
             Ok(exit_guard.all_claimable_at_height().await)
-        }).await
+        })
+        .await
     }
 
     /// Get detailed exit status for a specific VTXO
@@ -1484,7 +1523,8 @@ impl Wallet {
                 })?;
 
             Ok(status.map(Into::into))
-        }).await
+        })
+        .await
     }
 
     /// Drain claimable exits to an address
@@ -1566,7 +1606,8 @@ impl Wallet {
                 psbt_base64,
                 fee_sats: fee_sats.to_sat(),
             })
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -1583,7 +1624,8 @@ impl Wallet {
                 .into_iter()
                 .map(Into::into)
                 .collect())
-        }).await
+        })
+        .await
     }
 
     /// Cancel a specific pending round
@@ -1595,11 +1637,10 @@ impl Wallet {
         let inner = self.inner.clone();
         run_async(async move {
             use bark::persist::models::RoundStateId;
-            inner
-                .cancel_pending_round(RoundStateId(round_id))
-                .await?;
+            inner.cancel_pending_round(RoundStateId(round_id)).await?;
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Cancel all pending rounds
@@ -1608,7 +1649,8 @@ impl Wallet {
         run_async(async move {
             inner.cancel_all_pending_rounds().await?;
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Progress pending rounds
@@ -1619,7 +1661,8 @@ impl Wallet {
         run_async(async move {
             inner.progress_pending_rounds(None).await?;
             Ok(())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -1634,7 +1677,8 @@ impl Wallet {
         run_async(async move {
             inner.refresh_server().await?;
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Validate an Ark address against the connected server
@@ -1657,7 +1701,8 @@ impl Wallet {
                 Ok(_) => Ok(true),
                 Err(_) => Ok(false),
             }
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -1669,9 +1714,7 @@ impl Wallet {
     /// Returns None if there are no spendable VTXOs.
     pub async fn get_first_expiring_vtxo_blockheight(&self) -> Result<Option<u32>, BarkError> {
         let inner = self.inner.clone();
-        run_async(async move {
-            Ok(inner.get_first_expiring_vtxo_blockheight().await?)
-        }).await
+        run_async(async move { Ok(inner.get_first_expiring_vtxo_blockheight().await?) }).await
     }
 
     /// Get the next block height when a refresh should be performed
@@ -1680,9 +1723,7 @@ impl Wallet {
     /// Returns None if there are no VTXOs to refresh.
     pub async fn get_next_required_refresh_blockheight(&self) -> Result<Option<u32>, BarkError> {
         let inner = self.inner.clone();
-        run_async(async move {
-            Ok(inner.get_next_required_refresh_blockheight().await?)
-        }).await
+        run_async(async move { Ok(inner.get_next_required_refresh_blockheight().await?) }).await
     }
 
     /// Schedule a maintenance refresh if VTXOs need refreshing
@@ -1695,7 +1736,8 @@ impl Wallet {
                 .maybe_schedule_maintenance_refresh()
                 .await?
                 .map(|id| id.0))
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -1739,7 +1781,8 @@ impl Wallet {
 
             let signed_psbt_bytes = psbt.serialize();
             Ok(BASE64_STANDARD.encode(&signed_psbt_bytes))
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -1790,7 +1833,8 @@ impl Wallet {
             eprintln!("[BROADCAST] Transaction broadcasted successfully");
 
             Ok(txid.to_string())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -1824,24 +1868,24 @@ impl Wallet {
 
     fn start_mailbox_processor(inner: Arc<InnerWallet>) -> tokio::task::JoinHandle<()> {
         TOKIO_RT.spawn(async move {
-        let mut retry_delay = 1;
+            let mut retry_delay = 1;
 
-        loop {
-            match inner.subscribe_process_mailbox_messages(None).await {
-                Ok(_) => {
-                    eprintln!("[MAILBOX] stream ended, restarting...");
-                    retry_delay = 1; // reset
+            loop {
+                match inner.subscribe_process_mailbox_messages(None).await {
+                    Ok(_) => {
+                        eprintln!("[MAILBOX] stream ended, restarting...");
+                        retry_delay = 1; // reset
+                    }
+                    Err(e) => {
+                        eprintln!("[MAILBOX] error: {:?}, retrying in {}s", e, retry_delay);
+                        tokio::time::sleep(std::time::Duration::from_secs(retry_delay)).await;
+                        retry_delay = (retry_delay * 2).min(30); // exponential backoff
+                        continue;
+                    }
                 }
-                Err(e) => {
-                    eprintln!("[MAILBOX] error: {:?}, retrying in {}s", e, retry_delay);
-                    tokio::time::sleep(std::time::Duration::from_secs(retry_delay)).await;
-                    retry_delay = (retry_delay * 2).min(30); // exponential backoff
-                    continue;
-                }
+
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
-
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        }
         })
     }
 
@@ -1876,7 +1920,8 @@ impl Wallet {
 
             eprintln!("[IMPORT] VTXO imported successfully");
             Ok(())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -1893,7 +1938,8 @@ impl Wallet {
                 .await
                 .map_err(BarkError::from)?;
             Ok(fee.fee.to_sat())
-        }).await
+        })
+        .await
     }
 
     /// Estimate the fee for an offboard operation
@@ -1924,13 +1970,12 @@ impl Wallet {
 
             let mut vtxos = Vec::new();
             for id in ids {
-                let vtxo =
-                    inner
-                        .get_vtxo_by_id(id)
-                        .await
-                        .map_err(|e| BarkError::NotFound {
-                            error_message: format!("VTXO not found: {}", e),
-                        })?;
+                let vtxo = inner
+                    .get_vtxo_by_id(id)
+                    .await
+                    .map_err(|e| BarkError::NotFound {
+                        error_message: format!("VTXO not found: {}", e),
+                    })?;
                 vtxos.push(vtxo);
             }
 
@@ -1939,7 +1984,8 @@ impl Wallet {
                 .await
                 .map_err(BarkError::from)?;
             Ok(fee.fee.to_sat())
-        }).await
+        })
+        .await
     }
 
     /// Estimate the fee for a refresh operation
@@ -1960,13 +2006,12 @@ impl Wallet {
             // Look up the actual VTXOs from the wallet
             let mut vtxos = Vec::new();
             for id in ids {
-                let vtxo =
-                    inner
-                        .get_vtxo_by_id(id)
-                        .await
-                        .map_err(|e| BarkError::NotFound {
-                            error_message: format!("VTXO not found: {}", e),
-                        })?;
+                let vtxo = inner
+                    .get_vtxo_by_id(id)
+                    .await
+                    .map_err(|e| BarkError::NotFound {
+                        error_message: format!("VTXO not found: {}", e),
+                    })?;
                 vtxos.push(vtxo);
             }
 
@@ -1975,7 +2020,8 @@ impl Wallet {
                 .await
                 .map_err(BarkError::from)?;
             Ok(fee.fee.to_sat())
-        }).await
+        })
+        .await
     }
 
     /// Estimate the fee for a lightning send
@@ -1988,7 +2034,8 @@ impl Wallet {
                 .await
                 .map_err(BarkError::from)?;
             Ok(fee.fee.to_sat())
-        }).await
+        })
+        .await
     }
 
     /// Estimate the fee for a lightning receive
@@ -2001,7 +2048,8 @@ impl Wallet {
                 .await
                 .map_err(BarkError::from)?;
             Ok(fee.fee.to_sat())
-        }).await
+        })
+        .await
     }
 
     // ------------------------------------------------------------------------
@@ -2045,14 +2093,15 @@ impl Wallet {
                 .await
                 .map_err(BarkError::from)?;
             Ok(fee.fee.to_sat())
-        }).await
+        })
+        .await
     }
 }
 
 impl Drop for Wallet {
     fn drop(&mut self) {
         if let Some(handle) = self.mailbox_task.take() {
-			handle.abort();
+            handle.abort();
         }
     }
 }
