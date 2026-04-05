@@ -57,8 +57,8 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "ark-lib"
-version = "0.1.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.0#1ee8b31d618d546f0156ac2e08357d6ba5259e2b"
+version = "0.1.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.1#e1cadf3812d809eaa52c1af085641de95e827080"
 dependencies = [
  "async-trait",
  "bark-bitcoin-ext",
@@ -154,8 +154,8 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "bark-bitcoin-ext"
-version = "0.1.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.0#1ee8b31d618d546f0156ac2e08357d6ba5259e2b"
+version = "0.1.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.1#e1cadf3812d809eaa52c1af085641de95e827080"
 dependencies = [
  "bdk_bitcoind_rpc",
  "bdk_wallet",
@@ -169,7 +169,7 @@ dependencies = [
 
 [[package]]
 name = "bark-ffi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -195,8 +195,8 @@ dependencies = [
 
 [[package]]
 name = "bark-server-rpc"
-version = "0.1.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.0#1ee8b31d618d546f0156ac2e08357d6ba5259e2b"
+version = "0.1.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.1#e1cadf3812d809eaa52c1af085641de95e827080"
 dependencies = [
  "ark-lib",
  "bitcoin",
@@ -213,8 +213,8 @@ dependencies = [
 
 [[package]]
 name = "bark-wallet"
-version = "0.1.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.0#1ee8b31d618d546f0156ac2e08357d6ba5259e2b"
+version = "0.1.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.1#e1cadf3812d809eaa52c1af085641de95e827080"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -660,16 +660,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "core-foundation"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
-dependencies = [
- "core-foundation-sys",
- "libc",
-]
-
-[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -816,9 +806,9 @@ checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "fastrand"
-version = "2.3.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
+checksum = "a043dc74da1e37d6afe657061213aa6f425f855399a11d3463c6ecccc4dfda1f"
 
 [[package]]
 name = "find-msvc-tools"
@@ -1678,12 +1668,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-name = "openssl-probe"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
-
-[[package]]
 name = "ordered-multimap"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2257,18 +2241,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustls-native-certs"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "612460d5f7bea540c490b2b6395d8e34a953e52b491accd6c86c8164c5932a63"
-dependencies = [
- "openssl-probe",
- "rustls-pki-types",
- "schannel",
- "security-framework",
-]
-
-[[package]]
 name = "rustls-pki-types"
 version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2300,15 +2272,6 @@ name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
-
-[[package]]
-name = "schannel"
-version = "0.1.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91c1b7e4904c873ef0710c1f407dde2e6287de2bebc1bbbf7d430bb7cbffd939"
-dependencies = [
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "scopeguard"
@@ -2375,29 +2338,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d3be00697c88c00fe102af8dc316038cc2062eab8da646e7463f4c0e70ca9fd"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "security-framework"
-version = "3.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d"
-dependencies = [
- "bitflags",
- "core-foundation",
- "core-foundation-sys",
- "libc",
- "security-framework-sys",
-]
-
-[[package]]
-name = "security-framework-sys"
-version = "2.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
-dependencies = [
- "core-foundation-sys",
- "libc",
 ]
 
 [[package]]
@@ -2906,7 +2846,6 @@ dependencies = [
  "hyper-util",
  "percent-encoding",
  "pin-project",
- "rustls-native-certs",
  "socket2",
  "sync_wrapper",
  "tokio",
