@@ -6,6 +6,7 @@ use bark::Wallet as InnerWallet;
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;
 use lnurl::lightning_address::LightningAddress;
+use tokio_util::sync::CancellationToken;
 
 use crate::error::BarkError;
 use crate::notification::NotificationHolder;
@@ -16,15 +17,20 @@ use crate::types::*;
 pub struct Wallet {
     inner: Arc<InnerWallet>,
     mailbox_task: Option<tokio::task::JoinHandle<()>>,
+    /// Held to keep the token alive; dropping cancels the mailbox task.
+    #[allow(dead_code)]
+    mailbox_cancel: CancellationToken,
 }
 
 impl Wallet {
     fn from_inner(inner: InnerWallet) -> Self {
         let inner = Arc::new(inner);
-        let mailbox_task = Some(Self::start_mailbox_processor(inner.clone()));
+        let cancel = CancellationToken::new();
+        let mailbox_task = Some(Self::start_mailbox_processor(inner.clone(), cancel.clone()));
         Self {
             inner,
             mailbox_task,
+            mailbox_cancel: cancel,
         }
     }
 
@@ -1868,22 +1874,37 @@ impl Wallet {
         Ok(hex::encode(auth.serialize()))
     }
 
-    fn start_mailbox_processor(inner: Arc<InnerWallet>) -> tokio::task::JoinHandle<()> {
+    fn start_mailbox_processor(
+        inner: Arc<InnerWallet>,
+        cancel: CancellationToken,
+    ) -> tokio::task::JoinHandle<()> {
         TOKIO_RT.spawn(async move {
             let mut retry_delay = 1;
 
             loop {
-                match inner.subscribe_process_mailbox_messages(None).await {
+                match inner
+                    .subscribe_process_mailbox_messages(None, cancel.clone())
+                    .await
+                {
                     Ok(_) => {
                         eprintln!("[MAILBOX] stream ended, restarting...");
                         retry_delay = 1; // reset
                     }
                     Err(e) => {
+                        if cancel.is_cancelled() {
+                            eprintln!("[MAILBOX] shutting down");
+                            return;
+                        }
                         eprintln!("[MAILBOX] error: {:?}, retrying in {}s", e, retry_delay);
                         tokio::time::sleep(std::time::Duration::from_secs(retry_delay)).await;
                         retry_delay = (retry_delay * 2).min(30); // exponential backoff
                         continue;
                     }
+                }
+
+                if cancel.is_cancelled() {
+                    eprintln!("[MAILBOX] shutting down");
+                    return;
                 }
 
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -2056,6 +2077,23 @@ impl Wallet {
             let amount = bitcoin::Amount::from_sat(amount_sats);
             let estimate = inner
                 .estimate_lightning_receive_fee(amount)
+                .await
+                .map_err(BarkError::from)?;
+            Ok(estimate.into())
+        })
+        .await
+    }
+
+    /// Estimate the fee for an arkoor payment
+    pub async fn estimate_arkoor_payment_fee(
+        &self,
+        amount_sats: u64,
+    ) -> Result<FeeEstimate, BarkError> {
+        let inner = self.inner.clone();
+        run_async(async move {
+            let amount = bitcoin::Amount::from_sat(amount_sats);
+            let estimate = inner
+                .estimate_arkoor_payment_fee(amount)
                 .await
                 .map_err(BarkError::from)?;
             Ok(estimate.into())

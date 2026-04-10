@@ -1236,6 +1236,14 @@ interface Wallet {
     [Async, Throws=BarkError]
     FeeEstimate estimate_send_onchain_fee(string address, u64 amount_sats);
 
+    /// Estimate the fee for an arkoor payment
+    ///
+    /// # Arguments
+    ///
+    /// * `amount_sats` - Amount to send in sats
+    [Async, Throws=BarkError]
+    FeeEstimate estimate_arkoor_payment_fee(u64 amount_sats);
+
     // ------------------------------------------------------------------------
     // Notifications
     // ------------------------------------------------------------------------
