@@ -1,6 +1,6 @@
 [package]
 name = "bark-ffi"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "MIT"
 authors = ["Team Second <hello@second.tech>"]
@@ -14,20 +14,20 @@ name = "bark_ffi"
 [dependencies.bark]
 git = "https://gitlab.com/ark-bitcoin/bark"
 package = "bark-wallet"
-rev = "bark-0.1.1"
+rev = "bark-0.1.2"
 default-features = false
 features = ["native", "tls-webpki-roots", "onchain-bdk", "sqlite"]
 
 [dependencies.ark-lib]
 git = "https://gitlab.com/ark-bitcoin/bark"
 package = "ark-lib"
-rev = "bark-0.1.1"
+rev = "bark-0.1.2"
 default-features = false
 
 [dependencies.bark-bitcoin-ext]
 git = "https://gitlab.com/ark-bitcoin/bark"
 package = "bark-bitcoin-ext"
-rev = "bark-0.1.1"
+rev = "bark-0.1.2"
 default-features = false
 
 [dependencies]
@@ -58,6 +58,7 @@ hex = "0.4"
 chrono = "0.4"
 # Add rusqlite directly with bundled feature for mobile platform support
 rusqlite = { version = "0.31.0", features = ["bundled", "chrono"] }
+tokio-util = "0.7.18"
 
 [build-dependencies]
 uniffi = { version = "=0.30.0", features = ["build"] }
