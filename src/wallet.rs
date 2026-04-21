@@ -16,7 +16,7 @@ use bark::Wallet as InnerWallet;
 use crate::error::BarkError;
 use crate::notification::NotificationHolder;
 use crate::runtime::{run_async, TOKIO_RT};
-use crate::types::*;
+use crate::types;
 
 
 /// The main Bark wallet interface
@@ -43,7 +43,7 @@ impl Wallet {
     /// Create a new Bark wallet
     pub async fn create(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
         force_rescan: bool,
     ) -> Result<Self, BarkError> {
@@ -56,7 +56,7 @@ impl Wallet {
 
     async fn create_async(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
         force_rescan: bool,
     ) -> Result<InnerWallet, BarkError> {
@@ -82,7 +82,7 @@ impl Wallet {
     /// Open an existing Bark wallet
     pub async fn open(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
     ) -> Result<Self, BarkError> {
         run_async(async move {
@@ -94,7 +94,7 @@ impl Wallet {
 
     async fn open_async(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
     ) -> Result<InnerWallet, BarkError> {
         let cfg: bark::Config = config.into();
@@ -126,7 +126,7 @@ impl Wallet {
     /// Create a new Bark wallet WITH onchain capabilities
     pub async fn create_with_onchain(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
         onchain_wallet: Arc<crate::OnchainWallet>,
         force_rescan: bool,
@@ -186,7 +186,7 @@ impl Wallet {
     /// Open an existing Bark wallet WITH onchain capabilities
     pub async fn open_with_onchain(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
         onchain_wallet: Arc<crate::OnchainWallet>,
     ) -> Result<Self, BarkError> {
@@ -378,13 +378,13 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Get detailed wallet balance
-    pub async fn balance(&self) -> Result<Balance, BarkError> {
+    pub async fn balance(&self) -> Result<types::Balance, BarkError> {
         let inner = self.inner.clone();
         run_async(async move { Ok(inner.balance().await?.into()) }).await
     }
 
     /// List all unspent VTXOs in the wallet
-    pub async fn vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move { Ok(inner.vtxos().await?.into_iter().map(Into::into).collect()) })
             .await
@@ -395,7 +395,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Offboard all spendable VTXOs to a Bitcoin address
-    pub async fn offboard_all(&self, bitcoin_address: String) -> Result<OffboardResult, BarkError> {
+    pub async fn offboard_all(&self, bitcoin_address: String) -> Result<types::OffboardResult, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let addr = bitcoin_address
@@ -410,7 +410,7 @@ impl Wallet {
             // Convert RoundStatus to a displayable round ID
             let round_id = format!("{:?}", status);
 
-            Ok(OffboardResult { round_id })
+            Ok(types::OffboardResult { round_id })
         })
         .await
     }
@@ -423,7 +423,7 @@ impl Wallet {
         &self,
         invoice: String,
         amount_sats: Option<u64>,
-    ) -> Result<LightningSend, BarkError> {
+    ) -> Result<types::LightningSend, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let invoice: Bolt11Invoice =
@@ -446,7 +446,7 @@ impl Wallet {
         lightning_address: String,
         amount_sats: u64,
         comment: Option<String>,
-    ) -> Result<LightningSend, BarkError> {
+    ) -> Result<types::LightningSend, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let addr: LightningAddress =
@@ -472,13 +472,13 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Create a BOLT11 invoice to receive Lightning payment
-    pub async fn bolt11_invoice(&self, amount_sats: u64) -> Result<LightningInvoice, BarkError> {
+    pub async fn bolt11_invoice(&self, amount_sats: u64) -> Result<types::LightningInvoice, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
             let invoice = inner.bolt11_invoice(amount).await?;
 
-            Ok(LightningInvoice {
+            Ok(types::LightningInvoice {
                 invoice: invoice.to_string(),
                 amount_sats,
             })
@@ -490,7 +490,7 @@ impl Wallet {
     pub async fn try_claim_all_lightning_receives(
         &self,
         wait: bool,
-    ) -> Result<Vec<LightningReceive>, BarkError> {
+    ) -> Result<Vec<types::LightningReceive>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let receives = inner.try_claim_all_lightning_receives(wait).await?;
@@ -563,11 +563,11 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Generate a new address and return it with its index
-    pub async fn new_address_with_index(&self) -> Result<AddressWithIndex, BarkError> {
+    pub async fn new_address_with_index(&self) -> Result<types::AddressWithIndex, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let (addr, index) = inner.new_address_with_index().await?;
-            Ok(AddressWithIndex {
+            Ok(types::AddressWithIndex {
                 address: addr.to_string(),
                 index,
             })
@@ -601,7 +601,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Get all wallet movements (transaction history)
-    pub async fn history(&self) -> Result<Vec<Movement>, BarkError> {
+    pub async fn history(&self) -> Result<Vec<types::Movement>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move { Ok(inner.history().await?.into_iter().map(Into::into).collect()) })
             .await
@@ -618,7 +618,7 @@ impl Wallet {
         &self,
         payment_method_type: String,
         payment_method_value: String,
-    ) -> Result<Vec<Movement>, BarkError> {
+    ) -> Result<Vec<types::Movement>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let payment_method = bark::movement::PaymentMethod::from_type_value(
@@ -644,7 +644,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Get a specific VTXO by ID
-    pub async fn get_vtxo_by_id(&self, vtxo_id: String) -> Result<Vtxo, BarkError> {
+    pub async fn get_vtxo_by_id(&self, vtxo_id: String) -> Result<types::Vtxo, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let id = vtxo_id.parse().map_err(|e| BarkError::InvalidAddress {
@@ -656,7 +656,7 @@ impl Wallet {
     }
 
     /// Get all spendable VTXOs
-    pub async fn spendable_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn spendable_vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -670,7 +670,7 @@ impl Wallet {
     }
 
     /// Get all VTXOs (including spent)
-    pub async fn all_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn all_vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -684,7 +684,7 @@ impl Wallet {
     }
 
     /// Get VTXOs expiring within threshold blocks
-    pub async fn get_expiring_vtxos(&self, threshold_blocks: u32) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn get_expiring_vtxos(&self, threshold_blocks: u32) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -698,7 +698,7 @@ impl Wallet {
     }
 
     /// Get VTXOs that should be refreshed
-    pub async fn get_vtxos_to_refresh(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn get_vtxos_to_refresh(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -786,7 +786,7 @@ impl Wallet {
     pub async fn refresh_vtxos_delegated(
         &self,
         vtxo_ids: Vec<String>,
-    ) -> Result<Option<RoundState>, BarkError> {
+    ) -> Result<Option<types::RoundState>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             // Parse vtxo IDs similar to refresh_vtxos
@@ -813,7 +813,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Get all pending lightning sends
-    pub async fn pending_lightning_sends(&self) -> Result<Vec<LightningSend>, BarkError> {
+    pub async fn pending_lightning_sends(&self) -> Result<Vec<types::LightningSend>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -827,7 +827,7 @@ impl Wallet {
     }
 
     /// Get all pending lightning receives
-    pub async fn pending_lightning_receives(&self) -> Result<Vec<LightningReceive>, BarkError> {
+    pub async fn pending_lightning_receives(&self) -> Result<Vec<types::LightningReceive>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -983,7 +983,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Get read-only wallet properties
-    pub async fn properties(&self) -> Result<WalletProperties, BarkError> {
+    pub async fn properties(&self) -> Result<types::WalletProperties, BarkError> {
         let inner = self.inner.clone();
         run_async(async move { Ok(inner.properties().await?.into()) }).await
     }
@@ -994,18 +994,18 @@ impl Wallet {
     }
 
     /// Get the Bitcoin network this wallet is using
-    pub async fn network(&self) -> Result<Network, BarkError> {
+    pub async fn network(&self) -> Result<types::Network, BarkError> {
         let inner = self.inner.clone();
         run_async(async move { Ok(inner.network().await?.into()) }).await
     }
 
     /// Get wallet config
-    pub async fn config(&self) -> Config {
+    pub async fn config(&self) -> types::Config {
         let inner = self.inner.clone();
         run_async(async move {
             let cfg = inner.config();
             let props = inner.properties().await.unwrap();
-            Config {
+            types::Config {
                 server_address: cfg.server_address.clone(),
                 server_access_token: cfg.server_access_token.clone(),
                 esplora_address: cfg.esplora_address.clone(),
@@ -1030,7 +1030,7 @@ impl Wallet {
     }
 
     /// Get Ark server info
-    pub async fn ark_info(&self) -> Option<ArkInfo> {
+    pub async fn ark_info(&self) -> Option<types::ArkInfo> {
         let inner = self.inner.clone();
         run_async(async move {
             match inner.ark_info().await {
@@ -1201,7 +1201,7 @@ impl Wallet {
     }
 
     /// Get all pending board operations
-    pub async fn pending_boards(&self) -> Result<Vec<PendingBoard>, BarkError> {
+    pub async fn pending_boards(&self) -> Result<Vec<types::PendingBoard>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -1215,7 +1215,7 @@ impl Wallet {
     }
 
     /// Get all VTXOs that are part of pending boards
-    pub async fn pending_board_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn pending_board_vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -1229,7 +1229,7 @@ impl Wallet {
     }
 
     /// Get VTXOs being used as inputs in pending rounds
-    pub async fn pending_round_input_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn pending_round_input_vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -1243,7 +1243,7 @@ impl Wallet {
     }
 
     /// Get VTXOs locked in pending Lightning sends
-    pub async fn pending_lightning_send_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn pending_lightning_send_vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -1964,7 +1964,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Estimate the fee for a board operation
-    pub async fn estimate_board_fee(&self, amount_sats: u64) -> Result<FeeEstimate, BarkError> {
+    pub async fn estimate_board_fee(&self, amount_sats: u64) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
@@ -1982,7 +1982,7 @@ impl Wallet {
         &self,
         address: String,
         vtxo_ids: Vec<String>,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let btc_addr = address
@@ -2027,7 +2027,7 @@ impl Wallet {
     pub async fn estimate_refresh_fee(
         &self,
         vtxo_ids: Vec<String>,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let ids: Result<Vec<_>, _> = vtxo_ids
@@ -2066,7 +2066,7 @@ impl Wallet {
     pub async fn estimate_lightning_send_fee(
         &self,
         amount_sats: u64,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
@@ -2083,7 +2083,7 @@ impl Wallet {
     pub async fn estimate_lightning_receive_fee(
         &self,
         amount_sats: u64,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
@@ -2100,7 +2100,7 @@ impl Wallet {
     pub async fn estimate_arkoor_payment_fee(
         &self,
         amount_sats: u64,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
@@ -2137,7 +2137,7 @@ impl Wallet {
     pub async fn estimate_offboard_all_fee(
         &self,
         address: String,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let btc_addr = address
@@ -2161,7 +2161,7 @@ impl Wallet {
         &self,
         address: String,
         amount_sats: u64,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let btc_addr = address
