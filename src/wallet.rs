@@ -1,12 +1,15 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Context;
-use bark::lightning_invoice::Bolt11Invoice;
-use bark::Wallet as InnerWallet;
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;
 use lnurl::lightning_address::LightningAddress;
 use tokio_util::sync::CancellationToken;
+
+use ark_lib::lightning::PaymentHash;
+use bark::lightning_invoice::Bolt11Invoice;
+use bark::Wallet as InnerWallet;
 
 use crate::error::BarkError;
 use crate::notification::NotificationHolder;
@@ -884,15 +887,10 @@ impl Wallet {
     ) -> Result<Option<String>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::lightning::PaymentHash;
-            use bitcoin::hex::FromHex;
-
-            let hash_bytes =
-                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+            let payment_hash_obj = PaymentHash::from_str(&payment_hash)
+                .map_err(|e| BarkError::InvalidInvoice {
                     error_message: format!("Invalid payment hash: {}", e),
                 })?;
-
-            let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
             let payment = inner
                 .check_lightning_payment(payment_hash_obj, wait)
@@ -914,15 +912,10 @@ impl Wallet {
     ) -> Result<Option<crate::LightningReceive>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::lightning::PaymentHash;
-            use bitcoin::hex::FromHex;
-
-            let hash_bytes =
-                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+            let payment_hash_obj = PaymentHash::from_str(&payment_hash)
+                .map_err(|e| BarkError::InvalidInvoice {
                     error_message: format!("Invalid payment hash: {}", e),
                 })?;
-
-            let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
             Ok(inner
                 .lightning_receive_status(payment_hash_obj)
@@ -945,15 +938,10 @@ impl Wallet {
     ) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::lightning::PaymentHash;
-            use bitcoin::hex::FromHex;
-
-            let hash_bytes =
-                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+            let payment_hash_obj = PaymentHash::from_str(&payment_hash)
+                .map_err(|e| BarkError::InvalidInvoice {
                     error_message: format!("Invalid payment hash: {}", e),
                 })?;
-
-            let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
             inner
                 .try_claim_lightning_receive(payment_hash_obj, wait, None)
@@ -975,15 +963,10 @@ impl Wallet {
     ) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::lightning::PaymentHash;
-            use bitcoin::hex::FromHex;
-
-            let hash_bytes =
-                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+            let payment_hash_obj = PaymentHash::from_str(&payment_hash)
+                .map_err(|e| BarkError::InvalidInvoice {
                     error_message: format!("Invalid payment hash: {}", e),
                 })?;
-
-            let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
             inner.cancel_lightning_receive(payment_hash_obj).await?;
 
