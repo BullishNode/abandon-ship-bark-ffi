@@ -2,12 +2,14 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Context;
+use base64::Engine;
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;
 use lnurl::lightning_address::LightningAddress;
 use tokio_util::sync::CancellationToken;
 
-use ark_lib::lightning::PaymentHash;
+use ark::{ProtocolEncoding, VtxoId};
+use ark::lightning::{Offer, PaymentHash};
 use bark::lightning_invoice::Bolt11Invoice;
 use bark::Wallet as InnerWallet;
 
@@ -15,6 +17,7 @@ use crate::error::BarkError;
 use crate::notification::NotificationHolder;
 use crate::runtime::{run_async, TOKIO_RT};
 use crate::types::*;
+
 
 /// The main Bark wallet interface
 pub struct Wallet {
@@ -508,7 +511,7 @@ impl Wallet {
     ) -> Result<String, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            let addr: ark_lib::Address =
+            let addr: ark::Address =
                 ark_address.parse().map_err(|e| BarkError::InvalidAddress {
                     error_message: format!("invalid ark address: {}", e),
                 })?;
@@ -730,7 +733,7 @@ impl Wallet {
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
                 .map(|id| {
-                    id.parse::<ark_lib::VtxoId>()
+                    id.parse::<VtxoId>()
                         .map_err(|e| BarkError::InvalidAddress {
                             error_message: format!("invalid vtxo id: {}", e),
                         })
@@ -754,7 +757,7 @@ impl Wallet {
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
                 .map(|id| {
-                    id.parse::<ark_lib::VtxoId>()
+                    id.parse::<VtxoId>()
                         .map_err(|e| BarkError::InvalidAddress {
                             error_message: format!("invalid vtxo id: {}", e),
                         })
@@ -789,7 +792,7 @@ impl Wallet {
             // Parse vtxo IDs similar to refresh_vtxos
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
-                .map(|s| s.parse::<ark_lib::VtxoId>())
+                .map(|s| s.parse::<VtxoId>())
                 .collect();
             let ids = ids.map_err(|e| BarkError::InvalidVtxoId {
                 error_message: e.to_string(),
@@ -857,9 +860,6 @@ impl Wallet {
     ) -> Result<crate::LightningSend, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::lightning::Offer;
-            use std::str::FromStr;
-
             let offer_obj = Offer::from_str(&offer).map_err(|e| BarkError::InvalidInvoice {
                 error_message: format!("Invalid BOLT12 offer: {:?}", e),
             })?;
@@ -1422,7 +1422,7 @@ impl Wallet {
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
                 .map(|id| {
-                    id.parse::<ark_lib::VtxoId>()
+                    id.parse::<VtxoId>()
                         .map_err(|e| BarkError::InvalidAddress {
                             error_message: format!("invalid vtxo id: {}", e),
                         })
@@ -1440,7 +1440,7 @@ impl Wallet {
                 vtxos.push(vtxo);
             }
 
-            let vtxo_refs: Vec<&ark_lib::Vtxo> = vtxos.iter().map(|v| &v.vtxo).collect();
+            let vtxo_refs: Vec<&ark::Vtxo> = vtxos.iter().map(|v| &v.vtxo).collect();
 
             inner
                 .exit
@@ -1535,7 +1535,7 @@ impl Wallet {
         run_async(async move {
             let vtxo_id_parsed =
                 vtxo_id
-                    .parse::<ark_lib::VtxoId>()
+                    .parse::<VtxoId>()
                     .map_err(|e| BarkError::InvalidAddress {
                         error_message: format!("invalid vtxo id: {}", e),
                     })?;
@@ -1593,7 +1593,7 @@ impl Wallet {
             } else {
                 let requested_ids: std::collections::HashSet<_> = vtxo_ids
                     .iter()
-                    .filter_map(|id| id.parse::<ark_lib::VtxoId>().ok())
+                    .filter_map(|id| id.parse::<VtxoId>().ok())
                     .collect();
                 claimable
                     .into_iter()
@@ -1718,7 +1718,7 @@ impl Wallet {
     pub async fn validate_arkoor_address(&self, address: String) -> Result<bool, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            let addr: ark_lib::Address =
+            let addr: ark::Address =
                 address.parse().map_err(|e| BarkError::InvalidAddress {
                     error_message: format!("invalid ark address: {}", e),
                 })?;
@@ -1882,8 +1882,6 @@ impl Wallet {
 
     /// Create a new authorization for your server mailbox
     pub fn mailbox_authorization(&self) -> Result<String, BarkError> {
-        use ark_lib::ProtocolEncoding;
-
         // Default expiry: 24 hours from now
         let expiry = chrono::Local::now() + chrono::Duration::hours(24);
 
@@ -1938,17 +1936,13 @@ impl Wallet {
     pub async fn import_vtxo(&self, vtxo_base64: String) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::ProtocolEncoding;
-            use base64::Engine;
-
             let vtxo_bytes = base64::engine::general_purpose::STANDARD
                 .decode(&vtxo_base64)
                 .map_err(|e| BarkError::Internal {
                     error_message: format!("Invalid base64: {}", e),
                 })?;
 
-            let vtxo =
-                ark_lib::Vtxo::deserialize(&vtxo_bytes).map_err(|e| BarkError::Internal {
+            let vtxo = ark::Vtxo::deserialize(&vtxo_bytes).map_err(|e| BarkError::Internal {
                     error_message: format!("Invalid VTXO data: {}", e),
                 })?;
 
@@ -2001,7 +1995,7 @@ impl Wallet {
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
                 .map(|id| {
-                    id.parse::<ark_lib::VtxoId>()
+                    id.parse::<VtxoId>()
                         .map_err(|e| BarkError::InvalidVtxoId {
                             error_message: format!("invalid vtxo id: {}", e),
                         })
@@ -2039,7 +2033,7 @@ impl Wallet {
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
                 .map(|id| {
-                    id.parse::<ark_lib::VtxoId>()
+                    id.parse::<VtxoId>()
                         .map_err(|e| BarkError::InvalidVtxoId {
                             error_message: format!("invalid vtxo id: {}", e),
                         })
