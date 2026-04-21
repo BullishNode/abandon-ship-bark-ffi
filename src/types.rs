@@ -46,6 +46,7 @@ impl From<BtcNetwork> for Network {
 #[derive(Clone, Debug)]
 pub struct Config {
     pub server_address: String,
+    pub server_access_token: Option<String>,
     pub esplora_address: Option<String>,
     pub bitcoind_address: Option<String>,
     pub bitcoind_cookiefile: Option<String>,
@@ -67,6 +68,7 @@ impl From<Config> for bark::Config {
         let mut cfg = bark::Config::network_default(network);
 
         cfg.server_address = c.server_address;
+        cfg.server_access_token = c.server_access_token;
         cfg.esplora_address = c.esplora_address;
         cfg.bitcoind_address = c.bitcoind_address;
         cfg.bitcoind_cookiefile = c.bitcoind_cookiefile.map(std::path::PathBuf::from);

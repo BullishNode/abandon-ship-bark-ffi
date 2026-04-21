@@ -964,6 +964,34 @@ impl Wallet {
         .await
     }
 
+    /// Cancel a pending lightning receive by payment hash
+    ///
+    /// # Arguments
+    ///
+    /// * `payment_hash` - Payment hash as hex string
+    pub async fn cancel_lightning_receive(
+        &self,
+        payment_hash: String,
+    ) -> Result<(), BarkError> {
+        let inner = self.inner.clone();
+        run_async(async move {
+            use ark_lib::lightning::PaymentHash;
+            use bitcoin::hex::FromHex;
+
+            let hash_bytes =
+                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+                    error_message: format!("Invalid payment hash: {}", e),
+                })?;
+
+            let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
+
+            inner.cancel_lightning_receive(payment_hash_obj).await?;
+
+            Ok(())
+        })
+        .await
+    }
+
     // ------------------------------------------------------------------------
     // Info
     // ------------------------------------------------------------------------
@@ -993,6 +1021,7 @@ impl Wallet {
             let props = inner.properties().await.unwrap();
             Config {
                 server_address: cfg.server_address.clone(),
+                server_access_token: cfg.server_access_token.clone(),
                 esplora_address: cfg.esplora_address.clone(),
                 bitcoind_address: cfg.bitcoind_address.clone(),
                 bitcoind_cookiefile: cfg

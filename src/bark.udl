@@ -64,6 +64,9 @@ dictionary Config {
     /// Ark server address
     string server_address;
 
+    /// Access token for private Ark servers (sent as `ark-access-token` HTTP header)
+    string? server_access_token;
+
     /// Esplora HTTP REST server address
     string? esplora_address;
 
@@ -877,6 +880,17 @@ interface Wallet {
     /// * `wait` - Whether to wait for claim to complete
     [Async, Throws=BarkError]
     void try_claim_lightning_receive(string payment_hash, boolean wait);
+
+    /// Cancel a pending lightning receive by payment hash
+    ///
+    /// Server will refuse if HTLCs already granted, preimage already revealed,
+    /// or receive already finished.
+    ///
+    /// # Arguments
+    ///
+    /// * `payment_hash` - Payment hash as hex string
+    [Async, Throws=BarkError]
+    void cancel_lightning_receive(string payment_hash);
 
     // ------------------------------------------------------------------------
     // Connection & Info
