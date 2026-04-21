@@ -113,7 +113,8 @@ impl Wallet {
         if inner.ark_info().await.ok().flatten().is_some() {
             eprintln!("[OPEN] ✅ Server connection established");
         } else {
-            eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark operations will not work!");
+            eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark \
+                operations will not work!");
         }
 
         Ok(inner)
@@ -219,7 +220,8 @@ impl Wallet {
             if inner.ark_info().await.ok().flatten().is_some() {
                 eprintln!("[OPEN] ✅ Server connection established");
             } else {
-                eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark operations will not work!");
+                eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark \
+                    operations will not work!");
             }
 
             eprintln!("[OPEN] ✅ Bark wallet with onchain opened successfully");
@@ -606,7 +608,8 @@ impl Wallet {
     ///
     /// # Arguments
     ///
-    /// * `payment_method_type` - Type of payment method (e.g. "ark", "bitcoin", "invoice", "offer", "lightning_address", "custom")
+    /// * `payment_method_type` - Type of payment method
+    ///   (e.g. "ark", "bitcoin", "invoice", "offer", "lightning_address", "custom")
     /// * `payment_method_value` - Value of the payment method (e.g. an address or invoice string)
     pub async fn history_by_payment_method(
         &self,
@@ -1097,7 +1100,8 @@ impl Wallet {
                     })?
             } else {
                 return Err(BarkError::OnchainWalletRequired {
-                    error_message: "Boarding requires a valid onchain wallet. Create one with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
+                    error_message: "Boarding requires a valid onchain wallet. Create one with \
+                        OnchainWallet.default() or OnchainWallet.custom()".to_string(),
                 });
             };
 
@@ -1151,7 +1155,8 @@ impl Wallet {
                     })?
             } else {
                 return Err(BarkError::OnchainWalletRequired {
-                    error_message: "Boarding requires a valid onchain wallet. Create one with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
+                    error_message: "Boarding requires a valid onchain wallet. Create one with \
+                        OnchainWallet.default() or OnchainWallet.custom()".to_string(),
                 });
             };
 
@@ -1325,7 +1330,8 @@ impl Wallet {
                     })?;
             } else {
                 return Err(BarkError::OnchainWalletRequired {
-                    error_message: "Syncing exits requires a valid onchain wallet. Create one with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
+                    error_message: "Syncing exits requires a valid onchain wallet. Create one \
+                        with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
                 });
             }
 
