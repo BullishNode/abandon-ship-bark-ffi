@@ -11,18 +11,18 @@ description = "Language-agnostic Rust FFI implementation for Bark SDK bindings u
 crate-type = ["lib", "staticlib", "cdylib"]
 name = "bark_ffi"
 
+[dependencies.ark]
+git = "https://gitlab.com/ark-bitcoin/bark"
+package = "ark-lib"
+rev = "bark-0.1.3"
+default-features = false
+
 [dependencies.bark]
 git = "https://gitlab.com/ark-bitcoin/bark"
 package = "bark-wallet"
 rev = "bark-0.1.3"
 default-features = false
 features = ["native", "tls-webpki-roots", "onchain-bdk", "sqlite"]
-
-[dependencies.ark-lib]
-git = "https://gitlab.com/ark-bitcoin/bark"
-package = "ark-lib"
-rev = "bark-0.1.3"
-default-features = false
 
 [dependencies.bark-bitcoin-ext]
 git = "https://gitlab.com/ark-bitcoin/bark"

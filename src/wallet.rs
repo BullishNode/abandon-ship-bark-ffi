@@ -1,17 +1,23 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Context;
-use bark::lightning_invoice::Bolt11Invoice;
-use bark::Wallet as InnerWallet;
+use base64::Engine;
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;
 use lnurl::lightning_address::LightningAddress;
 use tokio_util::sync::CancellationToken;
 
+use ark::{ProtocolEncoding, VtxoId};
+use ark::lightning::{Offer, PaymentHash};
+use bark::lightning_invoice::Bolt11Invoice;
+use bark::Wallet as InnerWallet;
+
 use crate::error::BarkError;
 use crate::notification::NotificationHolder;
 use crate::runtime::{run_async, TOKIO_RT};
-use crate::types::*;
+use crate::types;
+
 
 /// The main Bark wallet interface
 pub struct Wallet {
@@ -37,7 +43,7 @@ impl Wallet {
     /// Create a new Bark wallet
     pub async fn create(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
         force_rescan: bool,
     ) -> Result<Self, BarkError> {
@@ -50,7 +56,7 @@ impl Wallet {
 
     async fn create_async(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
         force_rescan: bool,
     ) -> Result<InnerWallet, BarkError> {
@@ -76,7 +82,7 @@ impl Wallet {
     /// Open an existing Bark wallet
     pub async fn open(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
     ) -> Result<Self, BarkError> {
         run_async(async move {
@@ -88,7 +94,7 @@ impl Wallet {
 
     async fn open_async(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
     ) -> Result<InnerWallet, BarkError> {
         let cfg: bark::Config = config.into();
@@ -110,7 +116,8 @@ impl Wallet {
         if inner.ark_info().await.ok().flatten().is_some() {
             eprintln!("[OPEN] ✅ Server connection established");
         } else {
-            eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark operations will not work!");
+            eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark \
+                operations will not work!");
         }
 
         Ok(inner)
@@ -119,7 +126,7 @@ impl Wallet {
     /// Create a new Bark wallet WITH onchain capabilities
     pub async fn create_with_onchain(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
         onchain_wallet: Arc<crate::OnchainWallet>,
         force_rescan: bool,
@@ -179,7 +186,7 @@ impl Wallet {
     /// Open an existing Bark wallet WITH onchain capabilities
     pub async fn open_with_onchain(
         mnemonic: String,
-        config: Config,
+        config: types::Config,
         datadir: String,
         onchain_wallet: Arc<crate::OnchainWallet>,
     ) -> Result<Self, BarkError> {
@@ -216,7 +223,8 @@ impl Wallet {
             if inner.ark_info().await.ok().flatten().is_some() {
                 eprintln!("[OPEN] ✅ Server connection established");
             } else {
-                eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark operations will not work!");
+                eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark \
+                    operations will not work!");
             }
 
             eprintln!("[OPEN] ✅ Bark wallet with onchain opened successfully");
@@ -370,13 +378,13 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Get detailed wallet balance
-    pub async fn balance(&self) -> Result<Balance, BarkError> {
+    pub async fn balance(&self) -> Result<types::Balance, BarkError> {
         let inner = self.inner.clone();
         run_async(async move { Ok(inner.balance().await?.into()) }).await
     }
 
     /// List all unspent VTXOs in the wallet
-    pub async fn vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move { Ok(inner.vtxos().await?.into_iter().map(Into::into).collect()) })
             .await
@@ -387,7 +395,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Offboard all spendable VTXOs to a Bitcoin address
-    pub async fn offboard_all(&self, bitcoin_address: String) -> Result<OffboardResult, BarkError> {
+    pub async fn offboard_all(&self, bitcoin_address: String) -> Result<types::OffboardResult, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let addr = bitcoin_address
@@ -402,7 +410,7 @@ impl Wallet {
             // Convert RoundStatus to a displayable round ID
             let round_id = format!("{:?}", status);
 
-            Ok(OffboardResult { round_id })
+            Ok(types::OffboardResult { round_id })
         })
         .await
     }
@@ -415,7 +423,7 @@ impl Wallet {
         &self,
         invoice: String,
         amount_sats: Option<u64>,
-    ) -> Result<LightningSend, BarkError> {
+    ) -> Result<types::LightningSend, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let invoice: Bolt11Invoice =
@@ -438,7 +446,7 @@ impl Wallet {
         lightning_address: String,
         amount_sats: u64,
         comment: Option<String>,
-    ) -> Result<LightningSend, BarkError> {
+    ) -> Result<types::LightningSend, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let addr: LightningAddress =
@@ -464,13 +472,13 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Create a BOLT11 invoice to receive Lightning payment
-    pub async fn bolt11_invoice(&self, amount_sats: u64) -> Result<LightningInvoice, BarkError> {
+    pub async fn bolt11_invoice(&self, amount_sats: u64) -> Result<types::LightningInvoice, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
             let invoice = inner.bolt11_invoice(amount).await?;
 
-            Ok(LightningInvoice {
+            Ok(types::LightningInvoice {
                 invoice: invoice.to_string(),
                 amount_sats,
             })
@@ -482,7 +490,7 @@ impl Wallet {
     pub async fn try_claim_all_lightning_receives(
         &self,
         wait: bool,
-    ) -> Result<Vec<LightningReceive>, BarkError> {
+    ) -> Result<Vec<types::LightningReceive>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let receives = inner.try_claim_all_lightning_receives(wait).await?;
@@ -503,7 +511,7 @@ impl Wallet {
     ) -> Result<String, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            let addr: ark_lib::Address =
+            let addr: ark::Address =
                 ark_address.parse().map_err(|e| BarkError::InvalidAddress {
                     error_message: format!("invalid ark address: {}", e),
                 })?;
@@ -555,11 +563,11 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Generate a new address and return it with its index
-    pub async fn new_address_with_index(&self) -> Result<AddressWithIndex, BarkError> {
+    pub async fn new_address_with_index(&self) -> Result<types::AddressWithIndex, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let (addr, index) = inner.new_address_with_index().await?;
-            Ok(AddressWithIndex {
+            Ok(types::AddressWithIndex {
                 address: addr.to_string(),
                 index,
             })
@@ -593,7 +601,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Get all wallet movements (transaction history)
-    pub async fn history(&self) -> Result<Vec<Movement>, BarkError> {
+    pub async fn history(&self) -> Result<Vec<types::Movement>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move { Ok(inner.history().await?.into_iter().map(Into::into).collect()) })
             .await
@@ -603,13 +611,14 @@ impl Wallet {
     ///
     /// # Arguments
     ///
-    /// * `payment_method_type` - Type of payment method (e.g. "ark", "bitcoin", "invoice", "offer", "lightning_address", "custom")
+    /// * `payment_method_type` - Type of payment method
+    ///   (e.g. "ark", "bitcoin", "invoice", "offer", "lightning_address", "custom")
     /// * `payment_method_value` - Value of the payment method (e.g. an address or invoice string)
     pub async fn history_by_payment_method(
         &self,
         payment_method_type: String,
         payment_method_value: String,
-    ) -> Result<Vec<Movement>, BarkError> {
+    ) -> Result<Vec<types::Movement>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let payment_method = bark::movement::PaymentMethod::from_type_value(
@@ -635,7 +644,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Get a specific VTXO by ID
-    pub async fn get_vtxo_by_id(&self, vtxo_id: String) -> Result<Vtxo, BarkError> {
+    pub async fn get_vtxo_by_id(&self, vtxo_id: String) -> Result<types::Vtxo, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let id = vtxo_id.parse().map_err(|e| BarkError::InvalidAddress {
@@ -647,7 +656,7 @@ impl Wallet {
     }
 
     /// Get all spendable VTXOs
-    pub async fn spendable_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn spendable_vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -661,7 +670,7 @@ impl Wallet {
     }
 
     /// Get all VTXOs (including spent)
-    pub async fn all_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn all_vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -675,7 +684,7 @@ impl Wallet {
     }
 
     /// Get VTXOs expiring within threshold blocks
-    pub async fn get_expiring_vtxos(&self, threshold_blocks: u32) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn get_expiring_vtxos(&self, threshold_blocks: u32) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -689,7 +698,7 @@ impl Wallet {
     }
 
     /// Get VTXOs that should be refreshed
-    pub async fn get_vtxos_to_refresh(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn get_vtxos_to_refresh(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -724,7 +733,7 @@ impl Wallet {
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
                 .map(|id| {
-                    id.parse::<ark_lib::VtxoId>()
+                    id.parse::<VtxoId>()
                         .map_err(|e| BarkError::InvalidAddress {
                             error_message: format!("invalid vtxo id: {}", e),
                         })
@@ -748,7 +757,7 @@ impl Wallet {
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
                 .map(|id| {
-                    id.parse::<ark_lib::VtxoId>()
+                    id.parse::<VtxoId>()
                         .map_err(|e| BarkError::InvalidAddress {
                             error_message: format!("invalid vtxo id: {}", e),
                         })
@@ -777,13 +786,13 @@ impl Wallet {
     pub async fn refresh_vtxos_delegated(
         &self,
         vtxo_ids: Vec<String>,
-    ) -> Result<Option<RoundState>, BarkError> {
+    ) -> Result<Option<types::RoundState>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             // Parse vtxo IDs similar to refresh_vtxos
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
-                .map(|s| s.parse::<ark_lib::VtxoId>())
+                .map(|s| s.parse::<VtxoId>())
                 .collect();
             let ids = ids.map_err(|e| BarkError::InvalidVtxoId {
                 error_message: e.to_string(),
@@ -804,7 +813,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Get all pending lightning sends
-    pub async fn pending_lightning_sends(&self) -> Result<Vec<LightningSend>, BarkError> {
+    pub async fn pending_lightning_sends(&self) -> Result<Vec<types::LightningSend>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -818,7 +827,7 @@ impl Wallet {
     }
 
     /// Get all pending lightning receives
-    pub async fn pending_lightning_receives(&self) -> Result<Vec<LightningReceive>, BarkError> {
+    pub async fn pending_lightning_receives(&self) -> Result<Vec<types::LightningReceive>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -851,9 +860,6 @@ impl Wallet {
     ) -> Result<crate::LightningSend, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::lightning::Offer;
-            use std::str::FromStr;
-
             let offer_obj = Offer::from_str(&offer).map_err(|e| BarkError::InvalidInvoice {
                 error_message: format!("Invalid BOLT12 offer: {:?}", e),
             })?;
@@ -884,15 +890,10 @@ impl Wallet {
     ) -> Result<Option<String>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::lightning::PaymentHash;
-            use bitcoin::hex::FromHex;
-
-            let hash_bytes =
-                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+            let payment_hash_obj = PaymentHash::from_str(&payment_hash)
+                .map_err(|e| BarkError::InvalidInvoice {
                     error_message: format!("Invalid payment hash: {}", e),
                 })?;
-
-            let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
             let payment = inner
                 .check_lightning_payment(payment_hash_obj, wait)
@@ -914,15 +915,10 @@ impl Wallet {
     ) -> Result<Option<crate::LightningReceive>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::lightning::PaymentHash;
-            use bitcoin::hex::FromHex;
-
-            let hash_bytes =
-                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+            let payment_hash_obj = PaymentHash::from_str(&payment_hash)
+                .map_err(|e| BarkError::InvalidInvoice {
                     error_message: format!("Invalid payment hash: {}", e),
                 })?;
-
-            let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
             Ok(inner
                 .lightning_receive_status(payment_hash_obj)
@@ -945,15 +941,10 @@ impl Wallet {
     ) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::lightning::PaymentHash;
-            use bitcoin::hex::FromHex;
-
-            let hash_bytes =
-                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+            let payment_hash_obj = PaymentHash::from_str(&payment_hash)
+                .map_err(|e| BarkError::InvalidInvoice {
                     error_message: format!("Invalid payment hash: {}", e),
                 })?;
-
-            let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
             inner
                 .try_claim_lightning_receive(payment_hash_obj, wait, None)
@@ -975,15 +966,10 @@ impl Wallet {
     ) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::lightning::PaymentHash;
-            use bitcoin::hex::FromHex;
-
-            let hash_bytes =
-                <[u8; 32]>::from_hex(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+            let payment_hash_obj = PaymentHash::from_str(&payment_hash)
+                .map_err(|e| BarkError::InvalidInvoice {
                     error_message: format!("Invalid payment hash: {}", e),
                 })?;
-
-            let payment_hash_obj = PaymentHash::from_byte_array(hash_bytes);
 
             inner.cancel_lightning_receive(payment_hash_obj).await?;
 
@@ -997,7 +983,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Get read-only wallet properties
-    pub async fn properties(&self) -> Result<WalletProperties, BarkError> {
+    pub async fn properties(&self) -> Result<types::WalletProperties, BarkError> {
         let inner = self.inner.clone();
         run_async(async move { Ok(inner.properties().await?.into()) }).await
     }
@@ -1008,18 +994,18 @@ impl Wallet {
     }
 
     /// Get the Bitcoin network this wallet is using
-    pub async fn network(&self) -> Result<Network, BarkError> {
+    pub async fn network(&self) -> Result<types::Network, BarkError> {
         let inner = self.inner.clone();
         run_async(async move { Ok(inner.network().await?.into()) }).await
     }
 
     /// Get wallet config
-    pub async fn config(&self) -> Config {
+    pub async fn config(&self) -> types::Config {
         let inner = self.inner.clone();
         run_async(async move {
             let cfg = inner.config();
             let props = inner.properties().await.unwrap();
-            Config {
+            types::Config {
                 server_address: cfg.server_address.clone(),
                 server_access_token: cfg.server_access_token.clone(),
                 esplora_address: cfg.esplora_address.clone(),
@@ -1044,7 +1030,7 @@ impl Wallet {
     }
 
     /// Get Ark server info
-    pub async fn ark_info(&self) -> Option<ArkInfo> {
+    pub async fn ark_info(&self) -> Option<types::ArkInfo> {
         let inner = self.inner.clone();
         run_async(async move {
             match inner.ark_info().await {
@@ -1114,7 +1100,8 @@ impl Wallet {
                     })?
             } else {
                 return Err(BarkError::OnchainWalletRequired {
-                    error_message: "Boarding requires a valid onchain wallet. Create one with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
+                    error_message: "Boarding requires a valid onchain wallet. Create one with \
+                        OnchainWallet.default() or OnchainWallet.custom()".to_string(),
                 });
             };
 
@@ -1168,7 +1155,8 @@ impl Wallet {
                     })?
             } else {
                 return Err(BarkError::OnchainWalletRequired {
-                    error_message: "Boarding requires a valid onchain wallet. Create one with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
+                    error_message: "Boarding requires a valid onchain wallet. Create one with \
+                        OnchainWallet.default() or OnchainWallet.custom()".to_string(),
                 });
             };
 
@@ -1213,7 +1201,7 @@ impl Wallet {
     }
 
     /// Get all pending board operations
-    pub async fn pending_boards(&self) -> Result<Vec<PendingBoard>, BarkError> {
+    pub async fn pending_boards(&self) -> Result<Vec<types::PendingBoard>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -1227,7 +1215,7 @@ impl Wallet {
     }
 
     /// Get all VTXOs that are part of pending boards
-    pub async fn pending_board_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn pending_board_vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -1241,7 +1229,7 @@ impl Wallet {
     }
 
     /// Get VTXOs being used as inputs in pending rounds
-    pub async fn pending_round_input_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn pending_round_input_vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -1255,7 +1243,7 @@ impl Wallet {
     }
 
     /// Get VTXOs locked in pending Lightning sends
-    pub async fn pending_lightning_send_vtxos(&self) -> Result<Vec<Vtxo>, BarkError> {
+    pub async fn pending_lightning_send_vtxos(&self) -> Result<Vec<types::Vtxo>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             Ok(inner
@@ -1342,7 +1330,8 @@ impl Wallet {
                     })?;
             } else {
                 return Err(BarkError::OnchainWalletRequired {
-                    error_message: "Syncing exits requires a valid onchain wallet. Create one with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
+                    error_message: "Syncing exits requires a valid onchain wallet. Create one \
+                        with OnchainWallet.default() or OnchainWallet.custom()".to_string(),
                 });
             }
 
@@ -1433,7 +1422,7 @@ impl Wallet {
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
                 .map(|id| {
-                    id.parse::<ark_lib::VtxoId>()
+                    id.parse::<VtxoId>()
                         .map_err(|e| BarkError::InvalidAddress {
                             error_message: format!("invalid vtxo id: {}", e),
                         })
@@ -1451,7 +1440,7 @@ impl Wallet {
                 vtxos.push(vtxo);
             }
 
-            let vtxo_refs: Vec<&ark_lib::Vtxo> = vtxos.iter().map(|v| &v.vtxo).collect();
+            let vtxo_refs: Vec<&ark::Vtxo> = vtxos.iter().map(|v| &v.vtxo).collect();
 
             inner
                 .exit
@@ -1546,7 +1535,7 @@ impl Wallet {
         run_async(async move {
             let vtxo_id_parsed =
                 vtxo_id
-                    .parse::<ark_lib::VtxoId>()
+                    .parse::<VtxoId>()
                     .map_err(|e| BarkError::InvalidAddress {
                         error_message: format!("invalid vtxo id: {}", e),
                     })?;
@@ -1604,7 +1593,7 @@ impl Wallet {
             } else {
                 let requested_ids: std::collections::HashSet<_> = vtxo_ids
                     .iter()
-                    .filter_map(|id| id.parse::<ark_lib::VtxoId>().ok())
+                    .filter_map(|id| id.parse::<VtxoId>().ok())
                     .collect();
                 claimable
                     .into_iter()
@@ -1729,7 +1718,7 @@ impl Wallet {
     pub async fn validate_arkoor_address(&self, address: String) -> Result<bool, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            let addr: ark_lib::Address =
+            let addr: ark::Address =
                 address.parse().map_err(|e| BarkError::InvalidAddress {
                     error_message: format!("invalid ark address: {}", e),
                 })?;
@@ -1893,8 +1882,6 @@ impl Wallet {
 
     /// Create a new authorization for your server mailbox
     pub fn mailbox_authorization(&self) -> Result<String, BarkError> {
-        use ark_lib::ProtocolEncoding;
-
         // Default expiry: 24 hours from now
         let expiry = chrono::Local::now() + chrono::Duration::hours(24);
 
@@ -1949,17 +1936,13 @@ impl Wallet {
     pub async fn import_vtxo(&self, vtxo_base64: String) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            use ark_lib::ProtocolEncoding;
-            use base64::Engine;
-
             let vtxo_bytes = base64::engine::general_purpose::STANDARD
                 .decode(&vtxo_base64)
                 .map_err(|e| BarkError::Internal {
                     error_message: format!("Invalid base64: {}", e),
                 })?;
 
-            let vtxo =
-                ark_lib::Vtxo::deserialize(&vtxo_bytes).map_err(|e| BarkError::Internal {
+            let vtxo = ark::Vtxo::deserialize(&vtxo_bytes).map_err(|e| BarkError::Internal {
                     error_message: format!("Invalid VTXO data: {}", e),
                 })?;
 
@@ -1981,7 +1964,7 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Estimate the fee for a board operation
-    pub async fn estimate_board_fee(&self, amount_sats: u64) -> Result<FeeEstimate, BarkError> {
+    pub async fn estimate_board_fee(&self, amount_sats: u64) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
@@ -1999,7 +1982,7 @@ impl Wallet {
         &self,
         address: String,
         vtxo_ids: Vec<String>,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let btc_addr = address
@@ -2012,7 +1995,7 @@ impl Wallet {
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
                 .map(|id| {
-                    id.parse::<ark_lib::VtxoId>()
+                    id.parse::<VtxoId>()
                         .map_err(|e| BarkError::InvalidVtxoId {
                             error_message: format!("invalid vtxo id: {}", e),
                         })
@@ -2044,13 +2027,13 @@ impl Wallet {
     pub async fn estimate_refresh_fee(
         &self,
         vtxo_ids: Vec<String>,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
                 .map(|id| {
-                    id.parse::<ark_lib::VtxoId>()
+                    id.parse::<VtxoId>()
                         .map_err(|e| BarkError::InvalidVtxoId {
                             error_message: format!("invalid vtxo id: {}", e),
                         })
@@ -2083,7 +2066,7 @@ impl Wallet {
     pub async fn estimate_lightning_send_fee(
         &self,
         amount_sats: u64,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
@@ -2100,7 +2083,7 @@ impl Wallet {
     pub async fn estimate_lightning_receive_fee(
         &self,
         amount_sats: u64,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
@@ -2117,7 +2100,7 @@ impl Wallet {
     pub async fn estimate_arkoor_payment_fee(
         &self,
         amount_sats: u64,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
@@ -2154,7 +2137,7 @@ impl Wallet {
     pub async fn estimate_offboard_all_fee(
         &self,
         address: String,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let btc_addr = address
@@ -2178,7 +2161,7 @@ impl Wallet {
         &self,
         address: String,
         amount_sats: u64,
-    ) -> Result<FeeEstimate, BarkError> {
+    ) -> Result<types::FeeEstimate, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let btc_addr = address
