@@ -266,9 +266,9 @@ impl OnchainWallet {
     ///
     /// This allows the Bark wallet to access the onchain wallet for boarding and exits.
     /// Only works with BDK-based wallets.
-    pub(crate) fn inner_bdk(&self) -> Option<&RwLock<BarkOnchainWallet>> {
+    pub(crate) fn inner_bdk(&self) -> Option<Arc<RwLock<BarkOnchainWallet>>> {
         match &self.inner {
-            OnchainWalletInner::Bdk { wallet, .. } => Some(wallet),
+            OnchainWalletInner::Bdk { wallet, .. } => Some(wallet.clone()),
             OnchainWalletInner::Callback { .. } => None,
         }
     }
@@ -277,10 +277,10 @@ impl OnchainWallet {
     ///
     /// This allows the Bark wallet to access the onchain wallet for boarding and exits.
     /// Only works with callback-based wallets.
-    pub(crate) fn inner_callback(&self) -> Option<&RwLock<CallbackWalletAdapter>> {
+    pub(crate) fn inner_callback(&self) -> Option<Arc<RwLock<CallbackWalletAdapter>>> {
         match &self.inner {
             OnchainWalletInner::Bdk { .. } => None,
-            OnchainWalletInner::Callback { adapter } => Some(adapter),
+            OnchainWalletInner::Callback { adapter } => Some(adapter.clone()),
         }
     }
 }
