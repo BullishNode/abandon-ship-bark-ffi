@@ -147,7 +147,7 @@ impl Wallet {
             eprintln!("[CREATE] Creating Bark wallet with onchain capabilities...");
 
             let inner = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let onchain_inner = bdk_wallet.lock().await;
+                let onchain_inner = bdk_wallet.read().await;
                 InnerWallet::create_with_onchain(
                     &mnemonic,
                     network,
@@ -159,7 +159,7 @@ impl Wallet {
                 .await
                 .map_err(BarkError::from)?
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let onchain_inner = callback_adapter.lock().await;
+                let onchain_inner = callback_adapter.read().await;
                 InnerWallet::create_with_onchain(
                     &mnemonic,
                     network,
@@ -204,12 +204,12 @@ impl Wallet {
             eprintln!("[OPEN] Opening Bark wallet with onchain capabilities...");
 
             let inner = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let onchain_inner = bdk_wallet.lock().await;
+                let onchain_inner = bdk_wallet.read().await;
                 InnerWallet::open_with_onchain(&mnemonic, db, &*onchain_inner, cfg)
                     .await
                     .map_err(BarkError::from)?
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let onchain_inner = callback_adapter.lock().await;
+                let onchain_inner = callback_adapter.read().await;
                 InnerWallet::open_with_onchain(&mnemonic, db, &*onchain_inner, cfg)
                     .await
                     .map_err(BarkError::from)?
@@ -301,10 +301,10 @@ impl Wallet {
         let inner = self.inner.clone();
         run_async(async move {
             if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
+                let mut onchain = bdk_wallet.write().await;
                 inner.maintenance_with_onchain(&mut *onchain).await?;
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
+                let mut onchain = callback_adapter.write().await;
                 inner.maintenance_with_onchain(&mut *onchain).await?;
             } else {
                 return Err(BarkError::OnchainWalletRequired {
@@ -340,12 +340,12 @@ impl Wallet {
             // maintenance_with_onchain_delegated on inner wallet
             // Need to handle BDK vs Callback wallet types
             if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain_inner = bdk_wallet.lock().await;
+                let mut onchain_inner = bdk_wallet.write().await;
                 inner
                     .maintenance_with_onchain_delegated(&mut *onchain_inner)
                     .await?;
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain_inner = callback_adapter.lock().await;
+                let mut onchain_inner = callback_adapter.write().await;
                 inner
                     .maintenance_with_onchain_delegated(&mut *onchain_inner)
                     .await?;
@@ -1083,7 +1083,7 @@ impl Wallet {
             eprintln!("[BOARD] Boarding {} sats into Ark...", amount_sats);
 
             let pb = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
+                let mut onchain = bdk_wallet.write().await;
                 inner
                     .board_amount(&mut *onchain, amount)
                     .await
@@ -1091,7 +1091,7 @@ impl Wallet {
                         error_message: format!("Board failed: {}", e),
                     })?
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
+                let mut onchain = callback_adapter.write().await;
                 inner
                     .board_amount(&mut *onchain, amount)
                     .await
@@ -1138,7 +1138,7 @@ impl Wallet {
             eprintln!("[BOARD] Boarding ALL funds into Ark...");
 
             let pb = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
+                let mut onchain = bdk_wallet.write().await;
                 inner
                     .board_all(&mut *onchain)
                     .await
@@ -1146,7 +1146,7 @@ impl Wallet {
                         error_message: format!("Board all failed: {}", e),
                     })?
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
+                let mut onchain = callback_adapter.write().await;
                 inner
                     .board_all(&mut *onchain)
                     .await
@@ -1313,7 +1313,7 @@ impl Wallet {
             eprintln!("[EXIT] Syncing exits...");
 
             if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
+                let mut onchain = bdk_wallet.write().await;
                 inner
                     .sync_exits(&mut *onchain)
                     .await
@@ -1321,7 +1321,7 @@ impl Wallet {
                         error_message: format!("Sync exits failed: {}", e),
                     })?;
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
+                let mut onchain = callback_adapter.write().await;
                 inner
                     .sync_exits(&mut *onchain)
                     .await
@@ -1366,7 +1366,7 @@ impl Wallet {
             let fee_rate = fee_rate_sat_per_vb.and_then(bitcoin::FeeRate::from_sat_per_vb);
 
             let result = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
+                let mut onchain = bdk_wallet.write().await;
                 inner
                     .exit
                     .write()
@@ -1377,7 +1377,7 @@ impl Wallet {
                         error_message: format!("Progress exits failed: {}", e),
                     })?
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
+                let mut onchain = callback_adapter.write().await;
                 inner
                     .exit
                     .write()

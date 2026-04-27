@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 use bark::chain::{ChainSource, ChainSourceSpec};
 use bark::onchain::{ChainSync, OnchainWallet as BarkOnchainWallet};
@@ -15,11 +15,11 @@ use crate::types::{Config, OnchainBalance};
 #[derive(Clone)]
 enum OnchainWalletInner {
     Bdk {
-        wallet: Arc<Mutex<BarkOnchainWallet>>,
+        wallet: Arc<RwLock<BarkOnchainWallet>>,
         chain: Arc<ChainSource>,
     },
     Callback {
-        adapter: Arc<Mutex<CallbackWalletAdapter>>,
+        adapter: Arc<RwLock<CallbackWalletAdapter>>,
     },
 }
 
@@ -100,7 +100,7 @@ impl OnchainWallet {
 
             Ok(Self {
                 inner: OnchainWalletInner::Bdk {
-                    wallet: Arc::new(Mutex::new(onchain)),
+                    wallet: Arc::new(RwLock::new(onchain)),
                     chain,
                 },
             })
@@ -125,7 +125,7 @@ impl OnchainWallet {
 
         Ok(Self {
             inner: OnchainWalletInner::Callback {
-                adapter: std::sync::Arc::new(tokio::sync::Mutex::new(adapter)),
+                adapter: std::sync::Arc::new(tokio::sync::RwLock::new(adapter)),
             },
         })
     }
@@ -139,7 +139,7 @@ impl OnchainWallet {
             match inner {
                 OnchainWalletInner::Bdk { wallet, chain } => {
                     eprintln!("[ONCHAIN] Starting BDK sync...");
-                    let mut w = wallet.lock().await;
+                    let mut w = wallet.write().await;
                     w.sync(&chain).await.map_err(|e| BarkError::Network {
                         error_message: format!("Sync failed: {}", e),
                     })?;
@@ -165,13 +165,13 @@ impl OnchainWallet {
         run_async(async move {
             match inner {
                 OnchainWalletInner::Bdk { wallet, .. } => {
-                    let w = wallet.lock().await;
+                    let w = wallet.write().await;
                     let balance = w.balance();
                     Ok(balance.into())
                 }
                 OnchainWalletInner::Callback { adapter } => {
                     use bark::onchain::GetBalance;
-                    let a = adapter.lock().await;
+                    let a = adapter.write().await;
                     let amount = a.get_balance();
                     Ok(OnchainBalance {
                         confirmed_sats: amount.to_sat(),
@@ -190,7 +190,7 @@ impl OnchainWallet {
         run_async(async move {
             match inner {
                 OnchainWalletInner::Bdk { wallet, .. } => {
-                    let mut w = wallet.lock().await;
+                    let mut w = wallet.write().await;
                     let addr = w.address().await.map_err(|e| BarkError::Internal {
                         error_message: format!("Failed to generate address: {}", e),
                     })?;
@@ -223,7 +223,7 @@ impl OnchainWallet {
         run_async(async move {
             match inner {
                 OnchainWalletInner::Bdk { wallet, chain } => {
-                    let mut w = wallet.lock().await;
+                    let mut w = wallet.write().await;
 
                     let addr = address
                         .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
@@ -266,7 +266,7 @@ impl OnchainWallet {
     ///
     /// This allows the Bark wallet to access the onchain wallet for boarding and exits.
     /// Only works with BDK-based wallets.
-    pub(crate) fn inner_bdk(&self) -> Option<&Mutex<BarkOnchainWallet>> {
+    pub(crate) fn inner_bdk(&self) -> Option<&RwLock<BarkOnchainWallet>> {
         match &self.inner {
             OnchainWalletInner::Bdk { wallet, .. } => Some(wallet),
             OnchainWalletInner::Callback { .. } => None,
@@ -277,7 +277,7 @@ impl OnchainWallet {
     ///
     /// This allows the Bark wallet to access the onchain wallet for boarding and exits.
     /// Only works with callback-based wallets.
-    pub(crate) fn inner_callback(&self) -> Option<&Mutex<CallbackWalletAdapter>> {
+    pub(crate) fn inner_callback(&self) -> Option<&RwLock<CallbackWalletAdapter>> {
         match &self.inner {
             OnchainWalletInner::Bdk { .. } => None,
             OnchainWalletInner::Callback { adapter } => Some(adapter),
