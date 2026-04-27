@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use ark::{ProtocolEncoding, VtxoId};
 use ark::lightning::{Offer, PaymentHash};
 use bark::lightning_invoice::Bolt11Invoice;
-use bark::Wallet as InnerWallet;
+use bark::{DaemonHandle, Wallet as InnerWallet};
 
 use crate::error::BarkError;
 use crate::notification::NotificationHolder;
@@ -26,17 +26,19 @@ pub struct Wallet {
     /// Held to keep the token alive; dropping cancels the mailbox task.
     #[allow(dead_code)]
     mailbox_cancel: CancellationToken,
+    /// Handle to a running daemon, if any. Stopped on drop.
+    daemon: tokio::sync::Mutex<Option<DaemonHandle>>,
 }
 
 impl Wallet {
-    fn from_inner(inner: InnerWallet) -> Self {
-        let inner = Arc::new(inner);
+    fn from_inner(inner: Arc<InnerWallet>) -> Self {
         let cancel = CancellationToken::new();
         let mailbox_task = Some(Self::start_mailbox_processor(inner.clone(), cancel.clone()));
         Self {
             inner,
             mailbox_task,
             mailbox_cancel: cancel,
+            daemon: tokio::sync::Mutex::new(None),
         }
     }
 
@@ -49,7 +51,7 @@ impl Wallet {
     ) -> Result<Self, BarkError> {
         run_async(async move {
             let inner = Self::create_async(mnemonic, config, datadir, force_rescan).await?;
-            Ok(Self::from_inner(inner))
+            Ok(Self::from_inner(Arc::new(inner)))
         })
         .await
     }
@@ -87,7 +89,7 @@ impl Wallet {
     ) -> Result<Self, BarkError> {
         run_async(async move {
             let inner = Self::open_async(mnemonic, config, datadir).await?;
-            Ok(Self::from_inner(inner))
+            Ok(Self::from_inner(Arc::new(inner)))
         })
         .await
     }
@@ -147,7 +149,7 @@ impl Wallet {
             eprintln!("[CREATE] Creating Bark wallet with onchain capabilities...");
 
             let inner = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let onchain_inner = bdk_wallet.lock().await;
+                let onchain_inner = bdk_wallet.read().await;
                 InnerWallet::create_with_onchain(
                     &mnemonic,
                     network,
@@ -159,7 +161,7 @@ impl Wallet {
                 .await
                 .map_err(BarkError::from)?
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let onchain_inner = callback_adapter.lock().await;
+                let onchain_inner = callback_adapter.read().await;
                 InnerWallet::create_with_onchain(
                     &mnemonic,
                     network,
@@ -178,7 +180,7 @@ impl Wallet {
 
             eprintln!("[CREATE] ✅ Bark wallet with onchain created successfully");
 
-            Ok(Self::from_inner(inner))
+            Ok(Self::from_inner(Arc::new(inner)))
         })
         .await
     }
@@ -204,12 +206,12 @@ impl Wallet {
             eprintln!("[OPEN] Opening Bark wallet with onchain capabilities...");
 
             let inner = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let onchain_inner = bdk_wallet.lock().await;
+                let onchain_inner = bdk_wallet.read().await;
                 InnerWallet::open_with_onchain(&mnemonic, db, &*onchain_inner, cfg)
                     .await
                     .map_err(BarkError::from)?
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let onchain_inner = callback_adapter.lock().await;
+                let onchain_inner = callback_adapter.read().await;
                 InnerWallet::open_with_onchain(&mnemonic, db, &*onchain_inner, cfg)
                     .await
                     .map_err(BarkError::from)?
@@ -229,7 +231,60 @@ impl Wallet {
 
             eprintln!("[OPEN] ✅ Bark wallet with onchain opened successfully");
 
-            Ok(Self::from_inner(inner))
+            Ok(Self::from_inner(Arc::new(inner)))
+        }).await
+    }
+
+	/// Open an existing Bark wallet and start running the daemon,
+	/// optionally with onchain capabilities
+    pub async fn open_with_daemon(
+        mnemonic: String,
+        config: types::Config,
+        datadir: String,
+        onchain_wallet: Option<Arc<crate::OnchainWallet>>,
+    ) -> Result<Self, BarkError> {
+        run_async(async move {
+            let cfg: bark::Config = config.into();
+
+            let mnemonic = Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
+                error_message: e.to_string(),
+            })?;
+
+            // Use shared database cache
+            let db = crate::db::get_or_open_db(&datadir)
+                .with_context(|| format!("opening sqlite in {}", datadir))?;
+
+            eprintln!("[OPEN] Opening Bark wallet with daemon...");
+
+            let bdk = onchain_wallet.as_ref().and_then(|w| w.inner_bdk());
+            if bdk.is_none() {
+                if onchain_wallet.as_ref().and_then(|w| w.inner_callback()).is_some() {
+                    eprintln!("[OPEN] ⚠️  WARNING: Callback wallets are not supported for daemon mode, running without onchain capabilities");
+                } else {
+                    eprintln!("[OPEN] ⚠️  WARNING: No onchain wallet provided, running without onchain capabilities");
+                }
+            }
+
+            // NB: pass Some(bdk) at the call site so Arc<RwLock<T>> unsize-coerces
+            // to Arc<RwLock<dyn DaemonizableOnchainWallet>>; the coercion does not
+            // flow through an Option-typed local.
+            let (inner, daemon_handle) = match bdk {
+                Some(bdk) => InnerWallet::open_with_daemon(&mnemonic, db, cfg, Some(bdk)).await,
+                None => InnerWallet::open_with_daemon(&mnemonic, db, cfg, None).await,
+            }.map_err(BarkError::from)?;
+
+            if inner.ark_info().await.ok().flatten().is_some() {
+                eprintln!("[OPEN] ✅ Server connection established");
+            } else {
+                eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark \
+                    operations will not work!");
+            }
+
+            eprintln!("[OPEN] ✅ Bark wallet opened successfully and daemon running");
+
+            let wallet = Self::from_inner(inner);
+            *wallet.daemon.lock().await = Some(daemon_handle);
+            Ok(wallet)
         }).await
     }
 
@@ -301,10 +356,10 @@ impl Wallet {
         let inner = self.inner.clone();
         run_async(async move {
             if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
+                let mut onchain = bdk_wallet.write().await;
                 inner.maintenance_with_onchain(&mut *onchain).await?;
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
+                let mut onchain = callback_adapter.write().await;
                 inner.maintenance_with_onchain(&mut *onchain).await?;
             } else {
                 return Err(BarkError::OnchainWalletRequired {
@@ -340,12 +395,12 @@ impl Wallet {
             // maintenance_with_onchain_delegated on inner wallet
             // Need to handle BDK vs Callback wallet types
             if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain_inner = bdk_wallet.lock().await;
+                let mut onchain_inner = bdk_wallet.write().await;
                 inner
                     .maintenance_with_onchain_delegated(&mut *onchain_inner)
                     .await?;
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain_inner = callback_adapter.lock().await;
+                let mut onchain_inner = callback_adapter.write().await;
                 inner
                     .maintenance_with_onchain_delegated(&mut *onchain_inner)
                     .await?;
@@ -1083,7 +1138,7 @@ impl Wallet {
             eprintln!("[BOARD] Boarding {} sats into Ark...", amount_sats);
 
             let pb = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
+                let mut onchain = bdk_wallet.write().await;
                 inner
                     .board_amount(&mut *onchain, amount)
                     .await
@@ -1091,7 +1146,7 @@ impl Wallet {
                         error_message: format!("Board failed: {}", e),
                     })?
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
+                let mut onchain = callback_adapter.write().await;
                 inner
                     .board_amount(&mut *onchain, amount)
                     .await
@@ -1138,7 +1193,7 @@ impl Wallet {
             eprintln!("[BOARD] Boarding ALL funds into Ark...");
 
             let pb = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
+                let mut onchain = bdk_wallet.write().await;
                 inner
                     .board_all(&mut *onchain)
                     .await
@@ -1146,7 +1201,7 @@ impl Wallet {
                         error_message: format!("Board all failed: {}", e),
                     })?
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
+                let mut onchain = callback_adapter.write().await;
                 inner
                     .board_all(&mut *onchain)
                     .await
@@ -1313,7 +1368,7 @@ impl Wallet {
             eprintln!("[EXIT] Syncing exits...");
 
             if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
+                let mut onchain = bdk_wallet.write().await;
                 inner
                     .sync_exits(&mut *onchain)
                     .await
@@ -1321,7 +1376,7 @@ impl Wallet {
                         error_message: format!("Sync exits failed: {}", e),
                     })?;
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
+                let mut onchain = callback_adapter.write().await;
                 inner
                     .sync_exits(&mut *onchain)
                     .await
@@ -1366,7 +1421,7 @@ impl Wallet {
             let fee_rate = fee_rate_sat_per_vb.and_then(bitcoin::FeeRate::from_sat_per_vb);
 
             let result = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
-                let mut onchain = bdk_wallet.lock().await;
+                let mut onchain = bdk_wallet.write().await;
                 inner
                     .exit
                     .write()
@@ -1377,7 +1432,7 @@ impl Wallet {
                         error_message: format!("Progress exits failed: {}", e),
                     })?
             } else if let Some(callback_adapter) = onchain_wallet.inner_callback() {
-                let mut onchain = callback_adapter.lock().await;
+                let mut onchain = callback_adapter.write().await;
                 inner
                     .exit
                     .write()
@@ -2180,6 +2235,48 @@ impl Wallet {
         })
         .await
     }
+
+    /// Run the daemon. The handle is stored on the wallet and stopped on drop.
+    pub async fn run_daemon(
+        &mut self,
+        onchain_wallet: Option<Arc<crate::OnchainWallet>>,
+    ) -> Result<(), BarkError> {
+        let mut slot = self.daemon.lock().await;
+        if let Some(prev) = slot.take() {
+			eprintln!("[DAEMON] Stopping previous running daemon");
+            prev.stop();
+        }
+
+        let inner = self.inner.clone();
+        let handle = run_async(async move {
+            let bdk = onchain_wallet.as_ref().and_then(|w| w.inner_bdk());
+            if bdk.is_none() {
+                if onchain_wallet.as_ref().and_then(|w| w.inner_callback()).is_some() {
+                    eprintln!("[OPEN] ⚠️  WARNING: Callback wallets are not supported for daemon mode, running without onchain capabilities");
+                } else {
+                    eprintln!("[OPEN] ⚠️  WARNING: No onchain wallet provided, running without onchain capabilities");
+                }
+            }
+
+			match bdk {
+				Some(bdk) => inner.run_daemon(Some(bdk)).map_err(BarkError::from),
+				None => inner.run_daemon(None).map_err(BarkError::from),
+			}
+        })
+        .await?;
+
+        *slot = Some(handle);
+        Ok(())
+    }
+
+	/// Stop the running daemon if any. No-op otherwise.
+	pub async fn stop_daemon(&self) -> Result<(), BarkError> {
+		let mut slot = self.daemon.lock().await;
+		if let Some(daemon) = slot.take() {
+			daemon.stop();
+		}
+		Ok(())
+	}
 }
 
 impl Drop for Wallet {

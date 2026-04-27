@@ -659,6 +659,20 @@ interface Wallet {
         OnchainWallet onchain_wallet
     );
 
+    /// Open an existing Bark wallet and start running the daemon,
+    /// optionally with onchain capabilities.
+    ///
+    /// The daemon runs in the background and is stopped when the wallet is dropped.
+    /// Callback-based onchain wallets are not supported for daemon mode and the
+    /// wallet will be opened without onchain capabilities in that case.
+    [Async, Throws=BarkError, Name=open_with_daemon]
+    constructor(
+        string mnemonic,
+        Config config,
+        string datadir,
+        OnchainWallet? onchain_wallet
+    );
+
     // ------------------------------------------------------------------------
     // Synchronization & Maintenance
     // ------------------------------------------------------------------------
@@ -682,6 +696,20 @@ interface Wallet {
     /// Perform maintenance with onchain wallet in delegated mode
     [Async, Throws=BarkError]
     void maintenance_with_onchain_delegated(OnchainWallet onchain_wallet);
+
+    /// Start a background daemon for the wallet.
+    ///
+    /// The daemon performs periodic syncs, exit progression and other
+    /// background work. It is stopped automatically when the wallet is dropped.
+    /// Callback-based onchain wallets are not supported for daemon mode and the
+    /// daemon will run without onchain capabilities in that case.
+    /// Calling this multiple times stops the previous daemon and starts a new one.
+    [Async, Throws=BarkError]
+    void run_daemon(OnchainWallet? onchain_wallet);
+
+    /// Stop the running daemon if any. No-op otherwise.
+    [Async, Throws=BarkError]
+    void stop_daemon();
 
     // ------------------------------------------------------------------------
     // Address Generation
