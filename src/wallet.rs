@@ -2238,7 +2238,7 @@ impl Wallet {
 
     /// Run the daemon. The handle is stored on the wallet and stopped on drop.
     pub async fn run_daemon(
-        &mut self,
+        &self,
         onchain_wallet: Option<Arc<crate::OnchainWallet>>,
     ) -> Result<(), BarkError> {
         let mut slot = self.daemon.lock().await;
