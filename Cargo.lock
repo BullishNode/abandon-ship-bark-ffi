@@ -184,6 +184,7 @@ dependencies = [
  "hex",
  "lightning-invoice",
  "lnurl-rs",
+ "log",
  "once_cell",
  "rusqlite",
  "serde",

@@ -59,6 +59,7 @@ chrono = "0.4"
 # Add rusqlite directly with bundled feature for mobile platform support
 rusqlite = { version = "0.31.0", features = ["bundled", "chrono"] }
 tokio-util = "0.7.18"
+log = "0.4"
 
 [build-dependencies]
 uniffi = { version = "=0.31.1", features = ["build"] }
