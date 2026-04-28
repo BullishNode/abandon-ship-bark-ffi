@@ -53,7 +53,7 @@ impl OnchainWallet {
             // Use shared database cache
             let db = crate::db::get_or_open_db(&datadir)?;
 
-            eprintln!(
+            log::info!(
                 "[ONCHAIN] Creating onchain wallet for {:?} network",
                 btc_network
             );
@@ -73,13 +73,13 @@ impl OnchainWallet {
                 } else {
                     Auth::None
                 };
-                eprintln!("[ONCHAIN] Using Bitcoin Core RPC at {}", url);
+                log::info!("[ONCHAIN] Using Bitcoin Core RPC at {}", url);
                 ChainSourceSpec::Bitcoind {
                     url: url.clone(),
                     auth,
                 }
             } else if let Some(url) = config.esplora_address {
-                eprintln!("[ONCHAIN] Using Esplora at {}", url);
+                log::info!("[ONCHAIN] Using Esplora at {}", url);
                 ChainSourceSpec::Esplora { url }
             } else {
                 return Err(BarkError::InvalidAddress {
@@ -96,7 +96,7 @@ impl OnchainWallet {
                     })?,
             );
 
-            eprintln!("[ONCHAIN] Onchain wallet created successfully");
+            log::info!("[ONCHAIN] Onchain wallet created successfully");
 
             Ok(Self {
                 inner: OnchainWalletInner::Bdk {
@@ -119,7 +119,7 @@ impl OnchainWallet {
     pub fn custom(
         callbacks: Box<dyn crate::custom_onchain_wallet::CustomOnchainWalletCallbacks>,
     ) -> Result<Self, BarkError> {
-        eprintln!("[ONCHAIN] Creating callback-based onchain wallet");
+        log::info!("[ONCHAIN] Creating callback-based onchain wallet");
 
         let adapter = CallbackWalletAdapter::new(callbacks);
 
@@ -138,20 +138,20 @@ impl OnchainWallet {
         run_async(async move {
             match inner {
                 OnchainWalletInner::Bdk { wallet, chain } => {
-                    eprintln!("[ONCHAIN] Starting BDK sync...");
+                    log::info!("[ONCHAIN] Starting BDK sync...");
                     let mut w = wallet.write().await;
                     w.sync(&chain).await.map_err(|e| BarkError::Network {
                         error_message: format!("Sync failed: {}", e),
                     })?;
                     let balance = w.balance();
-                    eprintln!(
+                    log::info!(
                         "[ONCHAIN] BDK sync completed, balance: {} sats",
                         balance.total().to_sat()
                     );
                     Ok(balance.total().to_sat())
                 }
                 OnchainWalletInner::Callback { .. } => {
-                    eprintln!("[ONCHAIN] Callback wallets manage their own sync");
+                    log::info!("[ONCHAIN] Callback wallets manage their own sync");
                     Ok(0)
                 }
             }
@@ -239,7 +239,7 @@ impl OnchainWallet {
                             error_message: "Invalid fee rate".to_string(),
                         })?;
 
-                    eprintln!(
+                    log::info!(
                         "[ONCHAIN] Sending {} sats to {} with fee rate {} sat/vB",
                         amount_sats, addr, fee_rate_sat_per_vb
                     );
@@ -250,7 +250,7 @@ impl OnchainWallet {
                         }
                     })?;
 
-                    eprintln!("[ONCHAIN] Transaction broadcast: {}", txid);
+                    log::info!("[ONCHAIN] Transaction broadcast: {}", txid);
 
                     Ok(txid.to_string())
                 }

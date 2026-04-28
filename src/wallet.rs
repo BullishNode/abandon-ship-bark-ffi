@@ -116,9 +116,9 @@ impl Wallet {
 
         // Check if server connection was established
         if inner.ark_info().await.ok().flatten().is_some() {
-            eprintln!("[OPEN] ✅ Server connection established");
+            log::info!("[OPEN] Server connection established");
         } else {
-            eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark \
+            log::warn!("[OPEN] Server connection FAILED - Lightning and Ark \
                 operations will not work!");
         }
 
@@ -146,7 +146,7 @@ impl Wallet {
             let db = crate::db::get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
 
-            eprintln!("[CREATE] Creating Bark wallet with onchain capabilities...");
+            log::info!("[CREATE] Creating Bark wallet with onchain capabilities...");
 
             let inner = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
                 let onchain_inner = bdk_wallet.read().await;
@@ -178,7 +178,7 @@ impl Wallet {
                 });
             };
 
-            eprintln!("[CREATE] ✅ Bark wallet with onchain created successfully");
+            log::info!("[CREATE] Bark wallet with onchain created successfully");
 
             Ok(Self::from_inner(Arc::new(inner)))
         })
@@ -203,7 +203,7 @@ impl Wallet {
             let db = crate::db::get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
 
-            eprintln!("[OPEN] Opening Bark wallet with onchain capabilities...");
+            log::info!("[OPEN] Opening Bark wallet with onchain capabilities...");
 
             let inner = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
                 let onchain_inner = bdk_wallet.read().await;
@@ -223,13 +223,13 @@ impl Wallet {
 
             // Check if server connection was established
             if inner.ark_info().await.ok().flatten().is_some() {
-                eprintln!("[OPEN] ✅ Server connection established");
+                log::info!("[OPEN] Server connection established");
             } else {
-                eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark \
+                log::warn!("[OPEN] Server connection FAILED - Lightning and Ark \
                     operations will not work!");
             }
 
-            eprintln!("[OPEN] ✅ Bark wallet with onchain opened successfully");
+            log::info!("[OPEN] Bark wallet with onchain opened successfully");
 
             Ok(Self::from_inner(Arc::new(inner)))
         }).await
@@ -254,14 +254,14 @@ impl Wallet {
             let db = crate::db::get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
 
-            eprintln!("[OPEN] Opening Bark wallet with daemon...");
+            log::info!("[OPEN] Opening Bark wallet with daemon...");
 
             let bdk = onchain_wallet.as_ref().and_then(|w| w.inner_bdk());
             if bdk.is_none() {
                 if onchain_wallet.as_ref().and_then(|w| w.inner_callback()).is_some() {
-                    eprintln!("[OPEN] ⚠️  WARNING: Callback wallets are not supported for daemon mode, running without onchain capabilities");
+                    log::warn!("[OPEN] Callback wallets are not supported for daemon mode, running without onchain capabilities");
                 } else {
-                    eprintln!("[OPEN] ⚠️  WARNING: No onchain wallet provided, running without onchain capabilities");
+                    log::warn!("[OPEN] No onchain wallet provided, running without onchain capabilities");
                 }
             }
 
@@ -274,13 +274,13 @@ impl Wallet {
             }.map_err(BarkError::from)?;
 
             if inner.ark_info().await.ok().flatten().is_some() {
-                eprintln!("[OPEN] ✅ Server connection established");
+                log::info!("[OPEN] Server connection established");
             } else {
-                eprintln!("[OPEN] ⚠️  WARNING: Server connection FAILED - Lightning and Ark \
+                log::warn!("[OPEN] Server connection FAILED - Lightning and Ark \
                     operations will not work!");
             }
 
-            eprintln!("[OPEN] ✅ Bark wallet opened successfully and daemon running");
+            log::info!("[OPEN] Bark wallet opened successfully and daemon running");
 
             let wallet = Self::from_inner(inner);
             *wallet.daemon.lock().await = Some(daemon_handle);
@@ -300,13 +300,13 @@ impl Wallet {
     pub async fn sync(&self) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            eprintln!("[SYNC] Starting sync...");
+            log::info!("[SYNC] Starting sync...");
             inner.sync().await;
-            eprintln!("[SYNC] Sync completed");
+            log::info!("[SYNC] Sync completed");
 
             // Log balance after sync
             if let Ok(balance) = inner.balance().await {
-                eprintln!(
+                log::info!(
                     "[SYNC] Balance after sync: spendable={}, pending_board={}",
                     balance.spendable.to_sat(),
                     balance.pending_board.to_sat()
@@ -315,9 +315,9 @@ impl Wallet {
 
             // Log VTXO count
             if let Ok(vtxos) = inner.vtxos().await {
-                eprintln!("[SYNC] VTXOs after sync: {} total", vtxos.len());
+                log::info!("[SYNC] VTXOs after sync: {} total", vtxos.len());
                 for (i, vtxo) in vtxos.iter().enumerate().take(3) {
-                    eprintln!(
+                    log::info!(
                         "[SYNC]   VTXO {}: {} sats, state={:?}",
                         i,
                         vtxo.vtxo.amount().to_sat(),
@@ -1135,7 +1135,7 @@ impl Wallet {
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
 
-            eprintln!("[BOARD] Boarding {} sats into Ark...", amount_sats);
+            log::info!("[BOARD] Boarding {} sats into Ark...", amount_sats);
 
             let pb = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
                 let mut onchain = bdk_wallet.write().await;
@@ -1163,8 +1163,8 @@ impl Wallet {
             let txid = pb.funding_tx.compute_txid();
             let vtxo_id = pb.vtxos.first().map(|v| v.to_string()).unwrap_or_default();
 
-            eprintln!(
-                "[BOARD] ✅ Board transaction created: {} (VTXO ID: {})",
+            log::info!(
+                "[BOARD] Board transaction created: {} (VTXO ID: {})",
                 txid, vtxo_id
             );
 
@@ -1190,7 +1190,7 @@ impl Wallet {
     ) -> Result<crate::PendingBoard, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            eprintln!("[BOARD] Boarding ALL funds into Ark...");
+            log::info!("[BOARD] Boarding ALL funds into Ark...");
 
             let pb = if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
                 let mut onchain = bdk_wallet.write().await;
@@ -1218,8 +1218,8 @@ impl Wallet {
             let txid = pb.funding_tx.compute_txid();
             let vtxo_id = pb.vtxos.first().map(|v| v.to_string()).unwrap_or_default();
 
-            eprintln!(
-                "[BOARD] ✅ Board transaction created: {} (VTXO ID: {}, amount: {} sats)",
+            log::info!(
+                "[BOARD] Board transaction created: {} (VTXO ID: {}, amount: {} sats)",
                 txid,
                 vtxo_id,
                 pb.amount.to_sat()
@@ -1239,7 +1239,7 @@ impl Wallet {
     pub async fn sync_pending_boards(&self) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            eprintln!("[BOARD] Syncing pending boards...");
+            log::info!("[BOARD] Syncing pending boards...");
 
             inner
                 .sync_pending_boards()
@@ -1248,7 +1248,7 @@ impl Wallet {
                     error_message: format!("Sync pending boards failed: {}", e),
                 })?;
 
-            eprintln!("[BOARD] ✅ Pending boards synced");
+            log::info!("[BOARD] Pending boards synced");
 
             Ok(())
         })
@@ -1329,7 +1329,7 @@ impl Wallet {
     pub async fn start_exit_for_entire_wallet(&self) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            eprintln!("[EXIT] Starting unilateral exit for entire wallet...");
+            log::info!("[EXIT] Starting unilateral exit for entire wallet...");
 
             inner
                 .exit
@@ -1341,7 +1341,7 @@ impl Wallet {
                     error_message: format!("Start exit failed: {}", e),
                 })?;
 
-            eprintln!("[EXIT] ✅ Exit initiated - call sync_exits() periodically to progress");
+            log::info!("[EXIT] Exit initiated - call sync_exits() periodically to progress");
 
             Ok(())
         })
@@ -1365,7 +1365,7 @@ impl Wallet {
     ) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            eprintln!("[EXIT] Syncing exits...");
+            log::info!("[EXIT] Syncing exits...");
 
             if let Some(bdk_wallet) = onchain_wallet.inner_bdk() {
                 let mut onchain = bdk_wallet.write().await;
@@ -1390,7 +1390,7 @@ impl Wallet {
                 });
             }
 
-            eprintln!("[EXIT] ✅ Exits synced");
+            log::info!("[EXIT] Exits synced");
 
             Ok(())
         }).await
@@ -1416,7 +1416,7 @@ impl Wallet {
     ) -> Result<Vec<crate::ExitProgressStatus>, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            eprintln!("[EXIT] Progressing exits...");
+            log::info!("[EXIT] Progressing exits...");
 
             let fee_rate = fee_rate_sat_per_vb.and_then(bitcoin::FeeRate::from_sat_per_vb);
 
@@ -1454,7 +1454,7 @@ impl Wallet {
                 .map(Into::into)
                 .collect();
 
-            eprintln!("[EXIT] ✅ Exits progressed");
+            log::info!("[EXIT] Exits progressed");
 
             Ok(statuses)
         })
@@ -1472,7 +1472,7 @@ impl Wallet {
     pub async fn start_exit_for_vtxos(&self, vtxo_ids: Vec<String>) -> Result<(), BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            eprintln!("[EXIT] Starting exit for {} VTXOs...", vtxo_ids.len());
+            log::info!("[EXIT] Starting exit for {} VTXOs...", vtxo_ids.len());
 
             let ids: Result<Vec<_>, _> = vtxo_ids
                 .iter()
@@ -1507,7 +1507,7 @@ impl Wallet {
                     error_message: format!("Start exit for VTXOs failed: {}", e),
                 })?;
 
-            eprintln!("[EXIT] ✅ Exit initiated for {} VTXOs", vtxo_ids.len());
+            log::info!("[EXIT] Exit initiated for {} VTXOs", vtxo_ids.len());
 
             Ok(())
         })
@@ -1628,7 +1628,7 @@ impl Wallet {
     ) -> Result<crate::ExitClaimTransaction, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            eprintln!("[EXIT] Draining {} exits to {}...", vtxo_ids.len(), address);
+            log::info!("[EXIT] Draining {} exits to {}...", vtxo_ids.len(), address);
 
             let addr = address
                 .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
@@ -1678,8 +1678,8 @@ impl Wallet {
             use bitcoin::base64::prelude::*;
             let psbt_base64 = BASE64_STANDARD.encode(&psbt_bytes);
 
-            eprintln!(
-                "[EXIT] ✅ Drain PSBT created (fee: {} sats)",
+            log::info!(
+                "[EXIT] Drain PSBT created (fee: {} sats)",
                 fee_sats.to_sat()
             );
 
@@ -1901,7 +1901,7 @@ impl Wallet {
 
             let txid = tx.compute_txid();
 
-            eprintln!("[BROADCAST] Broadcasting transaction: {}", txid);
+            log::info!("[BROADCAST] Broadcasting transaction: {}", txid);
 
             inner
                 .chain
@@ -1911,7 +1911,7 @@ impl Wallet {
                     error_message: format!("Broadcast failed: {}", e),
                 })?;
 
-            eprintln!("[BROADCAST] Transaction broadcasted successfully");
+            log::info!("[BROADCAST] Transaction broadcasted successfully");
 
             Ok(txid.to_string())
         })
@@ -1958,15 +1958,15 @@ impl Wallet {
                     .await
                 {
                     Ok(_) => {
-                        eprintln!("[MAILBOX] stream ended, restarting...");
+                        log::info!("[MAILBOX] stream ended, restarting...");
                         retry_delay = 1; // reset
                     }
                     Err(e) => {
                         if cancel.is_cancelled() {
-                            eprintln!("[MAILBOX] shutting down");
+                            log::info!("[MAILBOX] shutting down");
                             return;
                         }
-                        eprintln!("[MAILBOX] error: {:?}, retrying in {}s", e, retry_delay);
+                        log::warn!("[MAILBOX] error: {:?}, retrying in {}s", e, retry_delay);
                         tokio::time::sleep(std::time::Duration::from_secs(retry_delay)).await;
                         retry_delay = (retry_delay * 2).min(30); // exponential backoff
                         continue;
@@ -1974,7 +1974,7 @@ impl Wallet {
                 }
 
                 if cancel.is_cancelled() {
-                    eprintln!("[MAILBOX] shutting down");
+                    log::info!("[MAILBOX] shutting down");
                     return;
                 }
 
@@ -2008,7 +2008,7 @@ impl Wallet {
                     error_message: format!("Failed to import VTXO: {}", e),
                 })?;
 
-            eprintln!("[IMPORT] VTXO imported successfully");
+            log::info!("[IMPORT] VTXO imported successfully");
             Ok(())
         })
         .await
@@ -2243,7 +2243,7 @@ impl Wallet {
     ) -> Result<(), BarkError> {
         let mut slot = self.daemon.lock().await;
         if let Some(prev) = slot.take() {
-			eprintln!("[DAEMON] Stopping previous running daemon");
+			log::info!("[DAEMON] Stopping previous running daemon");
             prev.stop();
         }
 
@@ -2252,9 +2252,9 @@ impl Wallet {
             let bdk = onchain_wallet.as_ref().and_then(|w| w.inner_bdk());
             if bdk.is_none() {
                 if onchain_wallet.as_ref().and_then(|w| w.inner_callback()).is_some() {
-                    eprintln!("[OPEN] ⚠️  WARNING: Callback wallets are not supported for daemon mode, running without onchain capabilities");
+                    log::warn!("[OPEN] Callback wallets are not supported for daemon mode, running without onchain capabilities");
                 } else {
-                    eprintln!("[OPEN] ⚠️  WARNING: No onchain wallet provided, running without onchain capabilities");
+                    log::warn!("[OPEN] No onchain wallet provided, running without onchain capabilities");
                 }
             }
 
