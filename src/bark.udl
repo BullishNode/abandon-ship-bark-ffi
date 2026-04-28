@@ -11,6 +11,11 @@ namespace bark {
 
     [Throws=BarkError]
     string extract_tx_from_psbt(string psbt_base64);
+
+    /// Install the foreign log sink. Must be called at most once,
+	/// subsequent calls return an error
+    [Throws=BarkError]
+    void set_logger(BarkLogger logger, LogLevel max_level);
 };
 
 // ============================================================================
@@ -23,6 +28,22 @@ enum Network {
     "Testnet",
     "Signet",
     "Regtest",
+};
+
+/// Severity of a log record forwarded to a foreign [BarkLogger].
+enum LogLevel {
+    "Error",
+    "Warn",
+    "Info",
+    "Debug",
+    "Trace",
+};
+
+/// Foreign sink for log records. Implement in Dart/Swift/Kotlin and pass to
+/// [set_logger]. The `log()` method must not call back into bark APIs that
+/// emit log records.
+callback interface BarkLogger {
+    void log(LogLevel level, string target, string message);
 };
 
 /// A notification event from the wallet

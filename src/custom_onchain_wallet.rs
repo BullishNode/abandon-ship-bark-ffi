@@ -125,12 +125,12 @@ impl GetBalance for CallbackWalletAdapter {
         match self.callbacks.get_balance() {
             Ok(sats) => Amount::from_sat(sats),
             Err(e) => {
-                eprintln!(
-                    "[ERROR] CustomOnchainWalletCallbacks::get_balance failed: {}",
+                log::error!(
+                    "CustomOnchainWalletCallbacks::get_balance failed: {}",
                     e.message()
                 );
-                eprintln!("[ERROR] Returning 0 balance - this may cause unexpected behavior!");
-                eprintln!("[ERROR] Please fix the wallet implementation to ensure get_balance never fails");
+                log::error!("Returning 0 balance - this may cause unexpected behavior!");
+                log::error!("Please fix the wallet implementation to ensure get_balance never fails");
                 Amount::ZERO
             }
         }
