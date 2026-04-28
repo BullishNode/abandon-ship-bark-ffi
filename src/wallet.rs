@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use ark::{ProtocolEncoding, VtxoId};
 use ark::lightning::{Offer, PaymentHash};
 use bark::lightning_invoice::Bolt11Invoice;
-use bark::{DaemonHandle, Wallet as InnerWallet};
+use bark::{Wallet as InnerWallet};
 
 use crate::error::BarkError;
 use crate::notification::NotificationHolder;
@@ -26,8 +26,6 @@ pub struct Wallet {
     /// Held to keep the token alive; dropping cancels the mailbox task.
     #[allow(dead_code)]
     mailbox_cancel: CancellationToken,
-    /// Handle to a running daemon, if any. Stopped on drop.
-    daemon: tokio::sync::Mutex<Option<DaemonHandle>>,
 }
 
 impl Wallet {
@@ -38,7 +36,6 @@ impl Wallet {
             inner,
             mailbox_task,
             mailbox_cancel: cancel,
-            daemon: tokio::sync::Mutex::new(None),
         }
     }
 
@@ -268,7 +265,7 @@ impl Wallet {
             // NB: pass Some(bdk) at the call site so Arc<RwLock<T>> unsize-coerces
             // to Arc<RwLock<dyn DaemonizableOnchainWallet>>; the coercion does not
             // flow through an Option-typed local.
-            let (inner, daemon_handle) = match bdk {
+            let inner = match bdk {
                 Some(bdk) => InnerWallet::open_with_daemon(&mnemonic, db, cfg, Some(bdk)).await,
                 None => InnerWallet::open_with_daemon(&mnemonic, db, cfg, None).await,
             }.map_err(BarkError::from)?;
@@ -283,7 +280,6 @@ impl Wallet {
             log::info!("[OPEN] Bark wallet opened successfully and daemon running");
 
             let wallet = Self::from_inner(inner);
-            *wallet.daemon.lock().await = Some(daemon_handle);
             Ok(wallet)
         }).await
     }
@@ -527,11 +523,11 @@ impl Wallet {
     // ------------------------------------------------------------------------
 
     /// Create a BOLT11 invoice to receive Lightning payment
-    pub async fn bolt11_invoice(&self, amount_sats: u64) -> Result<types::LightningInvoice, BarkError> {
+    pub async fn bolt11_invoice(&self, amount_sats: u64, description: Option<String>) -> Result<types::LightningInvoice, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
             let amount = bitcoin::Amount::from_sat(amount_sats);
-            let invoice = inner.bolt11_invoice(amount).await?;
+            let invoice = inner.bolt11_invoice(amount, description).await?;
 
             Ok(types::LightningInvoice {
                 invoice: invoice.to_string(),
@@ -2241,14 +2237,8 @@ impl Wallet {
         &self,
         onchain_wallet: Option<Arc<crate::OnchainWallet>>,
     ) -> Result<(), BarkError> {
-        let mut slot = self.daemon.lock().await;
-        if let Some(prev) = slot.take() {
-			log::info!("[DAEMON] Stopping previous running daemon");
-            prev.stop();
-        }
-
         let inner = self.inner.clone();
-        let handle = run_async(async move {
+        run_async(async move {
             let bdk = onchain_wallet.as_ref().and_then(|w| w.inner_bdk());
             if bdk.is_none() {
                 if onchain_wallet.as_ref().and_then(|w| w.inner_callback()).is_some() {
@@ -2259,24 +2249,21 @@ impl Wallet {
             }
 
 			match bdk {
-				Some(bdk) => inner.run_daemon(Some(bdk)).map_err(BarkError::from),
-				None => inner.run_daemon(None).map_err(BarkError::from),
+				Some(bdk) => inner.start_daemon(Some(bdk)).map_err(BarkError::from),
+				None => inner.start_daemon(None).map_err(BarkError::from),
 			}
         })
         .await?;
 
-        *slot = Some(handle);
         Ok(())
     }
 
 	/// Stop the running daemon if any. No-op otherwise.
 	pub async fn stop_daemon(&self) -> Result<(), BarkError> {
-		let mut slot = self.daemon.lock().await;
-		if let Some(daemon) = slot.take() {
-			daemon.stop();
-		}
-		Ok(())
-	}
+	    let inner = self.inner.clone();
+	    inner.stop_daemon();
+	    Ok(())
+    }
 }
 
 impl Drop for Wallet {

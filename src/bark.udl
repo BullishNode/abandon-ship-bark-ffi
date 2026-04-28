@@ -775,7 +775,7 @@ interface Wallet {
     // ------------------------------------------------------------------------
 
     [Async, Throws=BarkError]
-    LightningInvoice bolt11_invoice(u64 amount_sats);
+    LightningInvoice bolt11_invoice(u64 amount_sats, string? description);
 
     [Async, Throws=BarkError]
     sequence<LightningReceive> try_claim_all_lightning_receives(boolean wait);
