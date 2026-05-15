@@ -33,6 +33,7 @@ wasm-web = [
     "dep:wasm-bindgen",
     "dep:wasm-bindgen-futures",
     "dep:serde-wasm-bindgen",
+    "dep:tsify",
     "dep:tokio-util",
     "dep:gloo-timers",
     "ark/wasm-web",
@@ -89,6 +90,7 @@ tokio-util = { version = "0.7.18", optional = true }
 wasm-bindgen = { version = "0.2.100", optional = true }
 wasm-bindgen-futures = { version = "0.4.56", optional = true }
 serde-wasm-bindgen = { version = "0.6.5", optional = true }
+tsify = { version = "0.5.6", default-features = false, features = ["js"], optional = true }
 gloo-timers = { version = "0.3", features = ["futures"], optional = true }
 
 [build-dependencies]

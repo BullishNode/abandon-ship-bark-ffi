@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 // ============================================================================
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(from_wasm_abi, into_wasm_abi))]
 pub enum Network {
     Bitcoin,
     Testnet,
@@ -45,6 +47,8 @@ impl From<BtcNetwork> for Network {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct WalletProperties {
     pub network: Network,
     pub fingerprint: String,
@@ -64,6 +68,8 @@ impl From<BarkWalletProperties> for WalletProperties {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Balance {
     pub spendable_sats: u64,
     pub pending_in_round_sats: u64,
@@ -93,6 +99,8 @@ impl From<BarkBalance> for Balance {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Vtxo {
     pub id: String,
     pub amount_sats: u64,
@@ -118,6 +126,8 @@ impl From<BarkWalletVtxo> for Vtxo {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct LightningInvoice {
     pub invoice: String,
     pub amount_sats: u64,
@@ -128,6 +138,8 @@ pub struct LightningInvoice {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct OffboardResult {
     pub round_id: String,
 }
@@ -137,6 +149,8 @@ pub struct OffboardResult {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct AddressWithIndex {
     pub address: String,
     pub index: u32,
@@ -147,6 +161,8 @@ pub struct AddressWithIndex {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct LightningReceive {
     pub payment_hash: String,
     pub invoice: String,
@@ -177,6 +193,8 @@ impl From<bark::persist::models::LightningReceive> for LightningReceive {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct LightningSend {
     pub invoice: String,
     pub amount_sats: u64,
@@ -200,6 +218,8 @@ impl From<bark::persist::models::LightningSend> for LightningSend {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Movement {
     pub id: u32,
     pub status: String,
@@ -263,6 +283,8 @@ impl From<bark::movement::Movement> for Movement {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct FeeEstimate {
     pub gross_amount_sats: u64,
     pub fee_sats: u64,
@@ -286,6 +308,8 @@ impl From<bark::FeeEstimate> for FeeEstimate {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct OnchainBalance {
     pub confirmed_sats: u64,
     pub pending_sats: u64,
@@ -307,6 +331,8 @@ impl From<bark::onchain::bdk_wallet::Balance> for OnchainBalance {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct PendingBoard {
     pub vtxo_id: String,
     pub amount_sats: u64,
@@ -328,6 +354,8 @@ impl From<BarkPendingBoard> for PendingBoard {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ArkInfo {
     pub network: Network,
     pub server_pubkey: String,
@@ -389,6 +417,8 @@ use bark::exit::ExitVtxo as BarkExitVtxo;
 
 /// A VTXO that is being unilaterally exited
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ExitVtxo {
     pub vtxo_id: String,
     pub amount_sats: u64,
@@ -409,6 +439,8 @@ impl From<&BarkExitVtxo> for ExitVtxo {
 
 /// Status of an exit progression
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ExitProgressStatus {
     pub vtxo_id: String,
     pub state: String,
@@ -427,6 +459,8 @@ impl From<BarkExitProgressStatus> for ExitProgressStatus {
 
 /// Claim transaction for exited funds
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ExitClaimTransaction {
     pub psbt_base64: String,
     pub fee_sats: u64,
@@ -434,6 +468,8 @@ pub struct ExitClaimTransaction {
 
 /// Detailed status of an exit transaction
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ExitTransactionStatus {
     pub vtxo_id: String,
     pub state: String,
@@ -462,6 +498,8 @@ use bark::persist::models::{StoredRoundState, Unlocked};
 
 /// A pending round state
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct RoundState {
     pub id: u32,
     /// Whether the round is ongoing
@@ -483,6 +521,8 @@ impl From<StoredRoundState<Unlocked>> for RoundState {
 
 /// A Bitcoin transaction output destination
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Destination {
     pub address: String,
     pub amount_sats: u64,
@@ -490,6 +530,8 @@ pub struct Destination {
 
 /// A Bitcoin transaction outpoint (reference to a previous output)
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct OutPoint {
     pub txid: String,
     pub vout: u32,
@@ -497,6 +539,8 @@ pub struct OutPoint {
 
 /// Reference to a block in the blockchain
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct BlockRef {
     pub height: u32,
     pub hash: String,
@@ -504,6 +548,8 @@ pub struct BlockRef {
 
 /// Parameters for creating a CPFP (Child Pays For Parent) transaction
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct CpfpParams {
     pub tx_hex: String,
     pub fees_type: String,
@@ -517,6 +563,9 @@ pub struct CpfpParams {
 
 /// A notification event from the wallet
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(tag = "type"))]
 pub enum WalletNotification {
     /// A new movement was created
     MovementCreated { movement: Movement },

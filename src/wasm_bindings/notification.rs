@@ -4,6 +4,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::core::notification::NotificationHolder as CoreHolder;
 use crate::error::BarkError;
+use crate::types::WalletNotification;
 
 fn bark_err(e: BarkError) -> JsError {
     JsError::new(&e.message())
@@ -32,16 +33,12 @@ impl NotificationHolder {
 impl NotificationHolder {
     /// Wait for the next wallet notification.
     ///
-    /// Resolves to a serialized `WalletNotification` object, or `null` if:
+    /// Resolves to a `WalletNotification` object, or `null` if:
     /// - `cancelNextNotificationWait()` was called while pending, or
     /// - the wallet's notification source was shut down.
     #[wasm_bindgen(js_name = nextNotification)]
-    pub async fn next_notification(&self) -> Result<JsValue, JsError> {
-        match self.inner.clone().next_notification().await.map_err(bark_err)? {
-            Some(n) => serde_wasm_bindgen::to_value(&n)
-                .map_err(|e| JsError::new(&e.to_string())),
-            None => Ok(JsValue::NULL),
-        }
+    pub async fn next_notification(&self) -> Result<Option<WalletNotification>, JsError> {
+        self.inner.clone().next_notification().await.map_err(bark_err)
     }
 
     /// Cancel the currently pending `nextNotification()` wait.

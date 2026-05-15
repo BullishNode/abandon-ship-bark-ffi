@@ -5,6 +5,7 @@ use wasm_bindgen::prelude::*;
 use crate::config::Config;
 use crate::core::onchain::OnchainWallet as CoreOnchainWallet;
 use crate::error::BarkError;
+use crate::types::OnchainBalance;
 use crate::wasm_bindings::db::indexed_db_client;
 
 fn bark_err(e: BarkError) -> JsError {
@@ -21,11 +22,9 @@ impl OnchainWallet {
     /// Open (or create) the onchain wallet against an IndexedDB-backed persister.
     pub async fn default(
         mnemonic: String,
-        config: JsValue,
+        config: Config,
         db_name: String,
     ) -> Result<OnchainWallet, JsError> {
-        let config: Config = serde_wasm_bindgen::from_value(config)
-            .map_err(|e| JsError::new(&format!("invalid config: {}", e)))?;
         let db = indexed_db_client(&db_name).await.map_err(bark_err)?;
         let core = CoreOnchainWallet::default(mnemonic, config, db).await.map_err(bark_err)?;
         Ok(Self { inner: Arc::new(core) })
@@ -35,9 +34,8 @@ impl OnchainWallet {
         self.inner.sync().await.map_err(bark_err)
     }
 
-    pub async fn balance(&self) -> Result<JsValue, JsError> {
-        let b = self.inner.balance().await.map_err(bark_err)?;
-        serde_wasm_bindgen::to_value(&b).map_err(|e| JsError::new(&e.to_string()))
+    pub async fn balance(&self) -> Result<OnchainBalance, JsError> {
+        self.inner.balance().await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = newAddress)]
