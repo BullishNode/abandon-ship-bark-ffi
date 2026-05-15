@@ -38,3 +38,48 @@ Bindings from [bark-ffi-bindings](https://gitlab.com/ark-bitcoin/bark-ffi-bindin
 bark-ffi = { git = "https://gitlab.com/ark-bitcoin/bark-ffi", branch = "v0.1.0-beta.8-uniffi-v0.30.0" }
 uniffi = { version = "=0.30.0", features = ["cli"] }
 ```
+
+## Build flavors
+
+Two mutually-exclusive feature flags select the binding layer:
+
+| Feature             | Target                       | Persister              |
+| ------------------- | ---------------------------- | ---------------------- |
+| `uniffi-bindings`   | native (Dart/Swift/Kotlin/…) | SQLite                 |
+| `wasm-web`          | `wasm32-unknown-unknown`     | IndexedDB              |
+
+`uniffi-bindings` is the default.
+
+### Native (uniffi)
+
+```sh
+cargo build --no-default-features --features uniffi-bindings
+```
+
+### WASM
+
+`secp256k1-sys` compiles a `wasm32` C object. Apple's stock clang has no
+wasm32 backend; on macOS install LLVM clang first:
+
+```sh
+brew install llvm
+rustup target add wasm32-unknown-unknown
+```
+
+On Linux the distro `clang` usually has wasm32 support built-in
+(`apt install clang llvm`).
+
+Use the helper script — it sets the right `CC`/`AR` for each OS:
+
+```sh
+scripts/wasm.sh check
+scripts/wasm.sh build --release
+```
+
+Or set the env vars yourself:
+
+```sh
+export CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang  # macOS
+export AR_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/llvm-ar
+cargo check --no-default-features --features wasm-web --target wasm32-unknown-unknown
+```
