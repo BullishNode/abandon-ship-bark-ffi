@@ -24,9 +24,8 @@ For the actual bindings, go to [bark-ffi-bindings](https://gitlab.com/ark-bitcoi
 This repo can maintain different branches with different versions of uniffi, for example:
 
 ```
-v0.1.0-beta.8-uniffi-v0.30.0
-v0.1.0-beta.7-uniffi-v0.30.0
-v0.1.0-beta.7-uniffi-v0.29.3
+v0.9.0+bark.0.1.4.uniffi-v0.31.1
+v0.9.0+bark.0.1.4.uniffi-v0.30.0
 ```
 
 Bindings from [bark-ffi-bindings](https://gitlab.com/ark-bitcoin/bark-ffi-bindings) can tap into these branches to generate their own bindings:
@@ -35,8 +34,8 @@ Bindings from [bark-ffi-bindings](https://gitlab.com/ark-bitcoin/bark-ffi-bindin
 # react-native/rust/Cargo.toml
 
 [dependencies]
-bark-ffi = { git = "https://gitlab.com/ark-bitcoin/bark-ffi", branch = "v0.1.0-beta.8-uniffi-v0.30.0" }
-uniffi = { version = "=0.30.0", features = ["cli"] }
+bark-ffi = { git = "https://gitlab.com/ark-bitcoin/bark-ffi", tag = "v0.9.0+bark.0.1.4.uniffi.0.31.1" }
+uniffi = { version = "=0.31.1", features = ["cli"] }
 ```
 
 ## Build flavors
@@ -69,14 +68,7 @@ rustup target add wasm32-unknown-unknown
 On Linux the distro `clang` usually has wasm32 support built-in
 (`apt install clang llvm`).
 
-Use the helper script — it sets the right `CC`/`AR` for each OS:
-
-```sh
-scripts/wasm.sh check
-scripts/wasm.sh build --release
-```
-
-Or set the env vars yourself:
+Set the env vars before building:
 
 ```sh
 export CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang  # macOS
