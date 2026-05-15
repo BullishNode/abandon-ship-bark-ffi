@@ -3,12 +3,13 @@ use bark::WalletVtxo as BarkWalletVtxo;
 use bark::{Balance as BarkBalance, WalletProperties as BarkWalletProperties};
 use bark_bitcoin_ext::AmountExt;
 use bitcoin::Network as BtcNetwork;
+use serde::{Deserialize, Serialize};
 
 // ============================================================================
 // Network
 // ============================================================================
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Network {
     Bitcoin,
     Testnet,
@@ -40,72 +41,10 @@ impl From<BtcNetwork> for Network {
 }
 
 // ============================================================================
-// Config
-// ============================================================================
-
-#[derive(Clone, Debug)]
-pub struct Config {
-    pub server_address: String,
-    pub server_access_token: Option<String>,
-    pub esplora_address: Option<String>,
-    pub bitcoind_address: Option<String>,
-    pub bitcoind_cookiefile: Option<String>,
-    pub bitcoind_user: Option<String>,
-    pub bitcoind_pass: Option<String>,
-    pub network: Network,
-    pub vtxo_refresh_expiry_threshold: Option<u32>,
-    pub vtxo_exit_margin: Option<u16>,
-    pub htlc_recv_claim_delta: Option<u16>,
-    pub fallback_fee_rate: Option<u64>,
-    pub round_tx_required_confirmations: Option<u32>,
-    pub daemon_fast_sync_interval_secs: Option<u64>,
-    pub daemon_slow_sync_interval_secs: Option<u64>,
-}
-
-impl From<Config> for bark::Config {
-    fn from(c: Config) -> Self {
-        let network: BtcNetwork = c.network.into();
-        let mut cfg = bark::Config::network_default(network);
-
-        cfg.server_address = c.server_address;
-        cfg.server_access_token = c.server_access_token;
-        cfg.esplora_address = c.esplora_address;
-        cfg.bitcoind_address = c.bitcoind_address;
-        cfg.bitcoind_cookiefile = c.bitcoind_cookiefile.map(std::path::PathBuf::from);
-        cfg.bitcoind_user = c.bitcoind_user;
-        cfg.bitcoind_pass = c.bitcoind_pass;
-
-        if let Some(threshold) = c.vtxo_refresh_expiry_threshold {
-            cfg.vtxo_refresh_expiry_threshold = threshold;
-        }
-        if let Some(margin) = c.vtxo_exit_margin {
-            cfg.vtxo_exit_margin = margin;
-        }
-        if let Some(delta) = c.htlc_recv_claim_delta {
-            cfg.htlc_recv_claim_delta = delta;
-        }
-        if let Some(rate) = c.fallback_fee_rate {
-            cfg.fallback_fee_rate = Some(bitcoin::FeeRate::from_sat_per_kwu(rate));
-        }
-        if let Some(confs) = c.round_tx_required_confirmations {
-            cfg.round_tx_required_confirmations = confs;
-        }
-        if let Some(secs) = c.daemon_fast_sync_interval_secs {
-            cfg.daemon_fast_sync_interval_secs = secs;
-        }
-        if let Some(secs) = c.daemon_slow_sync_interval_secs {
-            cfg.daemon_slow_sync_interval_secs = secs;
-        }
-
-        cfg
-    }
-}
-
-// ============================================================================
 // WalletProperties
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WalletProperties {
     pub network: Network,
     pub fingerprint: String,
@@ -124,7 +63,7 @@ impl From<BarkWalletProperties> for WalletProperties {
 // Balance
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Balance {
     pub spendable_sats: u64,
     pub pending_in_round_sats: u64,
@@ -153,7 +92,7 @@ impl From<BarkBalance> for Balance {
 // Vtxo
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Vtxo {
     pub id: String,
     pub amount_sats: u64,
@@ -178,7 +117,7 @@ impl From<BarkWalletVtxo> for Vtxo {
 // LightningInvoice
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LightningInvoice {
     pub invoice: String,
     pub amount_sats: u64,
@@ -188,7 +127,7 @@ pub struct LightningInvoice {
 // OffboardResult
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OffboardResult {
     pub round_id: String,
 }
@@ -197,7 +136,7 @@ pub struct OffboardResult {
 // AddressWithIndex
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddressWithIndex {
     pub address: String,
     pub index: u32,
@@ -207,7 +146,7 @@ pub struct AddressWithIndex {
 // LightningReceive
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LightningReceive {
     pub payment_hash: String,
     pub invoice: String,
@@ -237,7 +176,7 @@ impl From<bark::persist::models::LightningReceive> for LightningReceive {
 // LightningSend
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LightningSend {
     pub invoice: String,
     pub amount_sats: u64,
@@ -260,7 +199,7 @@ impl From<bark::persist::models::LightningSend> for LightningSend {
 // Movement
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Movement {
     pub id: u32,
     pub status: String,
@@ -323,7 +262,7 @@ impl From<bark::movement::Movement> for Movement {
 // FeeEstimate
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FeeEstimate {
     pub gross_amount_sats: u64,
     pub fee_sats: u64,
@@ -346,7 +285,7 @@ impl From<bark::FeeEstimate> for FeeEstimate {
 // OnchainBalance
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnchainBalance {
     pub confirmed_sats: u64,
     pub pending_sats: u64,
@@ -367,7 +306,7 @@ impl From<bark::onchain::bdk_wallet::Balance> for OnchainBalance {
 // PendingBoard
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PendingBoard {
     pub vtxo_id: String,
     pub amount_sats: u64,
@@ -388,7 +327,7 @@ impl From<BarkPendingBoard> for PendingBoard {
 // ArkInfo
 // ============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ArkInfo {
     pub network: Network,
     pub server_pubkey: String,
@@ -449,7 +388,7 @@ use bark::exit::ExitProgressStatus as BarkExitProgressStatus;
 use bark::exit::ExitVtxo as BarkExitVtxo;
 
 /// A VTXO that is being unilaterally exited
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExitVtxo {
     pub vtxo_id: String,
     pub amount_sats: u64,
@@ -469,7 +408,7 @@ impl From<&BarkExitVtxo> for ExitVtxo {
 }
 
 /// Status of an exit progression
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExitProgressStatus {
     pub vtxo_id: String,
     pub state: String,
@@ -487,14 +426,14 @@ impl From<BarkExitProgressStatus> for ExitProgressStatus {
 }
 
 /// Claim transaction for exited funds
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExitClaimTransaction {
     pub psbt_base64: String,
     pub fee_sats: u64,
 }
 
 /// Detailed status of an exit transaction
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExitTransactionStatus {
     pub vtxo_id: String,
     pub state: String,
@@ -522,7 +461,7 @@ impl From<bark::exit::ExitTransactionStatus> for ExitTransactionStatus {
 use bark::persist::models::{StoredRoundState, Unlocked};
 
 /// A pending round state
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RoundState {
     pub id: u32,
     /// Whether the round is ongoing
@@ -543,28 +482,28 @@ impl From<StoredRoundState<Unlocked>> for RoundState {
 // ============================================================================
 
 /// A Bitcoin transaction output destination
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Destination {
     pub address: String,
     pub amount_sats: u64,
 }
 
 /// A Bitcoin transaction outpoint (reference to a previous output)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OutPoint {
     pub txid: String,
     pub vout: u32,
 }
 
 /// Reference to a block in the blockchain
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockRef {
     pub height: u32,
     pub hash: String,
 }
 
 /// Parameters for creating a CPFP (Child Pays For Parent) transaction
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CpfpParams {
     pub tx_hex: String,
     pub fees_type: String,
@@ -577,7 +516,7 @@ pub struct CpfpParams {
 // ============================================================================
 
 /// A notification event from the wallet
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum WalletNotification {
     /// A new movement was created
     MovementCreated { movement: Movement },
