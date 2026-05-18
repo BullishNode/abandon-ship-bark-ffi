@@ -9,11 +9,11 @@ use tokio_util::sync::CancellationToken;
 use bark::Wallet as InnerWallet;
 
 use crate::config::Config;
+use crate::core::notification::NotificationHolder;
 use crate::core::wallet::Wallet as CoreWallet;
 use crate::error::BarkError;
 use crate::types;
 use crate::uniffi_bindings::db::get_or_open_db;
-use crate::core::notification::NotificationHolder;
 use crate::uniffi_bindings::onchain::OnchainWallet;
 use crate::uniffi_bindings::runtime::{run_async, TOKIO_RT};
 
@@ -26,39 +26,89 @@ use crate::uniffi_bindings::runtime::{run_async, TOKIO_RT};
 /// - Daemon control methods
 /// - Notification holder
 /// - Callback onchain dispatch
+#[derive(uniffi::Object)]
 pub struct Wallet {
     core: Arc<CoreWallet>,
     /// Direct handle to bark::Wallet so callback-onchain methods can bypass
     /// `core::Wallet` (which only knows BDK).
     inner: Arc<InnerWallet>,
-    mailbox_task: Option<tokio::task::JoinHandle<()>>,
+    mailbox_task: std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
     #[allow(dead_code)]
     mailbox_cancel: CancellationToken,
 }
 
 impl Wallet {
-    fn wrap(core: CoreWallet) -> Self {
+    fn wrap(core: CoreWallet) -> Arc<Self> {
         let inner = core.inner();
         let cancel = CancellationToken::new();
         let mailbox_task = Some(Self::start_mailbox_processor(inner.clone(), cancel.clone()));
-        Self {
+        Arc::new(Self {
             core: Arc::new(core),
             inner,
-            mailbox_task,
+            mailbox_task: std::sync::Mutex::new(mailbox_task),
             mailbox_cancel: cancel,
-        }
+        })
     }
 
+    fn start_mailbox_processor(
+        inner: Arc<InnerWallet>,
+        cancel: CancellationToken,
+    ) -> tokio::task::JoinHandle<()> {
+        TOKIO_RT.spawn(async move {
+            let mut retry_delay = 1;
+
+            loop {
+                match inner
+                    .subscribe_process_mailbox_messages(None, cancel.clone())
+                    .await
+                {
+                    Ok(_) => {
+                        log::info!("[MAILBOX] stream ended, restarting...");
+                        retry_delay = 1;
+                    }
+                    Err(e) => {
+                        if cancel.is_cancelled() {
+                            log::info!("[MAILBOX] shutting down");
+                            return;
+                        }
+                        log::warn!("[MAILBOX] error: {:?}, retrying in {}s", e, retry_delay);
+                        tokio::select! {
+                            _ = cancel.cancelled() => {
+                                log::info!("[MAILBOX] shutting down");
+                                return;
+                            }
+                            _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                        }
+                        retry_delay = (retry_delay * 2).min(30);
+                        continue;
+                    }
+                }
+
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        log::info!("[MAILBOX] shutting down");
+                        return;
+                    }
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+                }
+            }
+        })
+    }
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+impl Wallet {
     // ------------------------------------------------------------------------
     // Construction
     // ------------------------------------------------------------------------
 
+    #[uniffi::constructor]
     pub async fn create(
         mnemonic: String,
         config: Config,
         datadir: String,
         force_rescan: bool,
-    ) -> Result<Self, BarkError> {
+    ) -> Result<Arc<Self>, BarkError> {
         run_async(async move {
             let db = get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
@@ -68,11 +118,12 @@ impl Wallet {
         .await
     }
 
+    #[uniffi::constructor]
     pub async fn open(
         mnemonic: String,
         config: Config,
         datadir: String,
-    ) -> Result<Self, BarkError> {
+    ) -> Result<Arc<Self>, BarkError> {
         run_async(async move {
             let db = get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
@@ -82,13 +133,14 @@ impl Wallet {
         .await
     }
 
+    #[uniffi::constructor]
     pub async fn create_with_onchain(
         mnemonic: String,
         config: Config,
         datadir: String,
         onchain_wallet: Arc<OnchainWallet>,
         force_rescan: bool,
-    ) -> Result<Self, BarkError> {
+    ) -> Result<Arc<Self>, BarkError> {
         run_async(async move {
             let db = get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
@@ -130,12 +182,13 @@ impl Wallet {
         .await
     }
 
+    #[uniffi::constructor]
     pub async fn open_with_onchain(
         mnemonic: String,
         config: Config,
         datadir: String,
         onchain_wallet: Arc<OnchainWallet>,
-    ) -> Result<Self, BarkError> {
+    ) -> Result<Arc<Self>, BarkError> {
         run_async(async move {
             let db = get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
@@ -167,12 +220,13 @@ impl Wallet {
     }
 
     /// Open an existing wallet and start running the daemon.
+    #[uniffi::constructor]
     pub async fn open_with_daemon(
         mnemonic: String,
         config: Config,
         datadir: String,
         onchain_wallet: Option<Arc<OnchainWallet>>,
-    ) -> Result<Self, BarkError> {
+    ) -> Result<Arc<Self>, BarkError> {
         run_async(async move {
             let cfg: bark::Config = config.into();
 
@@ -301,11 +355,6 @@ impl Wallet {
     pub async fn peek_address(&self, index: u32) -> Result<String, BarkError> {
         let core = self.core.clone();
         run_async(async move { core.peek_address(index).await }).await
-    }
-
-    #[deprecated(since = "0.1.0-beta.9", note = "use peek_address")]
-    pub async fn peak_address(&self, index: u32) -> Result<String, BarkError> {
-        self.peek_address(index).await
     }
 
     // ------------------------------------------------------------------------
@@ -890,51 +939,6 @@ impl Wallet {
         self.core.mailbox_authorization()
     }
 
-    fn start_mailbox_processor(
-        inner: Arc<InnerWallet>,
-        cancel: CancellationToken,
-    ) -> tokio::task::JoinHandle<()> {
-        TOKIO_RT.spawn(async move {
-            let mut retry_delay = 1;
-
-            loop {
-                match inner
-                    .subscribe_process_mailbox_messages(None, cancel.clone())
-                    .await
-                {
-                    Ok(_) => {
-                        log::info!("[MAILBOX] stream ended, restarting...");
-                        retry_delay = 1;
-                    }
-                    Err(e) => {
-                        if cancel.is_cancelled() {
-                            log::info!("[MAILBOX] shutting down");
-                            return;
-                        }
-                        log::warn!("[MAILBOX] error: {:?}, retrying in {}s", e, retry_delay);
-                        tokio::select! {
-                            _ = cancel.cancelled() => {
-                                log::info!("[MAILBOX] shutting down");
-                                return;
-                            }
-                            _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
-                        }
-                        retry_delay = (retry_delay * 2).min(30);
-                        continue;
-                    }
-                }
-
-                tokio::select! {
-                    _ = cancel.cancelled() => {
-                        log::info!("[MAILBOX] shutting down");
-                        return;
-                    }
-                    _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
-                }
-            }
-        })
-    }
-
     // ------------------------------------------------------------------------
     // VTXO Import
     // ------------------------------------------------------------------------
@@ -1062,9 +1066,8 @@ impl Wallet {
 
 impl Drop for Wallet {
     fn drop(&mut self) {
-        if let Some(handle) = self.mailbox_task.take() {
+        if let Some(handle) = self.mailbox_task.lock().unwrap().take() {
             handle.abort();
         }
     }
 }
-

@@ -16,6 +16,7 @@ use crate::uniffi_bindings::runtime::run_async;
 /// UniFFI-facing onchain wallet. Supports two backends:
 /// - BDK (real onchain wallet via `bark::onchain::OnchainWallet`)
 /// - Callback (foreign-language implementation)
+#[derive(uniffi::Object)]
 pub struct OnchainWallet {
     inner: OnchainWalletInner,
 }
@@ -25,30 +26,33 @@ enum OnchainWalletInner {
     Callback(Arc<RwLock<CallbackWalletAdapter>>),
 }
 
+#[uniffi::export(async_runtime = "tokio")]
 impl OnchainWallet {
     /// BDK-backed wallet. Opens the shared sqlite cache.
+    #[uniffi::constructor]
     pub async fn default(
         mnemonic: String,
         config: Config,
         datadir: String,
-    ) -> Result<Self, BarkError> {
+    ) -> Result<Arc<Self>, BarkError> {
         run_async(async move {
             let db = get_or_open_db(&datadir)?;
             let core = CoreOnchainWallet::default(mnemonic, config, db).await?;
-            Ok(Self { inner: OnchainWalletInner::Bdk(Arc::new(core)) })
+            Ok(Arc::new(Self { inner: OnchainWalletInner::Bdk(Arc::new(core)) }))
         })
         .await
     }
 
     /// Callback-backed wallet for foreign-language implementations.
+    #[uniffi::constructor]
     pub fn custom(
-        callbacks: Box<dyn CustomOnchainWalletCallbacks>,
-    ) -> Result<Self, BarkError> {
+        callbacks: Arc<dyn CustomOnchainWalletCallbacks>,
+    ) -> Result<Arc<Self>, BarkError> {
         log::info!("[ONCHAIN] Creating callback-based onchain wallet");
         let adapter = CallbackWalletAdapter::new(callbacks);
-        Ok(Self {
+        Ok(Arc::new(Self {
             inner: OnchainWalletInner::Callback(Arc::new(RwLock::new(adapter))),
-        })
+        }))
     }
 
     pub async fn sync(&self) -> Result<u64, BarkError> {
@@ -116,7 +120,9 @@ impl OnchainWallet {
             }),
         }
     }
+}
 
+impl OnchainWallet {
     /// Returns the inner BDK wallet handle for use by `bark::Wallet` operations
     /// that require an `&mut OnchainWallet`. Used by daemon mode (which takes
     /// the handle directly) and the core-bypass callback dispatch in the

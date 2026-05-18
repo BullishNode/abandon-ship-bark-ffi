@@ -34,4 +34,4 @@ mod wasm_bindings;
 pub use wasm_bindings::*;
 
 #[cfg(feature = "uniffi-bindings")]
-uniffi::include_scaffolding!("bark");
+uniffi::setup_scaffolding!();

@@ -19,6 +19,7 @@ use crate::types::WalletNotification;
 /// This holder is intended for a single consumer loop. Concurrent calls to
 /// `next_notification()` on the same holder are not supported and will return
 /// `None` immediately.
+#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Object))]
 pub struct NotificationHolder {
     /// The bark notification stream. Held in a tokio Mutex because we need to
     /// hold it across the `.await` point inside `next_notification()`.
@@ -53,7 +54,10 @@ impl NotificationHolder {
             wait_in_progress: AtomicBool::new(false),
         })
     }
+}
 
+#[cfg_attr(feature = "uniffi-bindings", uniffi::export(async_runtime = "tokio"))]
+impl NotificationHolder {
     /// Wait for the next wallet notification.
     ///
     /// Returns `None` when:

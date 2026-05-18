@@ -15,7 +15,7 @@ use once_cell::sync::OnceCell;
 use crate::error::BarkError;
 
 /// Severity of a log record.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum LogLevel {
     Error,
     Warn,
@@ -53,6 +53,7 @@ impl From<LogLevel> for log::LevelFilter {
 /// IMPORTANT: implementations must not call back into bark APIs that
 /// themselves emit log records, or the foreign runtime may stack-overflow
 /// or deadlock.
+#[uniffi::export(with_foreign)]
 pub trait BarkLogger: Send + Sync {
     fn log(&self, level: LogLevel, target: String, message: String);
 }
@@ -73,8 +74,6 @@ impl log::Log for Bridge {
         if !self.enabled(record.metadata()) {
             return;
         }
-        // Clone the Arc out from under the lock so the foreign callback runs
-        // without holding our RwLock
 		self.sink.log(
 			record.level().into(),
 			record.target().to_string(),
@@ -89,14 +88,14 @@ impl log::Log for Bridge {
 ///
 /// On first call, installs the bridge with `log::set_logger`. Subsequent calls
 /// will return an error.
+#[uniffi::export]
 pub fn set_logger(
-    logger: Box<dyn BarkLogger>,
+    logger: Arc<dyn BarkLogger>,
     max_level: LogLevel,
 ) -> Result<(), BarkError> {
-	let sink = Arc::from(logger);
 	let filter: LevelFilter = max_level.into();
 
-    let bridge = BRIDGE.try_insert(Bridge { sink, filter })
+    let bridge = BRIDGE.try_insert(Bridge { sink: logger, filter })
 		.map_err(|_| BarkError::Internal { error_message: "logger already installed".to_string() })?;
 
 	log::set_logger(bridge)

@@ -6,6 +6,7 @@ use bip39::Mnemonic;
 use crate::error::BarkError;
 
 /// Generate a new 12-word BIP39 mnemonic
+#[cfg_attr(feature = "uniffi-bindings", uniffi::export)]
 pub fn generate_mnemonic() -> Result<String, BarkError> {
     let mnemonic = Mnemonic::generate(12).map_err(|e| BarkError::Internal {
         error_message: format!("Failed to generate mnemonic: {}", e),
@@ -14,6 +15,7 @@ pub fn generate_mnemonic() -> Result<String, BarkError> {
 }
 
 /// Validate a BIP39 mnemonic phrase
+#[cfg_attr(feature = "uniffi-bindings", uniffi::export)]
 pub fn validate_mnemonic(mnemonic: String) -> Result<bool, BarkError> {
     match Mnemonic::parse(mnemonic.trim()) {
         Ok(_) => Ok(true),
@@ -26,6 +28,7 @@ pub fn validate_mnemonic(mnemonic: String) -> Result<bool, BarkError> {
 /// This only validates the format of the address, not whether it belongs
 /// to a specific Ark server. For full validation against a connected server,
 /// use Wallet::validate_arkoor_address() instead.
+#[cfg_attr(feature = "uniffi-bindings", uniffi::export)]
 pub fn validate_ark_address(address: String) -> Result<bool, BarkError> {
     match address.parse::<ark::Address>() {
         Ok(_) => Ok(true),
@@ -45,6 +48,7 @@ pub fn validate_ark_address(address: String) -> Result<bool, BarkError> {
 /// # Returns
 ///
 /// Hex-encoded signed transaction ready for broadcasting
+#[cfg_attr(feature = "uniffi-bindings", uniffi::export)]
 pub fn extract_tx_from_psbt(psbt_base64: String) -> Result<String, BarkError> {
     use bitcoin::consensus::encode::serialize_hex;
     use bitcoin::psbt::Psbt;
