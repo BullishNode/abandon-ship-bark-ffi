@@ -50,6 +50,7 @@ impl From<BtcNetwork> for Network {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct WalletProperties {
     pub network: Network,
@@ -72,6 +73,7 @@ impl From<BarkWalletProperties> for WalletProperties {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct Balance {
     pub spendable_sats: u64,
@@ -104,6 +106,7 @@ impl From<BarkBalance> for Balance {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct Vtxo {
     pub id: String,
@@ -132,6 +135,7 @@ impl From<BarkWalletVtxo> for Vtxo {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct LightningInvoice {
     pub invoice: String,
@@ -145,6 +149,7 @@ pub struct LightningInvoice {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct OffboardResult {
     pub round_id: String,
@@ -157,6 +162,7 @@ pub struct OffboardResult {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct AddressWithIndex {
     pub address: String,
@@ -170,6 +176,7 @@ pub struct AddressWithIndex {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct LightningReceive {
     pub payment_hash: String,
@@ -203,6 +210,7 @@ impl From<bark::persist::models::LightningReceive> for LightningReceive {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct LightningSend {
     pub invoice: String,
@@ -229,6 +237,7 @@ impl From<bark::persist::models::LightningSend> for LightningSend {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct Movement {
     pub id: u32,
@@ -295,6 +304,7 @@ impl From<bark::movement::Movement> for Movement {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct FeeEstimate {
     pub gross_amount_sats: u64,
@@ -321,6 +331,7 @@ impl From<bark::FeeEstimate> for FeeEstimate {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct OnchainBalance {
     pub confirmed_sats: u64,
@@ -345,6 +356,7 @@ impl From<bark::onchain::bdk_wallet::Balance> for OnchainBalance {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct PendingBoard {
     pub vtxo_id: String,
@@ -369,6 +381,7 @@ impl From<BarkPendingBoard> for PendingBoard {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct ArkInfo {
     pub network: Network,
@@ -433,6 +446,7 @@ use bark::exit::ExitVtxo as BarkExitVtxo;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct ExitVtxo {
     pub vtxo_id: String,
@@ -456,6 +470,7 @@ impl From<&BarkExitVtxo> for ExitVtxo {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct ExitProgressStatus {
     pub vtxo_id: String,
@@ -477,6 +492,7 @@ impl From<BarkExitProgressStatus> for ExitProgressStatus {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct ExitClaimTransaction {
     pub psbt_base64: String,
@@ -487,6 +503,7 @@ pub struct ExitClaimTransaction {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct ExitTransactionStatus {
     pub vtxo_id: String,
@@ -518,6 +535,7 @@ use bark::persist::models::{StoredRoundState, Unlocked};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct RoundState {
     pub id: u32,
@@ -542,6 +560,7 @@ impl From<StoredRoundState<Unlocked>> for RoundState {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct Destination {
     pub address: String,
@@ -552,6 +571,7 @@ pub struct Destination {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct OutPoint {
     pub txid: String,
@@ -562,6 +582,7 @@ pub struct OutPoint {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct BlockRef {
     pub height: u32,
@@ -572,6 +593,7 @@ pub struct BlockRef {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct CpfpParams {
     pub tx_hex: String,

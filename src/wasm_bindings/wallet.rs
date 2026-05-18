@@ -1,8 +1,12 @@
+#![allow(non_snake_case)]
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use bark::Wallet as InnerWallet;
+use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
+use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
 use crate::config::Config;
@@ -20,6 +24,102 @@ use crate::wasm_bindings::onchain::OnchainWallet;
 
 fn bark_err(e: BarkError) -> JsError {
     JsError::new(&e.message())
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PayLightningInvoiceArgs {
+    pub invoice: String,
+    #[tsify(optional)]
+    pub amountSats: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PayLightningOfferArgs {
+    pub offer: String,
+    #[tsify(optional)]
+    pub amountSats: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct Bolt11InvoiceArgs {
+    pub amountSats: u64,
+    #[tsify(optional)]
+    pub description: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgressExitsArgs {
+    #[tsify(optional)]
+    pub feeRateSatPerVb: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct DrainExitsArgs {
+    pub vtxoIds: Vec<String>,
+    pub address: String,
+    #[tsify(optional)]
+    pub feeRateSatPerVb: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckLightningPaymentArgs {
+    pub paymentHash: String,
+    pub wait: bool,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct GetExitStatusArgs {
+    pub vtxoId: String,
+    pub includeHistory: bool,
+    pub includeTransactions: bool,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct TryClaimLightningReceiveArgs {
+    pub paymentHash: String,
+    pub wait: bool,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct TryClaimAllLightningReceivesArgs {
+    pub wait: bool,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct WalletCreateArgs {
+    pub mnemonic: String,
+    pub config: Config,
+    pub dbName: String,
+    pub forceRescan: bool,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct WalletOpenArgs {
+    pub mnemonic: String,
+    pub config: Config,
+    pub dbName: String,
 }
 
 #[wasm_bindgen]
@@ -97,53 +197,47 @@ impl Drop for Wallet {
 impl Wallet {
     // -- Construction ---------------------------------------------------------
 
-    pub async fn create(
-        mnemonic: String,
-        config: Config,
-        db_name: String,
-        force_rescan: bool,
-    ) -> Result<Wallet, JsError> {
-        let db = indexed_db_client(&db_name).await.map_err(bark_err)?;
-        let core = CoreWallet::create(mnemonic, config, db, force_rescan).await.map_err(bark_err)?;
-        Ok(Self::wrap(core))
-    }
-
-    pub async fn open(
-        mnemonic: String,
-        config: Config,
-        db_name: String,
-    ) -> Result<Wallet, JsError> {
-        let db = indexed_db_client(&db_name).await.map_err(bark_err)?;
-        let core = CoreWallet::open(mnemonic, config, db).await.map_err(bark_err)?;
-        Ok(Self::wrap(core))
-    }
-
-    #[wasm_bindgen(js_name = createWithOnchain)]
-    pub async fn create_with_onchain(
-        mnemonic: String,
-        config: Config,
-        db_name: String,
-        onchain_wallet: &OnchainWallet,
-        force_rescan: bool,
-    ) -> Result<Wallet, JsError> {
-        let db = indexed_db_client(&db_name).await.map_err(bark_err)?;
-        let onchain = onchain_wallet.inner();
-        let core = CoreWallet::create_with_onchain(mnemonic, config, db, onchain, force_rescan)
+    pub async fn create(args: WalletCreateArgs) -> Result<Wallet, JsError> {
+        let db = indexed_db_client(&args.dbName).await.map_err(bark_err)?;
+        let core = CoreWallet::create(args.mnemonic, args.config, db, args.forceRescan)
             .await
             .map_err(bark_err)?;
         Ok(Self::wrap(core))
     }
 
+    pub async fn open(args: WalletOpenArgs) -> Result<Wallet, JsError> {
+        let db = indexed_db_client(&args.dbName).await.map_err(bark_err)?;
+        let core = CoreWallet::open(args.mnemonic, args.config, db).await.map_err(bark_err)?;
+        Ok(Self::wrap(core))
+    }
+
+    #[wasm_bindgen(js_name = createWithOnchain)]
+    pub async fn create_with_onchain(
+        onchainWallet: &OnchainWallet,
+        args: WalletCreateArgs,
+    ) -> Result<Wallet, JsError> {
+        let db = indexed_db_client(&args.dbName).await.map_err(bark_err)?;
+        let onchain = onchainWallet.inner();
+        let core = CoreWallet::create_with_onchain(
+            args.mnemonic,
+            args.config,
+            db,
+            onchain,
+            args.forceRescan,
+        )
+        .await
+        .map_err(bark_err)?;
+        Ok(Self::wrap(core))
+    }
+
     #[wasm_bindgen(js_name = openWithOnchain)]
     pub async fn open_with_onchain(
-        mnemonic: String,
-        config: Config,
-        db_name: String,
-        onchain_wallet: &OnchainWallet,
+        onchainWallet: &OnchainWallet,
+        args: WalletOpenArgs,
     ) -> Result<Wallet, JsError> {
-        let db = indexed_db_client(&db_name).await.map_err(bark_err)?;
-        let onchain = onchain_wallet.inner();
-        let core = CoreWallet::open_with_onchain(mnemonic, config, db, onchain)
+        let db = indexed_db_client(&args.dbName).await.map_err(bark_err)?;
+        let onchain = onchainWallet.inner();
+        let core = CoreWallet::open_with_onchain(args.mnemonic, args.config, db, onchain)
             .await
             .map_err(bark_err)?;
         Ok(Self::wrap(core))
@@ -162,9 +256,9 @@ impl Wallet {
     #[wasm_bindgen(js_name = maintenanceWithOnchain)]
     pub async fn maintenance_with_onchain(
         &self,
-        onchain_wallet: &OnchainWallet,
+        onchainWallet: &OnchainWallet,
     ) -> Result<(), JsError> {
-        self.core.maintenance_with_onchain(onchain_wallet.inner()).await.map_err(bark_err)
+        self.core.maintenance_with_onchain(onchainWallet.inner()).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = maintenanceDelegated)]
@@ -175,10 +269,10 @@ impl Wallet {
     #[wasm_bindgen(js_name = maintenanceWithOnchainDelegated)]
     pub async fn maintenance_with_onchain_delegated(
         &self,
-        onchain_wallet: &OnchainWallet,
+        onchainWallet: &OnchainWallet,
     ) -> Result<(), JsError> {
         self.core
-            .maintenance_with_onchain_delegated(onchain_wallet.inner())
+            .maintenance_with_onchain_delegated(onchainWallet.inner())
             .await
             .map_err(bark_err)
     }
@@ -211,8 +305,8 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = getVtxoById)]
-    pub async fn get_vtxo_by_id(&self, vtxo_id: String) -> Result<Vtxo, JsError> {
-        self.core.get_vtxo_by_id(vtxo_id).await.map_err(bark_err)
+    pub async fn get_vtxo_by_id(&self, vtxoId: String) -> Result<Vtxo, JsError> {
+        self.core.get_vtxo_by_id(vtxoId).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = spendableVtxos)]
@@ -226,8 +320,8 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = getExpiringVtxos)]
-    pub async fn get_expiring_vtxos(&self, threshold_blocks: u32) -> Result<Vec<Vtxo>, JsError> {
-        self.core.get_expiring_vtxos(threshold_blocks).await.map_err(bark_err)
+    pub async fn get_expiring_vtxos(&self, thresholdBlocks: u32) -> Result<Vec<Vtxo>, JsError> {
+        self.core.get_expiring_vtxos(thresholdBlocks).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = getVtxosToRefresh)]
@@ -238,17 +332,17 @@ impl Wallet {
     // -- Offboarding ----------------------------------------------------------
 
     #[wasm_bindgen(js_name = offboardAll)]
-    pub async fn offboard_all(&self, bitcoin_address: String) -> Result<OffboardResult, JsError> {
-        self.core.offboard_all(bitcoin_address).await.map_err(bark_err)
+    pub async fn offboard_all(&self, bitcoinAddress: String) -> Result<OffboardResult, JsError> {
+        self.core.offboard_all(bitcoinAddress).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = offboardVtxos)]
     pub async fn offboard_vtxos(
         &self,
-        vtxo_ids: Vec<String>,
-        bitcoin_address: String,
+        vtxoIds: Vec<String>,
+        bitcoinAddress: String,
     ) -> Result<String, JsError> {
-        self.core.offboard_vtxos(vtxo_ids, bitcoin_address).await.map_err(bark_err)
+        self.core.offboard_vtxos(vtxoIds, bitcoinAddress).await.map_err(bark_err)
     }
 
     // -- Lightning send -------------------------------------------------------
@@ -256,28 +350,34 @@ impl Wallet {
     #[wasm_bindgen(js_name = payLightningInvoice)]
     pub async fn pay_lightning_invoice(
         &self,
-        invoice: String,
-        amount_sats: Option<u64>,
+        args: PayLightningInvoiceArgs,
     ) -> Result<LightningSend, JsError> {
-        self.core.pay_lightning_invoice(invoice, amount_sats).await.map_err(bark_err)
+        self.core
+            .pay_lightning_invoice(args.invoice, args.amountSats)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = payLightningOffer)]
     pub async fn pay_lightning_offer(
         &self,
-        offer: String,
-        amount_sats: Option<u64>,
+        args: PayLightningOfferArgs,
     ) -> Result<LightningSend, JsError> {
-        self.core.pay_lightning_offer(offer, amount_sats).await.map_err(bark_err)
+        self.core
+            .pay_lightning_offer(args.offer, args.amountSats)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = checkLightningPayment)]
     pub async fn check_lightning_payment(
         &self,
-        payment_hash: String,
-        wait: bool,
+        args: CheckLightningPaymentArgs,
     ) -> Result<Option<String>, JsError> {
-        self.core.check_lightning_payment(payment_hash, wait).await.map_err(bark_err)
+        self.core
+            .check_lightning_payment(args.paymentHash, args.wait)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = pendingLightningSends)]
@@ -290,18 +390,23 @@ impl Wallet {
     #[wasm_bindgen(js_name = bolt11Invoice)]
     pub async fn bolt11_invoice(
         &self,
-        amount_sats: u64,
-        description: Option<String>,
+        args: Bolt11InvoiceArgs,
     ) -> Result<LightningInvoice, JsError> {
-        self.core.bolt11_invoice(amount_sats, description).await.map_err(bark_err)
+        self.core
+            .bolt11_invoice(args.amountSats, args.description)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = tryClaimAllLightningReceives)]
     pub async fn try_claim_all_lightning_receives(
         &self,
-        wait: bool,
+        args: TryClaimAllLightningReceivesArgs,
     ) -> Result<Vec<LightningReceive>, JsError> {
-        self.core.try_claim_all_lightning_receives(wait).await.map_err(bark_err)
+        self.core
+            .try_claim_all_lightning_receives(args.wait)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = pendingLightningReceives)]
@@ -310,30 +415,36 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = claimableLightningReceiveBalanceSats)]
-    pub async fn claimable_lightning_receive_balance_sats(&self) -> Result<u64, JsError> {
-        self.core.claimable_lightning_receive_balance_sats().await.map_err(bark_err)
+    pub async fn claimable_lightning_receive_balance_sats(&self) -> Result<f64, JsError> {
+        self.core
+            .claimable_lightning_receive_balance_sats()
+            .await
+            .map(|v| v as f64)
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = lightningReceiveStatus)]
     pub async fn lightning_receive_status(
         &self,
-        payment_hash: String,
+        paymentHash: String,
     ) -> Result<Option<LightningReceive>, JsError> {
-        self.core.lightning_receive_status(payment_hash).await.map_err(bark_err)
+        self.core.lightning_receive_status(paymentHash).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = tryClaimLightningReceive)]
     pub async fn try_claim_lightning_receive(
         &self,
-        payment_hash: String,
-        wait: bool,
+        args: TryClaimLightningReceiveArgs,
     ) -> Result<(), JsError> {
-        self.core.try_claim_lightning_receive(payment_hash, wait).await.map_err(bark_err)
+        self.core
+            .try_claim_lightning_receive(args.paymentHash, args.wait)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = cancelLightningReceive)]
-    pub async fn cancel_lightning_receive(&self, payment_hash: String) -> Result<(), JsError> {
-        self.core.cancel_lightning_receive(payment_hash).await.map_err(bark_err)
+    pub async fn cancel_lightning_receive(&self, paymentHash: String) -> Result<(), JsError> {
+        self.core.cancel_lightning_receive(paymentHash).await.map_err(bark_err)
     }
 
     // -- Arkoor ---------------------------------------------------------------
@@ -341,10 +452,13 @@ impl Wallet {
     #[wasm_bindgen(js_name = sendArkoorPayment)]
     pub async fn send_arkoor_payment(
         &self,
-        ark_address: String,
-        amount_sats: u64,
+        arkAddress: String,
+        amountSats: f64,
     ) -> Result<String, JsError> {
-        self.core.send_arkoor_payment(ark_address, amount_sats).await.map_err(bark_err)
+        self.core
+            .send_arkoor_payment(arkAddress, amountSats as u64)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = validateArkoorAddress)]
@@ -356,9 +470,12 @@ impl Wallet {
     pub async fn send_onchain(
         &self,
         address: String,
-        amount_sats: u64,
+        amountSats: f64,
     ) -> Result<String, JsError> {
-        self.core.send_onchain(address, amount_sats).await.map_err(bark_err)
+        self.core
+            .send_onchain(address, amountSats as u64)
+            .await
+            .map_err(bark_err)
     }
 
     // -- History --------------------------------------------------------------
@@ -370,11 +487,11 @@ impl Wallet {
     #[wasm_bindgen(js_name = historyByPaymentMethod)]
     pub async fn history_by_payment_method(
         &self,
-        payment_method_type: String,
-        payment_method_value: String,
+        paymentMethodType: String,
+        paymentMethodValue: String,
     ) -> Result<Vec<Movement>, JsError> {
         self.core
-            .history_by_payment_method(payment_method_type, payment_method_value)
+            .history_by_payment_method(paymentMethodType, paymentMethodValue)
             .await
             .map_err(bark_err)
     }
@@ -384,9 +501,9 @@ impl Wallet {
     #[wasm_bindgen(js_name = refreshVtxos)]
     pub async fn refresh_vtxos(
         &self,
-        vtxo_ids: Vec<String>,
+        vtxoIds: Vec<String>,
     ) -> Result<Option<String>, JsError> {
-        self.core.refresh_vtxos(vtxo_ids).await.map_err(bark_err)
+        self.core.refresh_vtxos(vtxoIds).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = maintenanceRefresh)]
@@ -397,9 +514,9 @@ impl Wallet {
     #[wasm_bindgen(js_name = refreshVtxosDelegated)]
     pub async fn refresh_vtxos_delegated(
         &self,
-        vtxo_ids: Vec<String>,
+        vtxoIds: Vec<String>,
     ) -> Result<Option<RoundState>, JsError> {
-        self.core.refresh_vtxos_delegated(vtxo_ids).await.map_err(bark_err)
+        self.core.refresh_vtxos_delegated(vtxoIds).await.map_err(bark_err)
     }
 
     // -- Info -----------------------------------------------------------------
@@ -426,8 +543,12 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = nextRoundStartTime)]
-    pub async fn next_round_start_time(&self) -> Result<u64, JsError> {
-        self.core.next_round_start_time().await.map_err(bark_err)
+    pub async fn next_round_start_time(&self) -> Result<f64, JsError> {
+        self.core
+            .next_round_start_time()
+            .await
+            .map(|v| v as f64)
+            .map_err(bark_err)
     }
 
     // -- Boarding -------------------------------------------------------------
@@ -435,15 +556,18 @@ impl Wallet {
     #[wasm_bindgen(js_name = boardAmount)]
     pub async fn board_amount(
         &self,
-        onchain_wallet: &OnchainWallet,
-        amount_sats: u64,
+        onchainWallet: &OnchainWallet,
+        amountSats: f64,
     ) -> Result<PendingBoard, JsError> {
-        self.core.board_amount(onchain_wallet.inner(), amount_sats).await.map_err(bark_err)
+        self.core
+            .board_amount(onchainWallet.inner(), amountSats as u64)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = boardAll)]
-    pub async fn board_all(&self, onchain_wallet: &OnchainWallet) -> Result<PendingBoard, JsError> {
-        self.core.board_all(onchain_wallet.inner()).await.map_err(bark_err)
+    pub async fn board_all(&self, onchainWallet: &OnchainWallet) -> Result<PendingBoard, JsError> {
+        self.core.board_all(onchainWallet.inner()).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = syncPendingBoards)]
@@ -479,25 +603,25 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = syncExits)]
-    pub async fn sync_exits(&self, onchain_wallet: &OnchainWallet) -> Result<(), JsError> {
-        self.core.sync_exits(onchain_wallet.inner()).await.map_err(bark_err)
+    pub async fn sync_exits(&self, onchainWallet: &OnchainWallet) -> Result<(), JsError> {
+        self.core.sync_exits(onchainWallet.inner()).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = progressExits)]
     pub async fn progress_exits(
         &self,
-        onchain_wallet: &OnchainWallet,
-        fee_rate_sat_per_vb: Option<u64>,
+        onchainWallet: &OnchainWallet,
+        args: ProgressExitsArgs,
     ) -> Result<Vec<ExitProgressStatus>, JsError> {
         self.core
-            .progress_exits(onchain_wallet.inner(), fee_rate_sat_per_vb)
+            .progress_exits(onchainWallet.inner(), args.feeRateSatPerVb)
             .await
             .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = startExitForVtxos)]
-    pub async fn start_exit_for_vtxos(&self, vtxo_ids: Vec<String>) -> Result<(), JsError> {
-        self.core.start_exit_for_vtxos(vtxo_ids).await.map_err(bark_err)
+    pub async fn start_exit_for_vtxos(&self, vtxoIds: Vec<String>) -> Result<(), JsError> {
+        self.core.start_exit_for_vtxos(vtxoIds).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = listClaimableExits)]
@@ -516,19 +640,21 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = pendingExitsTotalSats)]
-    pub async fn pending_exits_total_sats(&self) -> Result<u64, JsError> {
-        self.core.pending_exits_total_sats().await.map_err(bark_err)
+    pub async fn pending_exits_total_sats(&self) -> Result<f64, JsError> {
+        self.core
+            .pending_exits_total_sats()
+            .await
+            .map(|v| v as f64)
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = drainExits)]
     pub async fn drain_exits(
         &self,
-        vtxo_ids: Vec<String>,
-        address: String,
-        fee_rate_sat_per_vb: Option<u64>,
+        args: DrainExitsArgs,
     ) -> Result<ExitClaimTransaction, JsError> {
         self.core
-            .drain_exits(vtxo_ids, address, fee_rate_sat_per_vb)
+            .drain_exits(args.vtxoIds, args.address, args.feeRateSatPerVb)
             .await
             .map_err(bark_err)
     }
@@ -541,19 +667,17 @@ impl Wallet {
     #[wasm_bindgen(js_name = getExitStatus)]
     pub async fn get_exit_status(
         &self,
-        vtxo_id: String,
-        include_history: bool,
-        include_transactions: bool,
+        args: GetExitStatusArgs,
     ) -> Result<Option<ExitTransactionStatus>, JsError> {
         self.core
-            .get_exit_status(vtxo_id, include_history, include_transactions)
+            .get_exit_status(args.vtxoId, args.includeHistory, args.includeTransactions)
             .await
             .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = signExitClaimInputs)]
-    pub async fn sign_exit_claim_inputs(&self, psbt_base64: String) -> Result<String, JsError> {
-        self.core.sign_exit_claim_inputs(psbt_base64).await.map_err(bark_err)
+    pub async fn sign_exit_claim_inputs(&self, psbtBase64: String) -> Result<String, JsError> {
+        self.core.sign_exit_claim_inputs(psbtBase64).await.map_err(bark_err)
     }
 
     // -- Rounds ---------------------------------------------------------------
@@ -564,8 +688,8 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = cancelPendingRound)]
-    pub async fn cancel_pending_round(&self, round_id: u32) -> Result<(), JsError> {
-        self.core.cancel_pending_round(round_id).await.map_err(bark_err)
+    pub async fn cancel_pending_round(&self, roundId: u32) -> Result<(), JsError> {
+        self.core.cancel_pending_round(roundId).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = cancelAllPendingRounds)]
@@ -605,8 +729,8 @@ impl Wallet {
     // -- Broadcast ------------------------------------------------------------
 
     #[wasm_bindgen(js_name = broadcastTx)]
-    pub async fn broadcast_tx(&self, tx_hex: String) -> Result<String, JsError> {
-        self.core.broadcast_tx(tx_hex).await.map_err(bark_err)
+    pub async fn broadcast_tx(&self, txHex: String) -> Result<String, JsError> {
+        self.core.broadcast_tx(txHex).await.map_err(bark_err)
     }
 
     // -- Mailbox --------------------------------------------------------------
@@ -624,56 +748,68 @@ impl Wallet {
     // -- VTXO Import ----------------------------------------------------------
 
     #[wasm_bindgen(js_name = importVtxo)]
-    pub async fn import_vtxo(&self, vtxo_base64: String) -> Result<(), JsError> {
-        self.core.import_vtxo(vtxo_base64).await.map_err(bark_err)
+    pub async fn import_vtxo(&self, vtxoBase64: String) -> Result<(), JsError> {
+        self.core.import_vtxo(vtxoBase64).await.map_err(bark_err)
     }
 
     // -- Fee Estimation -------------------------------------------------------
 
     #[wasm_bindgen(js_name = estimateBoardFee)]
-    pub async fn estimate_board_fee(&self, amount_sats: u64) -> Result<FeeEstimate, JsError> {
-        self.core.estimate_board_fee(amount_sats).await.map_err(bark_err)
+    pub async fn estimate_board_fee(&self, amountSats: f64) -> Result<FeeEstimate, JsError> {
+        self.core
+            .estimate_board_fee(amountSats as u64)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = estimateOffboardFee)]
     pub async fn estimate_offboard_fee(
         &self,
         address: String,
-        vtxo_ids: Vec<String>,
+        vtxoIds: Vec<String>,
     ) -> Result<FeeEstimate, JsError> {
-        self.core.estimate_offboard_fee(address, vtxo_ids).await.map_err(bark_err)
+        self.core.estimate_offboard_fee(address, vtxoIds).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = estimateRefreshFee)]
     pub async fn estimate_refresh_fee(
         &self,
-        vtxo_ids: Vec<String>,
+        vtxoIds: Vec<String>,
     ) -> Result<FeeEstimate, JsError> {
-        self.core.estimate_refresh_fee(vtxo_ids).await.map_err(bark_err)
+        self.core.estimate_refresh_fee(vtxoIds).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = estimateLightningSendFee)]
     pub async fn estimate_lightning_send_fee(
         &self,
-        amount_sats: u64,
+        amountSats: f64,
     ) -> Result<FeeEstimate, JsError> {
-        self.core.estimate_lightning_send_fee(amount_sats).await.map_err(bark_err)
+        self.core
+            .estimate_lightning_send_fee(amountSats as u64)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = estimateLightningReceiveFee)]
     pub async fn estimate_lightning_receive_fee(
         &self,
-        amount_sats: u64,
+        amountSats: f64,
     ) -> Result<FeeEstimate, JsError> {
-        self.core.estimate_lightning_receive_fee(amount_sats).await.map_err(bark_err)
+        self.core
+            .estimate_lightning_receive_fee(amountSats as u64)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = estimateArkoorPaymentFee)]
     pub async fn estimate_arkoor_payment_fee(
         &self,
-        amount_sats: u64,
+        amountSats: f64,
     ) -> Result<FeeEstimate, JsError> {
-        self.core.estimate_arkoor_payment_fee(amount_sats).await.map_err(bark_err)
+        self.core
+            .estimate_arkoor_payment_fee(amountSats as u64)
+            .await
+            .map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = estimateOffboardAllFee)]
@@ -685,9 +821,12 @@ impl Wallet {
     pub async fn estimate_send_onchain_fee(
         &self,
         address: String,
-        amount_sats: u64,
+        amountSats: f64,
     ) -> Result<FeeEstimate, JsError> {
-        self.core.estimate_send_onchain_fee(address, amount_sats).await.map_err(bark_err)
+        self.core
+            .estimate_send_onchain_fee(address, amountSats as u64)
+            .await
+            .map_err(bark_err)
     }
 
     // -- Notifications --------------------------------------------------------
