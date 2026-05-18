@@ -6,22 +6,36 @@ use crate::types::Network;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(from_wasm_abi, into_wasm_abi))]
+#[cfg_attr(feature = "wasm-web", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct Config {
     pub server_address: String,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub server_access_token: Option<String>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub esplora_address: Option<String>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub bitcoind_address: Option<String>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub bitcoind_cookiefile: Option<String>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub bitcoind_user: Option<String>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub bitcoind_pass: Option<String>,
     pub network: Network,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub vtxo_refresh_expiry_threshold: Option<u32>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub vtxo_exit_margin: Option<u16>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub htlc_recv_claim_delta: Option<u16>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub fallback_fee_rate: Option<u64>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub round_tx_required_confirmations: Option<u32>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub daemon_fast_sync_interval_secs: Option<u64>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub daemon_slow_sync_interval_secs: Option<u64>,
 }
 
