@@ -6,6 +6,7 @@ use crate::types::Network;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm-web", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm-web", tsify(from_wasm_abi, into_wasm_abi))]
+#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct Config {
     pub server_address: String,
     pub server_access_token: Option<String>,

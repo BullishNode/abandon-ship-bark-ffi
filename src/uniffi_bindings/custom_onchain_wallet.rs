@@ -23,6 +23,7 @@ use crate::types::{BlockRef as FfiBlockRef, CpfpParams, Destination, OutPoint as
 /// Callback interface for custom onchain wallet implementations
 ///
 /// Foreign languages implement this trait to provide their own wallet functionality.
+#[uniffi::export(with_foreign)]
 pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// Get the wallet balance in satoshis
     fn get_balance(&self) -> Result<u64, BarkError>;
@@ -110,11 +111,11 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
 
 /// Rust adapter that implements Bark traits using callback interface
 pub struct CallbackWalletAdapter {
-    callbacks: Box<dyn CustomOnchainWalletCallbacks>,
+    callbacks: Arc<dyn CustomOnchainWalletCallbacks>,
 }
 
 impl CallbackWalletAdapter {
-    pub fn new(callbacks: Box<dyn CustomOnchainWalletCallbacks>) -> Self {
+    pub fn new(callbacks: Arc<dyn CustomOnchainWalletCallbacks>) -> Self {
         Self { callbacks }
     }
 }

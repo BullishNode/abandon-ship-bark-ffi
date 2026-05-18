@@ -2,6 +2,7 @@ use thiserror::Error;
 
 /// Error types that can occur when using the Bark wallet FFI
 #[derive(Debug, Error)]
+#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Error))]
 pub enum BarkError {
     #[error("Network error: {error_message}")]
     Network { error_message: String },
