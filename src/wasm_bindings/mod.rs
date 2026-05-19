@@ -1,4 +1,5 @@
 pub mod db;
+mod functions;
 pub mod notification;
 pub mod onchain;
 pub mod wallet;
