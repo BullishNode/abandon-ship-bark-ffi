@@ -382,7 +382,11 @@ impl Wallet {
     ) -> Result<types::LightningInvoice, BarkError> {
         let amount = bitcoin::Amount::from_sat(amount_sats);
         let invoice = self.inner.bolt11_invoice(amount, description).await?;
-        Ok(types::LightningInvoice { invoice: invoice.to_string(), amount_sats })
+        Ok(types::LightningInvoice {
+            invoice: invoice.to_string(),
+            payment_hash: invoice.payment_hash().to_string(),
+            amount_sats,
+        })
     }
 
     pub async fn try_claim_all_lightning_receives(

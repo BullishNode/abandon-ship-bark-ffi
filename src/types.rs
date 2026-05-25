@@ -154,6 +154,7 @@ impl From<BarkWalletVtxo> for Vtxo {
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct LightningInvoice {
     pub invoice: String,
+    pub payment_hash: String,
     pub amount_sats: u64,
 }
 
@@ -204,6 +205,7 @@ pub struct AddressWithIndex {
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct LightningReceive {
     pub payment_hash: String,
+    pub payment_preimage: String,
     pub invoice: String,
     pub amount_sats: u64,
     pub has_htlc_vtxos: bool,
@@ -212,9 +214,9 @@ pub struct LightningReceive {
 
 impl From<bark::persist::models::LightningReceive> for LightningReceive {
     fn from(r: bark::persist::models::LightningReceive) -> Self {
-        use bitcoin::hex::DisplayHex;
         Self {
-            payment_hash: r.payment_hash.as_hex().to_string(),
+            payment_hash: r.payment_hash.to_string(),
+            payment_preimage: r.payment_preimage.to_string(),
             invoice: r.invoice.to_string(),
             amount_sats: r
                 .invoice
