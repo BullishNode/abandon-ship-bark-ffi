@@ -62,8 +62,8 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// * `psbt_base64` - Base64-encoded PSBT
     ///
     /// # Returns
-    /// Hex-encoded signed transaction
-    fn finish_tx(&self, psbt_base64: String) -> Result<String, BarkError>;
+    /// Base64-encoded fully signed PSBT (all witnesses filled in)
+    fn finish_psbt(&self, psbt_base64: String) -> Result<String, BarkError>;
 
     /// Get a wallet transaction by txid
     ///
@@ -131,7 +131,9 @@ impl GetBalance for CallbackWalletAdapter {
                     e.message()
                 );
                 log::error!("Returning 0 balance - this may cause unexpected behavior!");
-                log::error!("Please fix the wallet implementation to ensure get_balance never fails");
+                log::error!(
+                    "Please fix the wallet implementation to ensure get_balance never fails"
+                );
                 Amount::ZERO
             }
         }
@@ -194,22 +196,23 @@ impl PreparePsbt for CallbackWalletAdapter {
 // Implement SignPsbt trait
 #[async_trait]
 impl SignPsbt for CallbackWalletAdapter {
-    async fn finish_tx(&mut self, psbt: Psbt) -> anyhow::Result<Transaction> {
+    async fn finish_psbt(&mut self, psbt: Psbt) -> anyhow::Result<Psbt> {
         // Serialize PSBT to base64
         use base64::Engine;
         let psbt_bytes = psbt.serialize();
         let psbt_base64 = base64::engine::general_purpose::STANDARD.encode(&psbt_bytes);
 
         // Call callback
-        let tx_hex = self
+        let signed_base64 = self
             .callbacks
-            .finish_tx(psbt_base64)
-            .map_err(|e| anyhow::anyhow!("finish_tx failed: {}", e.message()))?;
+            .finish_psbt(psbt_base64)
+            .map_err(|e| anyhow::anyhow!("finish_psbt failed: {}", e.message()))?;
 
-        // Decode transaction from hex
-        let tx: Transaction = bitcoin::consensus::deserialize(&hex::decode(&tx_hex)?)?;
+        // Decode the fully signed PSBT returned by the callback
+        let signed_bytes = base64::engine::general_purpose::STANDARD.decode(&signed_base64)?;
+        let signed_psbt = Psbt::deserialize(&signed_bytes)?;
 
-        Ok(tx)
+        Ok(signed_psbt)
     }
 }
 

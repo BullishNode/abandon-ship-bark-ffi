@@ -10,7 +10,7 @@ checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
 dependencies = [
  "cfg-if",
  "cipher",
- "cpufeatures",
+ "cpufeatures 0.2.17",
 ]
 
 [[package]]
@@ -57,8 +57,8 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "ark-lib"
-version = "0.1.4"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.4#12e45db7cd0e2ae4a34f80738bbcb5f92bc8e7b8"
+version = "0.2.0"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.0#573da2c66f23aef1f1433a237f1a98df5cc1f0a9"
 dependencies = [
  "async-trait",
  "bark-bitcoin-ext",
@@ -168,8 +168,8 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "bark-bitcoin-ext"
-version = "0.1.4"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.4#12e45db7cd0e2ae4a34f80738bbcb5f92bc8e7b8"
+version = "0.2.0"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.0#573da2c66f23aef1f1433a237f1a98df5cc1f0a9"
 dependencies = [
  "bdk_bitcoind_rpc",
  "bdk_wallet",
@@ -184,7 +184,7 @@ dependencies = [
 
 [[package]]
 name = "bark-ffi"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -217,8 +217,8 @@ dependencies = [
 
 [[package]]
 name = "bark-server-rpc"
-version = "0.1.4"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.4#12e45db7cd0e2ae4a34f80738bbcb5f92bc8e7b8"
+version = "0.2.0"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.0#573da2c66f23aef1f1433a237f1a98df5cc1f0a9"
 dependencies = [
  "ark-lib",
  "bitcoin",
@@ -237,8 +237,8 @@ dependencies = [
 
 [[package]]
 name = "bark-wallet"
-version = "0.1.4"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.1.4#12e45db7cd0e2ae4a34f80738bbcb5f92bc8e7b8"
+version = "0.2.0"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.0#573da2c66f23aef1f1433a237f1a98df5cc1f0a9"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -249,21 +249,24 @@ dependencies = [
  "bdk_core",
  "bdk_esplora",
  "bdk_wallet",
+ "bip321",
  "bip39",
  "bitcoin",
  "chrono",
  "config",
  "esplora-client",
  "futures",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "indexed-db",
+ "js-sys",
  "lazy_static",
+ "libc",
  "lightning",
  "lightning-invoice",
  "lnurl-rs",
  "log",
  "parking_lot",
- "rand 0.9.4",
+ "rand 0.10.1",
  "rmp-serde",
  "rusqlite",
  "serde",
@@ -274,6 +277,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tonic",
+ "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
 ]
@@ -364,9 +368,9 @@ dependencies = [
 
 [[package]]
 name = "bdk_wallet"
-version = "2.3.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b03f1e31ccc562f600981f747d2262b84428cbff52c9c9cdf14d15fb15bd2286"
+checksum = "67f3c4f9526d22374fca5b7ff1d6bf8d921ab56db2dac8df66a2c5561b31d4ef"
 dependencies = [
  "bdk_chain",
  "bitcoin",
@@ -381,6 +385,18 @@ name = "bech32"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32637268377fc7b10a8c6d51de3e7fba1ce5dd371a96e342b34e6078db558e7f"
+
+[[package]]
+name = "bip321"
+version = "0.1.0"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.0#573da2c66f23aef1f1433a237f1a98df5cc1f0a9"
+dependencies = [
+ "bitcoin",
+ "lightning",
+ "lightning-invoice",
+ "percent-encoding",
+ "thiserror",
+]
 
 [[package]]
 name = "bip39"
@@ -583,6 +599,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "chacha20"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f8d983286843e49675a4b7a2d174efe136dc93a18d69130dd18198a6c167601"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -705,6 +732,15 @@ name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "cpufeatures"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
 dependencies = [
  "libc",
 ]
@@ -1019,10 +1055,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0de51e6874e94e7bf76d726fc5d13ba782deca734ff60d5bb2fb2607c7406555"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "rand_core 0.10.1",
  "wasip2",
  "wasip3",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -2081,6 +2120,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2e8e8bcc7961af1fdac401278c6a831614941f6164ee3bf4ce61b7edb162207"
+dependencies = [
+ "chacha20",
+ "getrandom 0.4.2",
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "rand_chacha"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2117,6 +2167,12 @@ checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom 0.3.4",
 ]
+
+[[package]]
+name = "rand_core"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
 name = "redox_syscall"
@@ -2530,7 +2586,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest",
 ]
 
@@ -2987,9 +3043,9 @@ dependencies = [
 
 [[package]]
 name = "tonic-web-wasm-client"
-version = "0.8.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "898cd44be5e23e59d2956056538f1d6b3c5336629d384ffd2d92e76f87fb98ff"
+checksum = "3c0469c353de5f665c95f898074b5b004b500c6722214c3249f1dc79c0a2a3f6"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -3478,9 +3534,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-streams"
-version = "0.4.2"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+checksum = "9d1ec4f6517c9e11ae630e200b2b65d193279042e28edd4a2cda233e46670bbb"
 dependencies = [
  "futures-util",
  "js-sys",
