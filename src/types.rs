@@ -126,6 +126,12 @@ pub struct Vtxo {
     pub expiry_height: u32,
     pub kind: String,
     pub state: String,
+    /// Genesis chain length. Compare against `ArkInfo.max_vtxo_exit_depth` to
+    /// detect VTXOs nearing the server's OOR-cosign refusal threshold.
+    pub exit_depth: u32,
+    /// Weight units of the unilateral exit transaction chain. Lets clients
+    /// estimate exit cost without loading the full genesis.
+    pub exit_tx_weight_wu: u64,
 }
 
 impl From<BarkWalletVtxo> for Vtxo {
@@ -136,6 +142,8 @@ impl From<BarkWalletVtxo> for Vtxo {
             expiry_height: v.vtxo.expiry_height(),
             kind: format!("{:?}", v.vtxo.policy_type()),
             state: format!("{:?}", v.state.kind()),
+            exit_depth: v.exit_depth as u32,
+            exit_tx_weight_wu: v.exit_tx_weight.to_wu(),
         }
     }
 }
