@@ -37,9 +37,13 @@ pub struct Config {
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub round_tx_required_confirmations: Option<u32>,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
-    pub daemon_fast_sync_interval_secs: Option<u64>,
+    pub daemon_sync_interval_secs: Option<u64>,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
-    pub daemon_slow_sync_interval_secs: Option<u64>,
+    pub offboard_required_confirmations: Option<u32>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
+    pub daemon_manual_sync: Option<bool>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
+    pub lightning_receive_claim_retries: Option<u8>,
 }
 
 impl From<Config> for bark::Config {
@@ -70,11 +74,17 @@ impl From<Config> for bark::Config {
         if let Some(confs) = c.round_tx_required_confirmations {
             cfg.round_tx_required_confirmations = confs;
         }
-        if let Some(secs) = c.daemon_fast_sync_interval_secs {
-            cfg.daemon_fast_sync_interval_secs = secs;
+        if let Some(secs) = c.daemon_sync_interval_secs {
+            cfg.daemon_sync_interval_secs = secs;
         }
-        if let Some(secs) = c.daemon_slow_sync_interval_secs {
-            cfg.daemon_slow_sync_interval_secs = secs;
+        if let Some(confs) = c.offboard_required_confirmations {
+            cfg.offboard_required_confirmations = confs;
+        }
+        if let Some(manual) = c.daemon_manual_sync {
+            cfg.daemon_manual_sync = manual;
+        }
+        if let Some(retries) = c.lightning_receive_claim_retries {
+            cfg.lightning_receive_claim_retries = retries;
         }
 
         cfg

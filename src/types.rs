@@ -440,10 +440,12 @@ pub struct ArkInfo {
     pub required_board_confirmations: u32,
     pub max_user_invoice_cltv_delta: u16,
     pub min_board_amount_sats: u64,
-    pub offboard_feerate_sat_per_vb: u64,
     pub ln_receive_anti_dos_required: bool,
     /// Fee schedule as JSON string (contains board, offboard, refresh, lightning fees)
     pub fee_schedule_json: String,
+    /// Maximum exit depth (genesis chain length) allowed for a VTXO before the
+    /// server refuses to cosign further OOR transactions spending it.
+    pub max_vtxo_exit_depth: u16,
 }
 
 impl From<&bark::ark::ArkInfo> for ArkInfo {
@@ -472,9 +474,9 @@ impl From<&bark::ark::ArkInfo> for ArkInfo {
             required_board_confirmations: info.required_board_confirmations as u32,
             max_user_invoice_cltv_delta: info.max_user_invoice_cltv_delta,
             min_board_amount_sats: info.min_board_amount.to_sat(),
-            offboard_feerate_sat_per_vb: info.offboard_feerate.to_sat_per_vb_ceil(),
             ln_receive_anti_dos_required: info.ln_receive_anti_dos_required,
             fee_schedule_json,
+            max_vtxo_exit_depth: info.max_vtxo_exit_depth,
         }
     }
 }

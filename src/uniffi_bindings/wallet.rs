@@ -112,7 +112,8 @@ impl Wallet {
         run_async(async move {
             let db = get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
-            let core = CoreWallet::create(mnemonic, config, db, force_rescan).await?;
+            let lock_manager = bark::lock_manager::platform_default(&datadir)?;
+            let core = CoreWallet::create(mnemonic, config, db, lock_manager, force_rescan).await?;
             Ok(Self::wrap(core))
         })
         .await
@@ -127,7 +128,8 @@ impl Wallet {
         run_async(async move {
             let db = get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
-            let core = CoreWallet::open(mnemonic, config, db).await?;
+            let lock_manager = bark::lock_manager::platform_default(&datadir)?;
+            let core = CoreWallet::open(mnemonic, config, db, lock_manager).await?;
             Ok(Self::wrap(core))
         })
         .await
@@ -145,12 +147,14 @@ impl Wallet {
             let db = get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
 
+            let lock_manager = bark::lock_manager::platform_default(&datadir)?;
             if let Some(bdk) = onchain_wallet.bdk_core() {
                 let core = CoreWallet::create_with_onchain(
                     mnemonic,
                     config,
                     db,
                     bdk,
+                    lock_manager,
                     force_rescan,
                 )
                 .await?;
@@ -159,13 +163,20 @@ impl Wallet {
                 // Bypass core::Wallet: it doesn't model callback wallets.
                 let network: BtcNetwork = config.network.into();
                 let cfg: bark::Config = config.into();
-                let mn = Mnemonic::parse(mnemonic.trim()).map_err(|e| {
-                    BarkError::InvalidMnemonic { error_message: e.to_string() }
-                })?;
+                let mn =
+                    Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
+                        error_message: e.to_string(),
+                    })?;
 
                 let onchain = adapter.read().await;
                 let inner = InnerWallet::create_with_onchain(
-                    &mn, network, cfg, db, &*onchain, force_rescan,
+                    &mn,
+                    network,
+                    cfg,
+                    db,
+                    lock_manager,
+                    &*onchain,
+                    force_rescan,
                 )
                 .await
                 .map_err(BarkError::from)?;
@@ -193,17 +204,20 @@ impl Wallet {
             let db = get_or_open_db(&datadir)
                 .with_context(|| format!("opening sqlite in {}", datadir))?;
 
+            let lock_manager = bark::lock_manager::platform_default(&datadir)?;
             if let Some(bdk) = onchain_wallet.bdk_core() {
-                let core = CoreWallet::open_with_onchain(mnemonic, config, db, bdk).await?;
+                let core =
+                    CoreWallet::open_with_onchain(mnemonic, config, db, bdk, lock_manager).await?;
                 Ok(Self::wrap(core))
             } else if let Some(adapter) = onchain_wallet.inner_callback() {
                 let cfg: bark::Config = config.into();
-                let mn = Mnemonic::parse(mnemonic.trim()).map_err(|e| {
-                    BarkError::InvalidMnemonic { error_message: e.to_string() }
-                })?;
+                let mn =
+                    Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
+                        error_message: e.to_string(),
+                    })?;
 
                 let onchain = adapter.read().await;
-                let inner = InnerWallet::open_with_onchain(&mn, db, &*onchain, cfg)
+                let inner = InnerWallet::open_with_onchain(&mn, db, &*onchain, cfg, lock_manager)
                     .await
                     .map_err(BarkError::from)?;
                 drop(onchain);
@@ -252,9 +266,10 @@ impl Wallet {
                 }
             }
 
+            let lock_manager = bark::lock_manager::platform_default(&datadir)?;
             let inner = match bdk {
-                Some(bdk) => InnerWallet::open_with_daemon(&mn, db, cfg, Some(bdk)).await,
-                None => InnerWallet::open_with_daemon(&mn, db, cfg, None).await,
+                Some(bdk) => InnerWallet::open_with_daemon(&mn, db, cfg, Some(bdk), lock_manager).await,
+                None => InnerWallet::open_with_daemon(&mn, db, cfg, None, lock_manager).await,
             }
             .map_err(BarkError::from)?;
 
@@ -268,7 +283,7 @@ impl Wallet {
 
             log::info!("[OPEN] Bark wallet opened successfully and daemon running");
 
-            let core = CoreWallet::from_inner_arc(inner);
+            let core = CoreWallet::from_inner_arc(Arc::new(inner));
             Ok(Self::wrap(core))
         })
         .await
@@ -297,7 +312,8 @@ impl Wallet {
         run_async(async move {
             if let Some(bdk) = onchain_wallet.inner_bdk() {
                 let _ = bdk; // core path uses bdk via core::OnchainWallet wrapper
-                core.maintenance_with_onchain(onchain_wallet.bdk_core().unwrap()).await
+                core.maintenance_with_onchain(onchain_wallet.bdk_core().unwrap())
+                    .await
             } else if let Some(adapter) = onchain_wallet.inner_callback() {
                 let mut o = adapter.write().await;
                 inner.maintenance_with_onchain(&mut *o).await?;
@@ -324,7 +340,8 @@ impl Wallet {
         let inner = self.inner.clone();
         run_async(async move {
             if onchain_wallet.inner_bdk().is_some() {
-                core.maintenance_with_onchain_delegated(onchain_wallet.bdk_core().unwrap()).await
+                core.maintenance_with_onchain_delegated(onchain_wallet.bdk_core().unwrap())
+                    .await
             } else if let Some(adapter) = onchain_wallet.inner_callback() {
                 let mut o = adapter.write().await;
                 inner.maintenance_with_onchain_delegated(&mut *o).await?;
@@ -442,11 +459,12 @@ impl Wallet {
     ) -> Result<types::LightningSend, BarkError> {
         let inner = self.inner.clone();
         run_async(async move {
-            let addr: LightningAddress = lightning_address.parse().map_err(|e| {
-                BarkError::InvalidAddress {
-                    error_message: format!("invalid lightning address: {}", e),
-                }
-            })?;
+            let addr: LightningAddress =
+                lightning_address
+                    .parse()
+                    .map_err(|e| BarkError::InvalidAddress {
+                        error_message: format!("invalid lightning address: {}", e),
+                    })?;
             let amount = bitcoin::Amount::from_sat(amount_sats);
             let lightning_send = inner
                 .pay_lightning_address(&addr, amount, comment.as_deref())
@@ -474,9 +492,7 @@ impl Wallet {
         run_async(async move { core.check_lightning_payment(payment_hash, wait).await }).await
     }
 
-    pub async fn pending_lightning_sends(
-        &self,
-    ) -> Result<Vec<types::LightningSend>, BarkError> {
+    pub async fn pending_lightning_sends(&self) -> Result<Vec<types::LightningSend>, BarkError> {
         let core = self.core.clone();
         run_async(async move { core.pending_lightning_sends().await }).await
     }
@@ -531,10 +547,7 @@ impl Wallet {
         run_async(async move { core.try_claim_lightning_receive(payment_hash, wait).await }).await
     }
 
-    pub async fn cancel_lightning_receive(
-        &self,
-        payment_hash: String,
-    ) -> Result<(), BarkError> {
+    pub async fn cancel_lightning_receive(&self, payment_hash: String) -> Result<(), BarkError> {
         let core = self.core.clone();
         run_async(async move { core.cancel_lightning_receive(payment_hash).await }).await
     }
@@ -582,7 +595,8 @@ impl Wallet {
     ) -> Result<Vec<types::Movement>, BarkError> {
         let core = self.core.clone();
         run_async(async move {
-            core.history_by_payment_method(payment_method_type, payment_method_value).await
+            core.history_by_payment_method(payment_method_type, payment_method_value)
+                .await
         })
         .await
     }
@@ -591,10 +605,7 @@ impl Wallet {
     // Refresh
     // ------------------------------------------------------------------------
 
-    pub async fn refresh_vtxos(
-        &self,
-        vtxo_ids: Vec<String>,
-    ) -> Result<Option<String>, BarkError> {
+    pub async fn refresh_vtxos(&self, vtxo_ids: Vec<String>) -> Result<Option<String>, BarkError> {
         let core = self.core.clone();
         run_async(async move { core.refresh_vtxos(vtxo_ids).await }).await
     }
@@ -658,14 +669,18 @@ impl Wallet {
         let inner = self.inner.clone();
         run_async(async move {
             if onchain_wallet.inner_bdk().is_some() {
-                core.board_amount(onchain_wallet.bdk_core().unwrap(), amount_sats).await
+                core.board_amount(onchain_wallet.bdk_core().unwrap(), amount_sats)
+                    .await
             } else if let Some(adapter) = onchain_wallet.inner_callback() {
                 let amount = bitcoin::Amount::from_sat(amount_sats);
                 log::info!("[BOARD] Boarding {} sats into Ark...", amount_sats);
                 let mut onchain = adapter.write().await;
-                let pb = inner.board_amount(&mut *onchain, amount).await.map_err(|e| {
-                    BarkError::Internal { error_message: format!("Board failed: {}", e) }
-                })?;
+                let pb = inner
+                    .board_amount(&mut *onchain, amount)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Board failed: {}", e),
+                    })?;
                 Ok(pb.into())
             } else {
                 Err(BarkError::OnchainWalletRequired {
@@ -690,9 +705,12 @@ impl Wallet {
             } else if let Some(adapter) = onchain_wallet.inner_callback() {
                 log::info!("[BOARD] Boarding ALL funds into Ark...");
                 let mut onchain = adapter.write().await;
-                let pb = inner.board_all(&mut *onchain).await.map_err(|e| {
-                    BarkError::Internal { error_message: format!("Board all failed: {}", e) }
-                })?;
+                let pb = inner
+                    .board_all(&mut *onchain)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Board all failed: {}", e),
+                    })?;
                 Ok(pb.into())
             } else {
                 Err(BarkError::OnchainWalletRequired {
@@ -739,10 +757,7 @@ impl Wallet {
         run_async(async move { core.start_exit_for_entire_wallet().await }).await
     }
 
-    pub async fn sync_exits(
-        &self,
-        onchain_wallet: Arc<OnchainWallet>,
-    ) -> Result<(), BarkError> {
+    pub async fn sync_exits(&self, onchain_wallet: Arc<OnchainWallet>) -> Result<(), BarkError> {
         let core = self.core.clone();
         let inner = self.inner.clone();
         run_async(async move {
@@ -751,9 +766,12 @@ impl Wallet {
             } else if let Some(adapter) = onchain_wallet.inner_callback() {
                 log::info!("[EXIT] Syncing exits...");
                 let mut onchain = adapter.write().await;
-                inner.sync_exits(&mut *onchain).await.map_err(|e| BarkError::Internal {
-                    error_message: format!("Sync exits failed: {}", e),
-                })?;
+                inner
+                    .sync_exits(&mut *onchain)
+                    .await
+                    .map_err(|e| BarkError::Internal {
+                        error_message: format!("Sync exits failed: {}", e),
+                    })?;
                 log::info!("[EXIT] Exits synced");
                 Ok(())
             } else {
@@ -776,21 +794,24 @@ impl Wallet {
         let inner = self.inner.clone();
         run_async(async move {
             if onchain_wallet.inner_bdk().is_some() {
-                core.progress_exits(onchain_wallet.bdk_core().unwrap(), fee_rate_sat_per_vb).await
+                core.progress_exits(onchain_wallet.bdk_core().unwrap(), fee_rate_sat_per_vb)
+                    .await
             } else if let Some(adapter) = onchain_wallet.inner_callback() {
                 log::info!("[EXIT] Progressing exits...");
                 let fee_rate = fee_rate_sat_per_vb.and_then(bitcoin::FeeRate::from_sat_per_vb);
                 let mut onchain = adapter.write().await;
                 let result = inner
-                    .exit
-                    .write()
-                    .await
+                    .exit_mgr()
                     .progress_exits(&inner, &mut *onchain, fee_rate)
                     .await
                     .map_err(|e| BarkError::Internal {
                         error_message: format!("Progress exits failed: {}", e),
                     })?;
-                let statuses = result.unwrap_or_default().into_iter().map(Into::into).collect();
+                let statuses = result
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
                 log::info!("[EXIT] Exits progressed");
                 Ok(statuses)
             } else {
@@ -840,7 +861,8 @@ impl Wallet {
     ) -> Result<Option<types::ExitTransactionStatus>, BarkError> {
         let core = self.core.clone();
         run_async(async move {
-            core.get_exit_status(vtxo_id, include_history, include_transactions).await
+            core.get_exit_status(vtxo_id, include_history, include_transactions)
+                .await
         })
         .await
     }
@@ -853,15 +875,13 @@ impl Wallet {
     ) -> Result<types::ExitClaimTransaction, BarkError> {
         let core = self.core.clone();
         run_async(async move {
-            core.drain_exits(vtxo_ids, address, fee_rate_sat_per_vb).await
+            core.drain_exits(vtxo_ids, address, fee_rate_sat_per_vb)
+                .await
         })
         .await
     }
 
-    pub async fn sign_exit_claim_inputs(
-        &self,
-        psbt_base64: String,
-    ) -> Result<String, BarkError> {
+    pub async fn sign_exit_claim_inputs(&self, psbt_base64: String) -> Result<String, BarkError> {
         let core = self.core.clone();
         run_async(async move { core.sign_exit_claim_inputs(psbt_base64).await }).await
     }
