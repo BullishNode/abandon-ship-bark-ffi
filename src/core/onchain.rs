@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use bark::chain::{ChainSource, ChainSourceSpec};
-use bark::onchain::{ChainSync, OnchainWallet as BarkOnchainWallet};
+use bark::onchain::{ChainSync, GetAddress, OnchainWallet as BarkOnchainWallet};
 use bark::persist::BarkPersister;
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;

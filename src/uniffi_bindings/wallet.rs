@@ -159,7 +159,7 @@ impl Wallet {
                 )
                 .await?;
                 Ok(Self::wrap(core))
-            } else if let Some(adapter) = onchain_wallet.inner_callback() {
+            } else if let Some(_adapter) = onchain_wallet.inner_callback() {
                 // Bypass core::Wallet: it doesn't model callback wallets.
                 let network: BtcNetwork = config.network.into();
                 let cfg: bark::Config = config.into();
@@ -168,19 +168,16 @@ impl Wallet {
                         error_message: e.to_string(),
                     })?;
 
-                let onchain = adapter.read().await;
-                let inner = InnerWallet::create_with_onchain(
+                let inner = InnerWallet::create_with_exits(
                     &mn,
                     network,
                     cfg,
                     db,
                     lock_manager,
-                    &*onchain,
                     force_rescan,
                 )
                 .await
                 .map_err(BarkError::from)?;
-                drop(onchain);
 
                 let core = CoreWallet::from_inner_arc(Arc::new(inner));
                 Ok(Self::wrap(core))
@@ -209,18 +206,16 @@ impl Wallet {
                 let core =
                     CoreWallet::open_with_onchain(mnemonic, config, db, bdk, lock_manager).await?;
                 Ok(Self::wrap(core))
-            } else if let Some(adapter) = onchain_wallet.inner_callback() {
+            } else if let Some(_adapter) = onchain_wallet.inner_callback() {
                 let cfg: bark::Config = config.into();
                 let mn =
                     Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
                         error_message: e.to_string(),
                     })?;
 
-                let onchain = adapter.read().await;
-                let inner = InnerWallet::open_with_onchain(&mn, db, &*onchain, cfg, lock_manager)
+                let inner = InnerWallet::open_with_exits(&mn, db, cfg, lock_manager)
                     .await
                     .map_err(BarkError::from)?;
-                drop(onchain);
 
                 let core = CoreWallet::from_inner_arc(Arc::new(inner));
                 Ok(Self::wrap(core))
@@ -763,11 +758,10 @@ impl Wallet {
         run_async(async move {
             if onchain_wallet.inner_bdk().is_some() {
                 core.sync_exits(onchain_wallet.bdk_core().unwrap()).await
-            } else if let Some(adapter) = onchain_wallet.inner_callback() {
+            } else if onchain_wallet.inner_callback().is_some() {
                 log::info!("[EXIT] Syncing exits...");
-                let mut onchain = adapter.write().await;
                 inner
-                    .sync_exits(&mut *onchain)
+                    .sync_exits()
                     .await
                     .map_err(|e| BarkError::Internal {
                         error_message: format!("Sync exits failed: {}", e),
@@ -802,7 +796,7 @@ impl Wallet {
                 let mut onchain = adapter.write().await;
                 let result = inner
                     .exit_mgr()
-                    .progress_exits(&inner, &mut *onchain, fee_rate)
+                    .progress_exits_with_bdk(&inner, &mut *onchain, fee_rate)
                     .await
                     .map_err(|e| BarkError::Internal {
                         error_message: format!("Progress exits failed: {}", e),
