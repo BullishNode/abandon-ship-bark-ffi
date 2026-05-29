@@ -101,7 +101,7 @@ impl Wallet {
         mnemonic: String,
         config: Config,
         db: Arc<dyn BarkPersister>,
-        onchain_wallet: Arc<OnchainWallet>,
+        _onchain_wallet: Arc<OnchainWallet>,
         lock_manager: Box<dyn LockManager>,
         force_rescan: bool,
     ) -> Result<Self, BarkError> {
@@ -115,20 +115,16 @@ impl Wallet {
 
         log::info!("[CREATE] Creating Bark wallet with onchain capabilities...");
 
-        let bdk = onchain_wallet.inner();
-        let onchain_guard = bdk.read().await;
-        let inner = InnerWallet::create_with_onchain(
+        let inner = InnerWallet::create_with_exits(
             &mnemonic,
             network,
             cfg,
             db,
             lock_manager,
-            &*onchain_guard,
             force_rescan,
         )
         .await
         .map_err(BarkError::from)?;
-        drop(onchain_guard);
 
         log::info!("[CREATE] Bark wallet with onchain created successfully");
 
@@ -139,7 +135,7 @@ impl Wallet {
         mnemonic: String,
         config: Config,
         db: Arc<dyn BarkPersister>,
-        onchain_wallet: Arc<OnchainWallet>,
+        _onchain_wallet: Arc<OnchainWallet>,
         lock_manager: Box<dyn LockManager>,
     ) -> Result<Self, BarkError> {
         let cfg: bark::Config = config.into();
@@ -151,13 +147,9 @@ impl Wallet {
 
         log::info!("[OPEN] Opening Bark wallet with onchain capabilities...");
 
-        let bdk = onchain_wallet.inner();
-        let onchain_guard = bdk.read().await;
-        let inner =
-            InnerWallet::open_with_onchain(&mnemonic, db, &*onchain_guard, cfg, lock_manager)
-                .await
-                .map_err(BarkError::from)?;
-        drop(onchain_guard);
+        let inner = InnerWallet::open_with_exits(&mnemonic, db, cfg, lock_manager)
+            .await
+            .map_err(BarkError::from)?;
 
         if inner.ark_info().await.ok().flatten().is_some() {
             log::info!("[OPEN] Server connection established");
@@ -829,12 +821,10 @@ impl Wallet {
         Ok(())
     }
 
-    pub async fn sync_exits(&self, onchain_wallet: Arc<OnchainWallet>) -> Result<(), BarkError> {
+    pub async fn sync_exits(&self, _onchain_wallet: Arc<OnchainWallet>) -> Result<(), BarkError> {
         log::info!("[EXIT] Syncing exits...");
-        let bdk = onchain_wallet.inner();
-        let mut onchain = bdk.write().await;
         self.inner
-            .sync_exits(&mut *onchain)
+            .sync_exits()
             .await
             .map_err(|e| BarkError::Internal {
                 error_message: format!("Sync exits failed: {}", e),
@@ -857,7 +847,7 @@ impl Wallet {
         let result = self
             .inner
             .exit_mgr()
-            .progress_exits(&self.inner, &mut *onchain, fee_rate)
+            .progress_exits_with_bdk(&self.inner, &mut *onchain, fee_rate)
             .await
             .map_err(|e| BarkError::Internal {
                 error_message: format!("Progress exits failed: {}", e),
