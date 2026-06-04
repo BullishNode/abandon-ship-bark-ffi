@@ -15,8 +15,8 @@ use crate::error::BarkError;
 use crate::types::{
     AddressWithIndex, ArkInfo, Balance, ExitClaimTransaction, ExitProgressStatus,
     ExitTransactionStatus, ExitVtxo, FeeEstimate, LightningInvoice, LightningReceive,
-    LightningSend, Movement, Network, OffboardResult, PendingBoard, RoundState, Vtxo,
-    WalletProperties,
+    LightningSend, LightningSendStatus, Movement, Network, OffboardResult, PendingBoard,
+    RoundState, Vtxo, WalletProperties,
 };
 use crate::wasm_bindings::db::indexed_db_client;
 use crate::wasm_bindings::notification::NotificationHolder;
@@ -33,6 +33,7 @@ pub struct PayLightningInvoiceArgs {
     pub invoice: String,
     #[tsify(optional)]
     pub amountSats: Option<u64>,
+    pub wait: bool,
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
@@ -42,6 +43,7 @@ pub struct PayLightningOfferArgs {
     pub offer: String,
     #[tsify(optional)]
     pub amountSats: Option<u64>,
+    pub wait: bool,
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
@@ -377,9 +379,9 @@ impl Wallet {
     pub async fn pay_lightning_invoice(
         &self,
         args: PayLightningInvoiceArgs,
-    ) -> Result<LightningSend, JsError> {
+    ) -> Result<LightningSendStatus, JsError> {
         self.core
-            .pay_lightning_invoice(args.invoice, args.amountSats)
+            .pay_lightning_invoice(args.invoice, args.amountSats, args.wait)
             .await
             .map_err(bark_err)
     }
@@ -388,9 +390,9 @@ impl Wallet {
     pub async fn pay_lightning_offer(
         &self,
         args: PayLightningOfferArgs,
-    ) -> Result<LightningSend, JsError> {
+    ) -> Result<LightningSendStatus, JsError> {
         self.core
-            .pay_lightning_offer(args.offer, args.amountSats)
+            .pay_lightning_offer(args.offer, args.amountSats, args.wait)
             .await
             .map_err(bark_err)
     }
@@ -399,11 +401,27 @@ impl Wallet {
     pub async fn check_lightning_payment(
         &self,
         args: CheckLightningPaymentArgs,
-    ) -> Result<Option<String>, JsError> {
+    ) -> Result<LightningSendStatus, JsError> {
         self.core
             .check_lightning_payment(args.paymentHash, args.wait)
             .await
             .map_err(bark_err)
+    }
+
+    #[wasm_bindgen(js_name = lightningSendState)]
+    pub async fn lightning_send_state(
+        &self,
+        paymentHash: String,
+    ) -> Result<LightningSendStatus, JsError> {
+        self.core
+            .lightning_send_state(paymentHash)
+            .await
+            .map_err(bark_err)
+    }
+
+    #[wasm_bindgen(js_name = isInvoicePaid)]
+    pub async fn is_invoice_paid(&self, paymentHash: String) -> Result<bool, JsError> {
+        self.core.is_invoice_paid(paymentHash).await.map_err(bark_err)
     }
 
     #[wasm_bindgen(js_name = pendingLightningSends)]

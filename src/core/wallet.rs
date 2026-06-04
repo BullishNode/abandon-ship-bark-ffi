@@ -5,9 +5,8 @@ use base64::Engine;
 use bip39::Mnemonic;
 use bitcoin::Network as BtcNetwork;
 
-use ark::lightning::{Offer, PaymentHash};
+use ark::lightning::{Invoice, Offer, PaymentHash};
 use ark::{ProtocolEncoding, VtxoId};
-use bark::lightning_invoice::Bolt11Invoice;
 use bark::lock_manager::LockManager;
 use bark::persist::BarkPersister;
 use bark::Wallet as InnerWallet;
@@ -371,45 +370,89 @@ impl Wallet {
         &self,
         invoice: String,
         amount_sats: Option<u64>,
-    ) -> Result<types::LightningSend, BarkError> {
-        let invoice: Bolt11Invoice = invoice.parse().map_err(|e| BarkError::InvalidInvoice {
+        wait: bool,
+    ) -> Result<types::LightningSendStatus, BarkError> {
+        let invoice: Invoice = invoice.parse().map_err(|e| BarkError::InvalidInvoice {
             error_message: format!("invalid invoice: {}", e),
         })?;
         let amount = amount_sats.map(bitcoin::Amount::from_sat);
-        let lightning_send = self.inner.pay_lightning_invoice(invoice, amount).await?;
-        Ok(lightning_send.into())
+        let resolved = self
+            .inner
+            .pay_lightning_invoice(invoice, amount, wait)
+            .await?;
+        self.lightning_send_status(resolved).await
     }
 
     pub async fn pay_lightning_offer(
         &self,
         offer: String,
         amount_sats: Option<u64>,
-    ) -> Result<types::LightningSend, BarkError> {
+        wait: bool,
+    ) -> Result<types::LightningSendStatus, BarkError> {
         let offer_obj = Offer::from_str(&offer).map_err(|e| BarkError::InvalidInvoice {
             error_message: format!("Invalid BOLT12 offer: {:?}", e),
         })?;
         let amount = amount_sats.map(bitcoin::Amount::from_sat);
-        self.inner
-            .pay_lightning_offer(offer_obj, amount)
-            .await
-            .map(Into::into)
-            .map_err(Into::into)
+        let resolved = self
+            .inner
+            .pay_lightning_offer(offer_obj, amount, wait)
+            .await?;
+        self.lightning_send_status(resolved).await
+    }
+
+    /// Resolve the [`types::LightningSendStatus`] for a just-initiated send.
+    /// `bark` now returns only the resolved [`Invoice`] from `pay_lightning_*`,
+    /// so the send state is read back from the state machine by payment hash.
+    pub(crate) async fn lightning_send_status(
+        &self,
+        invoice: Invoice,
+    ) -> Result<types::LightningSendStatus, BarkError> {
+        let state = self
+            .inner
+            .lightning_send_state(invoice.payment_hash())
+            .await?;
+        Ok(state.into())
     }
 
     pub async fn check_lightning_payment(
         &self,
         payment_hash: String,
         wait: bool,
-    ) -> Result<Option<String>, BarkError> {
+    ) -> Result<types::LightningSendStatus, BarkError> {
         let payment_hash_obj =
             PaymentHash::from_str(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
                 error_message: format!("Invalid payment hash: {}", e),
             })?;
-        let payment = self
+        let state = self
             .inner
             .check_lightning_payment(payment_hash_obj, wait)
             .await?;
-        Ok(payment.and_then(|p| p.preimage).map(|p| p.to_string()))
+        Ok(state.into())
+    }
+
+    /// Read-only triage of a payment hash without driving the send forward.
+    /// Use this to poll progress after initiating a payment with `wait = false`.
+    /// Unlike [`Self::check_lightning_payment`], this never advances the action.
+    pub async fn lightning_send_state(
+        &self,
+        payment_hash: String,
+    ) -> Result<types::LightningSendStatus, BarkError> {
+        let payment_hash_obj =
+            PaymentHash::from_str(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+                error_message: format!("Invalid payment hash: {}", e),
+            })?;
+        let state = self.inner.lightning_send_state(payment_hash_obj).await?;
+        Ok(state.into())
+    }
+
+    /// Cheap "has this invoice ever been paid?" check, answered from the local
+    /// `bark_paid_invoice` fact table without consulting the server.
+    pub async fn is_invoice_paid(&self, payment_hash: String) -> Result<bool, BarkError> {
+        let payment_hash_obj =
+            PaymentHash::from_str(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+                error_message: format!("Invalid payment hash: {}", e),
+            })?;
+        Ok(self.inner.is_invoice_paid(payment_hash_obj).await?)
     }
 
     pub async fn pending_lightning_sends(&self) -> Result<Vec<types::LightningSend>, BarkError> {

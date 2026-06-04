@@ -251,18 +251,64 @@ impl From<bark::persist::models::LightningReceive> for LightningReceive {
 #[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
 pub struct LightningSend {
     pub invoice: String,
+    /// Amount being paid, in sats (`payment_amount`).
     pub amount_sats: u64,
+    /// Routing/ark fee for the send, in sats.
+    pub fee_sats: u64,
+    /// Number of input VTXOs locked into the in-flight HTLC.
     pub htlc_vtxo_count: u32,
-    pub preimage: Option<String>,
 }
 
-impl From<bark::persist::models::LightningSend> for LightningSend {
-    fn from(s: bark::persist::models::LightningSend) -> Self {
+impl From<bark::actions::lightning::pay::LightningSend> for LightningSend {
+    fn from(s: bark::actions::lightning::pay::LightningSend) -> Self {
         Self {
             invoice: s.invoice.to_string(),
-            amount_sats: s.amount.to_sat(),
-            htlc_vtxo_count: s.htlc_vtxos.len() as u32,
-            preimage: s.preimage.map(|p| p.to_string()),
+            amount_sats: s.payment_amount.to_sat(),
+            fee_sats: s.fee.to_sat(),
+            htlc_vtxo_count: s.input_vtxo_ids.len() as u32,
+        }
+    }
+}
+
+// ============================================================================
+// LightningSendStatus
+// ============================================================================
+
+/// Terminal/in-flight state of an outgoing lightning send.
+///
+/// Mirrors `bark`'s `LightningSendState`. `pay_lightning_*` and
+/// `check_lightning_payment` now return this so callers can drive the
+/// crash-safe send flow themselves (initiate with `wait = false`, then poll).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi),
+    serde(tag = "type", rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Enum))]
+pub enum LightningSendStatus {
+    /// No record of this payment (never started, or already pruned).
+    Unknown,
+    /// Send is in flight; HTLC VTXOs are locked.
+    InProgress { send: LightningSend },
+    /// Send has settled; the preimage proves payment.
+    Paid {
+        payment_hash: String,
+        preimage: String,
+    },
+}
+
+impl From<bark::actions::lightning::pay::LightningSendState> for LightningSendStatus {
+    fn from(state: bark::actions::lightning::pay::LightningSendState) -> Self {
+        use bark::actions::lightning::pay::LightningSendState as State;
+        match state {
+            State::Unknown => Self::Unknown,
+            State::InProgress(send) => Self::InProgress { send: send.into() },
+            State::Paid(paid) => Self::Paid {
+                payment_hash: paid.payment_hash.to_string(),
+                preimage: paid.preimage.to_string(),
+            },
         }
     }
 }

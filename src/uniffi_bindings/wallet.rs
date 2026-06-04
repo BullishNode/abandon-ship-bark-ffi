@@ -440,9 +440,10 @@ impl Wallet {
         &self,
         invoice: String,
         amount_sats: Option<u64>,
-    ) -> Result<types::LightningSend, BarkError> {
+        wait: bool,
+    ) -> Result<types::LightningSendStatus, BarkError> {
         let core = self.core.clone();
-        run_async(async move { core.pay_lightning_invoice(invoice, amount_sats).await }).await
+        run_async(async move { core.pay_lightning_invoice(invoice, amount_sats, wait).await }).await
     }
 
     /// Pay to a Lightning Address (LNURL). UniFFI-only — lnurl-rs is not wasm-compatible.
@@ -451,7 +452,9 @@ impl Wallet {
         lightning_address: String,
         amount_sats: u64,
         comment: Option<String>,
-    ) -> Result<types::LightningSend, BarkError> {
+        wait: bool,
+    ) -> Result<types::LightningSendStatus, BarkError> {
+        let core = self.core.clone();
         let inner = self.inner.clone();
         run_async(async move {
             let addr: LightningAddress =
@@ -461,10 +464,10 @@ impl Wallet {
                         error_message: format!("invalid lightning address: {}", e),
                     })?;
             let amount = bitcoin::Amount::from_sat(amount_sats);
-            let lightning_send = inner
-                .pay_lightning_address(&addr, amount, comment.as_deref())
+            let resolved = inner
+                .pay_lightning_address(&addr, amount, comment.as_deref(), wait)
                 .await?;
-            Ok(lightning_send.into())
+            core.lightning_send_status(resolved).await
         })
         .await
     }
@@ -473,18 +476,32 @@ impl Wallet {
         &self,
         offer: String,
         amount_sats: Option<u64>,
-    ) -> Result<types::LightningSend, BarkError> {
+        wait: bool,
+    ) -> Result<types::LightningSendStatus, BarkError> {
         let core = self.core.clone();
-        run_async(async move { core.pay_lightning_offer(offer, amount_sats).await }).await
+        run_async(async move { core.pay_lightning_offer(offer, amount_sats, wait).await }).await
     }
 
     pub async fn check_lightning_payment(
         &self,
         payment_hash: String,
         wait: bool,
-    ) -> Result<Option<String>, BarkError> {
+    ) -> Result<types::LightningSendStatus, BarkError> {
         let core = self.core.clone();
         run_async(async move { core.check_lightning_payment(payment_hash, wait).await }).await
+    }
+
+    pub async fn lightning_send_state(
+        &self,
+        payment_hash: String,
+    ) -> Result<types::LightningSendStatus, BarkError> {
+        let core = self.core.clone();
+        run_async(async move { core.lightning_send_state(payment_hash).await }).await
+    }
+
+    pub async fn is_invoice_paid(&self, payment_hash: String) -> Result<bool, BarkError> {
+        let core = self.core.clone();
+        run_async(async move { core.is_invoice_paid(payment_hash).await }).await
     }
 
     pub async fn pending_lightning_sends(&self) -> Result<Vec<types::LightningSend>, BarkError> {
