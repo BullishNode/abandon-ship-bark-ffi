@@ -465,6 +465,35 @@ impl Wallet {
             .collect())
     }
 
+    /// List failed lightning sends whose HTLC revocation also failed.
+    pub async fn stuck_failed_lightning_sends(
+        &self,
+    ) -> Result<Vec<types::LightningSend>, BarkError> {
+        Ok(self
+            .inner
+            .stuck_failed_lightning_sends()
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// Opt an individual stuck send into auto-exiting its HTLCs as they approach
+    /// expiry.
+    pub async fn allow_lightning_send_to_exit(
+        &self,
+        payment_hash: String,
+    ) -> Result<(), BarkError> {
+        let payment_hash_obj =
+            PaymentHash::from_str(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+                error_message: format!("Invalid payment hash: {}", e),
+            })?;
+        self.inner
+            .allow_lightning_send_to_exit(payment_hash_obj)
+            .await?;
+        Ok(())
+    }
+
     // ------------------------------------------------------------------------
     // Lightning (receive)
     // ------------------------------------------------------------------------
@@ -548,6 +577,21 @@ impl Wallet {
             })?;
         self.inner
             .cancel_lightning_receive(payment_hash_obj)
+            .await?;
+        Ok(())
+    }
+
+    /// Force-exit an unfinished lightning receive.
+    pub async fn attempt_lightning_receive_exit(
+        &self,
+        payment_hash: String,
+    ) -> Result<(), BarkError> {
+        let payment_hash_obj =
+            PaymentHash::from_str(&payment_hash).map_err(|e| BarkError::InvalidInvoice {
+                error_message: format!("Invalid payment hash: {}", e),
+            })?;
+        self.inner
+            .attempt_lightning_receive_exit(payment_hash_obj)
             .await?;
         Ok(())
     }

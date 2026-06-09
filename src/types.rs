@@ -257,6 +257,9 @@ pub struct LightningSend {
     pub fee_sats: u64,
     /// Number of input VTXOs locked into the in-flight HTLC.
     pub htlc_vtxo_count: u32,
+    /// Whether the send is stuck in the revocation-failed state: the payment
+    /// failed but revoking the HTLC also failed
+    pub has_failed_revocation: bool,
 }
 
 impl From<bark::actions::lightning::pay::LightningSend> for LightningSend {
@@ -266,6 +269,7 @@ impl From<bark::actions::lightning::pay::LightningSend> for LightningSend {
             amount_sats: s.payment_amount.to_sat(),
             fee_sats: s.fee.to_sat(),
             htlc_vtxo_count: s.input_vtxo_ids.len() as u32,
+            has_failed_revocation: s.has_failed_revocation(),
         }
     }
 }

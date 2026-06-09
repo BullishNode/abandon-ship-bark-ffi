@@ -429,6 +429,25 @@ impl Wallet {
         self.core.pending_lightning_sends().await.map_err(bark_err)
     }
 
+    #[wasm_bindgen(js_name = stuckFailedLightningSends)]
+    pub async fn stuck_failed_lightning_sends(&self) -> Result<Vec<LightningSend>, JsError> {
+        self.core
+            .stuck_failed_lightning_sends()
+            .await
+            .map_err(bark_err)
+    }
+
+    #[wasm_bindgen(js_name = allowLightningSendToExit)]
+    pub async fn allow_lightning_send_to_exit(
+        &self,
+        paymentHash: String,
+    ) -> Result<(), JsError> {
+        self.core
+            .allow_lightning_send_to_exit(paymentHash)
+            .await
+            .map_err(bark_err)
+    }
+
     // -- Lightning receive ----------------------------------------------------
 
     #[wasm_bindgen(js_name = bolt11Invoice)]
@@ -496,6 +515,17 @@ impl Wallet {
     pub async fn cancel_lightning_receive(&self, paymentHash: String) -> Result<(), JsError> {
         self.core
             .cancel_lightning_receive(paymentHash)
+            .await
+            .map_err(bark_err)
+    }
+
+    #[wasm_bindgen(js_name = attemptLightningReceiveExit)]
+    pub async fn attempt_lightning_receive_exit(
+        &self,
+        paymentHash: String,
+    ) -> Result<(), JsError> {
+        self.core
+            .attempt_lightning_receive_exit(paymentHash)
             .await
             .map_err(bark_err)
     }
