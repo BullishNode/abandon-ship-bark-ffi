@@ -509,6 +509,21 @@ impl Wallet {
         run_async(async move { core.pending_lightning_sends().await }).await
     }
 
+    pub async fn stuck_failed_lightning_sends(
+        &self,
+    ) -> Result<Vec<types::LightningSend>, BarkError> {
+        let core = self.core.clone();
+        run_async(async move { core.stuck_failed_lightning_sends().await }).await
+    }
+
+    pub async fn allow_lightning_send_to_exit(
+        &self,
+        payment_hash: String,
+    ) -> Result<(), BarkError> {
+        let core = self.core.clone();
+        run_async(async move { core.allow_lightning_send_to_exit(payment_hash).await }).await
+    }
+
     // ------------------------------------------------------------------------
     // Lightning (receive)
     // ------------------------------------------------------------------------
@@ -562,6 +577,14 @@ impl Wallet {
     pub async fn cancel_lightning_receive(&self, payment_hash: String) -> Result<(), BarkError> {
         let core = self.core.clone();
         run_async(async move { core.cancel_lightning_receive(payment_hash).await }).await
+    }
+
+    pub async fn attempt_lightning_receive_exit(
+        &self,
+        payment_hash: String,
+    ) -> Result<(), BarkError> {
+        let core = self.core.clone();
+        run_async(async move { core.attempt_lightning_receive_exit(payment_hash).await }).await
     }
 
     // ------------------------------------------------------------------------
