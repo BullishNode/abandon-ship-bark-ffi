@@ -57,8 +57,8 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "ark-lib"
-version = "0.2.3"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.3#25e8ac17f308fae685525fe543531e47d3c90855"
+version = "0.2.4"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.4#7c5438bf86ca7ed92cb6b9dbdb82a0eb18550274"
 dependencies = [
  "async-trait",
  "bark-bitcoin-ext",
@@ -168,8 +168,8 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "bark-bitcoin-ext"
-version = "0.2.3"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.3#25e8ac17f308fae685525fe543531e47d3c90855"
+version = "0.2.4"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.4#7c5438bf86ca7ed92cb6b9dbdb82a0eb18550274"
 dependencies = [
  "bdk_bitcoind_rpc",
  "bdk_wallet",
@@ -184,7 +184,7 @@ dependencies = [
 
 [[package]]
 name = "bark-ffi"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -217,8 +217,8 @@ dependencies = [
 
 [[package]]
 name = "bark-server-rpc"
-version = "0.2.3"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.3#25e8ac17f308fae685525fe543531e47d3c90855"
+version = "0.2.4"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.4#7c5438bf86ca7ed92cb6b9dbdb82a0eb18550274"
 dependencies = [
  "ark-lib",
  "bitcoin",
@@ -237,8 +237,8 @@ dependencies = [
 
 [[package]]
 name = "bark-wallet"
-version = "0.2.3"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.3#25e8ac17f308fae685525fe543531e47d3c90855"
+version = "0.2.4"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.4#7c5438bf86ca7ed92cb6b9dbdb82a0eb18550274"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -390,7 +390,7 @@ checksum = "32637268377fc7b10a8c6d51de3e7fba1ce5dd371a96e342b34e6078db558e7f"
 [[package]]
 name = "bip321"
 version = "0.1.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.3#25e8ac17f308fae685525fe543531e47d3c90855"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.2.4#7c5438bf86ca7ed92cb6b9dbdb82a0eb18550274"
 dependencies = [
  "bitcoin",
  "lightning",
