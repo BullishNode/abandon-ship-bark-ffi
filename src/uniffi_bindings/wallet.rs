@@ -436,6 +436,7 @@ impl Wallet {
     // Lightning (send)
     // ------------------------------------------------------------------------
 
+    #[uniffi::method(default(wait = false))]
     pub async fn pay_lightning_invoice(
         &self,
         invoice: String,
@@ -447,6 +448,7 @@ impl Wallet {
     }
 
     /// Pay to a Lightning Address (LNURL). UniFFI-only — lnurl-rs is not wasm-compatible.
+    #[uniffi::method(default(wait = false))]
     pub async fn pay_lightning_address(
         &self,
         lightning_address: String,
@@ -472,6 +474,7 @@ impl Wallet {
         .await
     }
 
+    #[uniffi::method(default(wait = false))]
     pub async fn pay_lightning_offer(
         &self,
         offer: String,
@@ -482,6 +485,7 @@ impl Wallet {
         run_async(async move { core.pay_lightning_offer(offer, amount_sats, wait).await }).await
     }
 
+    #[uniffi::method(default(wait = false))]
     pub async fn check_lightning_payment(
         &self,
         payment_hash: String,
@@ -537,6 +541,7 @@ impl Wallet {
         run_async(async move { core.bolt11_invoice(amount_sats, description).await }).await
     }
 
+    #[uniffi::method(default(wait = false))]
     pub async fn try_claim_all_lightning_receives(
         &self,
         wait: bool,
@@ -565,6 +570,7 @@ impl Wallet {
         run_async(async move { core.lightning_receive_status(payment_hash).await }).await
     }
 
+    #[uniffi::method(default(wait = false))]
     pub async fn try_claim_lightning_receive(
         &self,
         payment_hash: String,
