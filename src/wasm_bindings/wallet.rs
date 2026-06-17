@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use bark::Wallet as InnerWallet;
@@ -126,23 +125,23 @@ pub struct WalletOpenArgs {
 
 #[wasm_bindgen]
 pub struct Wallet {
-    core: Arc<CoreWallet>,
+    core: CoreWallet,
     #[allow(dead_code)]
     mailbox_cancel: CancellationToken,
 }
 
 impl Wallet {
     fn wrap(core: CoreWallet) -> Self {
-        let inner = core.inner();
+        let inner = core.inner().clone();
         let cancel = CancellationToken::new();
         Self::start_mailbox_processor(inner, cancel.clone());
         Self {
-            core: Arc::new(core),
+            core,
             mailbox_cancel: cancel,
         }
     }
 
-    fn start_mailbox_processor(inner: Arc<InnerWallet>, cancel: CancellationToken) {
+    fn start_mailbox_processor(inner: InnerWallet, cancel: CancellationToken) {
         wasm_bindgen_futures::spawn_local(async move {
             let mut retry_delay: u64 = 1;
 
@@ -956,6 +955,6 @@ impl Wallet {
     // -- Notifications --------------------------------------------------------
 
     pub fn notifications(&self) -> NotificationHolder {
-        NotificationHolder::new(&self.core.inner())
+        NotificationHolder::new(self.core.inner())
     }
 }
