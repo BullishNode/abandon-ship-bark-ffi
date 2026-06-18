@@ -33,7 +33,8 @@ pub struct PayLightningInvoiceArgs {
     pub invoice: String,
     #[tsify(optional)]
     pub amountSats: Option<u64>,
-    pub wait: bool,
+    #[tsify(optional)]
+    pub wait: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
@@ -43,7 +44,8 @@ pub struct PayLightningOfferArgs {
     pub offer: String,
     #[tsify(optional)]
     pub amountSats: Option<u64>,
-    pub wait: bool,
+    #[tsify(optional)]
+    pub wait: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
@@ -78,7 +80,8 @@ pub struct DrainExitsArgs {
 #[serde(rename_all = "camelCase")]
 pub struct CheckLightningPaymentArgs {
     pub paymentHash: String,
-    pub wait: bool,
+    #[tsify(optional)]
+    pub wait: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
@@ -95,14 +98,16 @@ pub struct GetExitStatusArgs {
 #[serde(rename_all = "camelCase")]
 pub struct TryClaimLightningReceiveArgs {
     pub paymentHash: String,
-    pub wait: bool,
+    #[tsify(optional)]
+    pub wait: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
 #[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct TryClaimAllLightningReceivesArgs {
-    pub wait: bool,
+    #[tsify(optional)]
+    pub wait: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
@@ -381,7 +386,7 @@ impl Wallet {
         args: PayLightningInvoiceArgs,
     ) -> Result<LightningSendStatus, JsError> {
         self.core
-            .pay_lightning_invoice(args.invoice, args.amountSats, args.wait)
+            .pay_lightning_invoice(args.invoice, args.amountSats, args.wait.unwrap_or(false))
             .await
             .map_err(bark_err)
     }
@@ -392,7 +397,7 @@ impl Wallet {
         args: PayLightningOfferArgs,
     ) -> Result<LightningSendStatus, JsError> {
         self.core
-            .pay_lightning_offer(args.offer, args.amountSats, args.wait)
+            .pay_lightning_offer(args.offer, args.amountSats, args.wait.unwrap_or(false))
             .await
             .map_err(bark_err)
     }
@@ -403,7 +408,7 @@ impl Wallet {
         args: CheckLightningPaymentArgs,
     ) -> Result<LightningSendStatus, JsError> {
         self.core
-            .check_lightning_payment(args.paymentHash, args.wait)
+            .check_lightning_payment(args.paymentHash, args.wait.unwrap_or(false))
             .await
             .map_err(bark_err)
     }
@@ -467,7 +472,7 @@ impl Wallet {
         args: TryClaimAllLightningReceivesArgs,
     ) -> Result<Vec<LightningReceive>, JsError> {
         self.core
-            .try_claim_all_lightning_receives(args.wait)
+            .try_claim_all_lightning_receives(args.wait.unwrap_or(false))
             .await
             .map_err(bark_err)
     }
@@ -506,7 +511,7 @@ impl Wallet {
         args: TryClaimLightningReceiveArgs,
     ) -> Result<(), JsError> {
         self.core
-            .try_claim_lightning_receive(args.paymentHash, args.wait)
+            .try_claim_lightning_receive(args.paymentHash, args.wait.unwrap_or(false))
             .await
             .map_err(bark_err)
     }
