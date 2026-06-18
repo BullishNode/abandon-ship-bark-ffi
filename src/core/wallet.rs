@@ -19,27 +19,22 @@ use crate::types;
 /// Core Bark wallet logic. No binding-specific behavior — pure async over
 /// `bark::Wallet`. UniFFI / WASM wrappers layer their own concerns on top
 /// (run_async, mailbox processor, JsError conversion, etc).
+#[derive(Clone)]
 pub struct Wallet {
-    inner: Arc<InnerWallet>,
+    inner: InnerWallet,
 }
 
 #[allow(dead_code)] // some methods are wired only via the uniffi layer
 impl Wallet {
-    /// Build from an already-constructed `bark::Wallet`.
-    fn from_inner(inner: InnerWallet) -> Self {
-        Self {
-            inner: Arc::new(inner),
-        }
-    }
-
-    /// Build from an `Arc<bark::Wallet>` — used by binding wrappers that
-    /// construct the inner wallet themselves (e.g. uniffi callback-onchain path).
-    pub(crate) fn from_inner_arc(inner: Arc<InnerWallet>) -> Self {
+    /// Build from an already-constructed `bark::Wallet`. `pub(crate)` so binding
+    /// wrappers that construct the inner wallet themselves (e.g. the uniffi
+    /// callback-onchain path) can reuse it.
+    pub(crate) fn from_inner(inner: InnerWallet) -> Self {
         Self { inner }
     }
 
-    pub(crate) fn inner(&self) -> Arc<InnerWallet> {
-        self.inner.clone()
+    pub(crate) fn inner(&self) -> &InnerWallet {
+        &self.inner
     }
 
     // ------------------------------------------------------------------------

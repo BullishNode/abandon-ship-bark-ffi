@@ -28,10 +28,10 @@ use crate::uniffi_bindings::runtime::{run_async, TOKIO_RT};
 /// - Callback onchain dispatch
 #[derive(uniffi::Object)]
 pub struct Wallet {
-    core: Arc<CoreWallet>,
+    core: CoreWallet,
     /// Direct handle to bark::Wallet so callback-onchain methods can bypass
     /// `core::Wallet` (which only knows BDK).
-    inner: Arc<InnerWallet>,
+    inner: InnerWallet,
     mailbox_task: std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
     #[allow(dead_code)]
     mailbox_cancel: CancellationToken,
@@ -39,11 +39,11 @@ pub struct Wallet {
 
 impl Wallet {
     fn wrap(core: CoreWallet) -> Arc<Self> {
-        let inner = core.inner();
+        let inner = core.inner().clone();
         let cancel = CancellationToken::new();
         let mailbox_task = Some(Self::start_mailbox_processor(inner.clone(), cancel.clone()));
         Arc::new(Self {
-            core: Arc::new(core),
+            core,
             inner,
             mailbox_task: std::sync::Mutex::new(mailbox_task),
             mailbox_cancel: cancel,
@@ -51,7 +51,7 @@ impl Wallet {
     }
 
     fn start_mailbox_processor(
-        inner: Arc<InnerWallet>,
+        inner: InnerWallet,
         cancel: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
         TOKIO_RT.spawn(async move {
@@ -179,7 +179,7 @@ impl Wallet {
                 .await
                 .map_err(BarkError::from)?;
 
-                let core = CoreWallet::from_inner_arc(Arc::new(inner));
+                let core = CoreWallet::from_inner(inner);
                 Ok(Self::wrap(core))
             } else {
                 Err(BarkError::Internal {
@@ -217,7 +217,7 @@ impl Wallet {
                     .await
                     .map_err(BarkError::from)?;
 
-                let core = CoreWallet::from_inner_arc(Arc::new(inner));
+                let core = CoreWallet::from_inner(inner);
                 Ok(Self::wrap(core))
             } else {
                 Err(BarkError::Internal {
@@ -278,7 +278,7 @@ impl Wallet {
 
             log::info!("[OPEN] Bark wallet opened successfully and daemon running");
 
-            let core = CoreWallet::from_inner_arc(Arc::new(inner));
+            let core = CoreWallet::from_inner(inner);
             Ok(Self::wrap(core))
         })
         .await
