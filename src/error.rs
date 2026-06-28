@@ -1,105 +1,57 @@
-use thiserror::Error;
 
-/// Error types that can occur when using the Bark wallet FFI
-#[derive(Debug, Error)]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Error))]
-pub enum BarkError {
-    #[error("Network error: {error_message}")]
-    Network { error_message: String },
+use std::fmt;
 
-    #[error("Database error: {error_message}")]
-    Database { error_message: String },
-
-    #[error("Invalid mnemonic: {error_message}")]
-    InvalidMnemonic { error_message: String },
-
-    #[error("Invalid address: {error_message}")]
-    InvalidAddress { error_message: String },
-
-    #[error("Invalid invoice: {error_message}")]
-    InvalidInvoice { error_message: String },
-
-    #[error("Invalid PSBT: {error_message}")]
-    InvalidPsbt { error_message: String },
-
-    #[error("Invalid transaction: {error_message}")]
-    InvalidTransaction { error_message: String },
-
-    #[error("Insufficient funds: {error_message}")]
-    InsufficientFunds { error_message: String },
-
-    #[error("Not found: {error_message}")]
-    NotFound { error_message: String },
-
-    #[error("Server connection error: {error_message}")]
-    ServerConnection { error_message: String },
-
-    #[error("Internal error: {error_message}")]
-    Internal { error_message: String },
-
-    #[error("Onchain wallet required: {error_message}")]
-    OnchainWalletRequired { error_message: String },
-
-    #[error("Invalid VTXO ID: {error_message}")]
-    InvalidVtxoId { error_message: String },
-
-    #[error("Server pubkey changed: {error_message}")]
-    ServerPubkeyChanged { error_message: String },
+/// The single error type surfaced across the Bark FFI.
+///
+/// It is a thin, single-variant wrapper around [`anyhow::Error`]. uniffi error
+/// types must be enums (callback interfaces require `ConvertError`, which
+/// objects cannot provide), and `flat_error` tells uniffi to carry only the
+/// `Display` string across the boundary — so the rich anyhow context collapses
+/// to a single message on the foreign side.
+#[derive(Debug)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
+#[cfg_attr(feature = "uniffi", uniffi(flat_error))]
+pub enum Error {
+    Inner(anyhow::Error),
 }
 
-impl BarkError {
+impl Error {
+    /// Wrap any error (or [`anyhow::Error`]) into a [`Error`].
+    pub fn new(err: impl Into<anyhow::Error>) -> Self {
+        Error::Inner(err.into())
+    }
+
+    /// The flattened error message (full anyhow cause chain, single line).
     pub fn message(&self) -> String {
-        match self {
-            BarkError::Network { error_message } => error_message.clone(),
-            BarkError::Database { error_message } => error_message.clone(),
-            BarkError::InvalidMnemonic { error_message } => error_message.clone(),
-            BarkError::InvalidAddress { error_message } => error_message.clone(),
-            BarkError::InvalidInvoice { error_message } => error_message.clone(),
-            BarkError::InvalidPsbt { error_message } => error_message.clone(),
-            BarkError::InvalidTransaction { error_message } => error_message.clone(),
-            BarkError::InsufficientFunds { error_message } => error_message.clone(),
-            BarkError::NotFound { error_message } => error_message.clone(),
-            BarkError::ServerConnection { error_message } => error_message.clone(),
-            BarkError::Internal { error_message } => error_message.clone(),
-            BarkError::OnchainWalletRequired { error_message } => error_message.clone(),
-            BarkError::InvalidVtxoId { error_message } => error_message.clone(),
-            BarkError::ServerPubkeyChanged { error_message } => error_message.clone(),
-        }
+        self.to_string()
     }
 }
 
-impl From<anyhow::Error> for BarkError {
-    fn from(e: anyhow::Error) -> Self {
-        let msg = format!("{:#}", e);
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Error::Inner(e) = self;
+        // Alternate form joins the whole anyhow cause chain on one line.
+        write!(f, "{:#}", e)
+    }
+}
 
-        // Try to categorize based on error message content
-        if msg.contains("mnemonic") || msg.contains("Mnemonic") {
-            BarkError::InvalidMnemonic { error_message: msg }
-        } else if msg.contains("address") && msg.contains("invalid") {
-            BarkError::InvalidAddress { error_message: msg }
-        } else if msg.contains("invoice") && (msg.contains("invalid") || msg.contains("parse")) {
-            BarkError::InvalidInvoice { error_message: msg }
-        } else if msg.contains("insufficient")
-            || msg.contains("balance")
-            || msg.contains("not enough")
-        {
-            BarkError::InsufficientFunds { error_message: msg }
-        } else if msg.contains("not found")
-            || msg.contains("doesn't exist")
-            || msg.contains("cannot find")
-        {
-            BarkError::NotFound { error_message: msg }
-        } else if msg.contains("Server public key has changed") {
-            BarkError::ServerPubkeyChanged { error_message: msg }
-        } else if msg.contains("server") || msg.contains("connection") || msg.contains("connect") {
-            BarkError::ServerConnection { error_message: msg }
-        } else if msg.contains("network") || msg.contains("Network") {
-            BarkError::Network { error_message: msg }
-        } else if msg.contains("database") || msg.contains("sqlite") || msg.contains("SQL") {
-            BarkError::Database { error_message: msg }
-        } else {
-            BarkError::Internal { error_message: msg }
-        }
+impl std::error::Error for Error {}
+
+impl From<anyhow::Error> for Error {
+    fn from(e: anyhow::Error) -> Self {
+        Error::Inner(e)
+    }
+}
+
+impl From<&str> for Error {
+    fn from(s: &str) -> Self {
+        Error::Inner(anyhow::Error::msg(s.to_owned()))
+    }
+}
+
+impl From<String> for Error {
+    fn from(s: String) -> Self {
+        Error::Inner(anyhow::Error::msg(s))
     }
 }
 
@@ -108,23 +60,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_error_categorization() {
-        let mnemonic_err = anyhow::anyhow!("Invalid mnemonic phrase");
-        assert!(matches!(
-            BarkError::from(mnemonic_err),
-            BarkError::InvalidMnemonic { .. }
-        ));
+    fn preserves_message() {
+        let err = Error::from(anyhow::anyhow!("something broke"));
+        assert_eq!(err.message(), "something broke");
+    }
 
-        let insufficient_err = anyhow::anyhow!("Insufficient balance available");
-        assert!(matches!(
-            BarkError::from(insufficient_err),
-            BarkError::InsufficientFunds { .. }
-        ));
-
-        let server_err = anyhow::anyhow!("Failed to connect to server");
-        assert!(matches!(
-            BarkError::from(server_err),
-            BarkError::ServerConnection { .. }
-        ));
+    #[test]
+    fn shows_full_cause_chain() {
+        // Display uses the alternate `{:#}` form, which joins the anyhow chain.
+        let err = Error::from(anyhow::anyhow!("root cause").context("outer context"));
+        let msg = err.message();
+        assert!(msg.contains("outer context"), "{msg}");
+        assert!(msg.contains("root cause"), "{msg}");
     }
 }

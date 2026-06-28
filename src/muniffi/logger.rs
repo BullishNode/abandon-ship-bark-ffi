@@ -12,7 +12,7 @@ use std::sync::Arc;
 use log::LevelFilter;
 use once_cell::sync::OnceCell;
 
-use crate::error::BarkError;
+use crate::error::Error;
 
 /// Severity of a log record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -74,11 +74,11 @@ impl log::Log for Bridge {
         if !self.enabled(record.metadata()) {
             return;
         }
-		self.sink.log(
-			record.level().into(),
-			record.target().to_string(),
-			format!("{}", record.args()),
-		);
+        self.sink.log(
+            record.level().into(),
+            record.target().to_string(),
+            format!("{}", record.args()),
+        );
     }
 
     fn flush(&self) {}
@@ -92,15 +92,15 @@ impl log::Log for Bridge {
 pub fn set_logger(
     logger: Arc<dyn BarkLogger>,
     max_level: LogLevel,
-) -> Result<(), BarkError> {
-	let filter: LevelFilter = max_level.into();
+) -> Result<(), Error> {
+    let filter: LevelFilter = max_level.into();
 
     let bridge = BRIDGE.try_insert(Bridge { sink: logger, filter })
-		.map_err(|_| BarkError::Internal { error_message: "logger already installed".to_string() })?;
+        .map_err(|_| Error::from("logger already installed"))?;
 
-	log::set_logger(bridge)
-		.map_err(|_| BarkError::Internal { error_message: "could not set logger".to_string() })?;
-	log::set_max_level(filter);
+    log::set_logger(bridge)
+        .map_err(|_| Error::from("could not set logger"))?;
+    log::set_max_level(filter);
 
     Ok(())
 }

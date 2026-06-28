@@ -44,15 +44,15 @@ Two mutually-exclusive feature flags select the binding layer:
 
 | Feature             | Target                       | Persister              |
 | ------------------- | ---------------------------- | ---------------------- |
-| `uniffi-bindings`   | native (Dart/Swift/Kotlin/…) | SQLite                 |
+| `uniffi`            | native (Dart/Swift/Kotlin/…) | SQLite                 |
 | `wasm-web`          | `wasm32-unknown-unknown`     | IndexedDB              |
 
-`uniffi-bindings` is the default.
+`uniffi` is the default.
 
 ### Native (uniffi)
 
 ```sh
-cargo build --no-default-features --features uniffi-bindings
+cargo build --no-default-features --features uniffi
 ```
 
 ### WASM

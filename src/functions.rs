@@ -1,22 +1,21 @@
 //! Namespace-level functions for Bark FFI
 
+use anyhow::Context;
 use bark::ark;
 use bip39::Mnemonic;
 
-use crate::error::BarkError;
+use crate::error::Error;
 
 /// Generate a new 12-word BIP39 mnemonic
-#[cfg_attr(feature = "uniffi-bindings", uniffi::export)]
-pub fn generate_mnemonic() -> Result<String, BarkError> {
-    let mnemonic = Mnemonic::generate(12).map_err(|e| BarkError::Internal {
-        error_message: format!("Failed to generate mnemonic: {}", e),
-    })?;
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn generate_mnemonic() -> Result<String, Error> {
+    let mnemonic = Mnemonic::generate(12).context("Failed to generate mnemonic")?;
     Ok(mnemonic.to_string())
 }
 
 /// Validate a BIP39 mnemonic phrase
-#[cfg_attr(feature = "uniffi-bindings", uniffi::export)]
-pub fn validate_mnemonic(mnemonic: String) -> Result<bool, BarkError> {
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn validate_mnemonic(mnemonic: String) -> Result<bool, Error> {
     match Mnemonic::parse(mnemonic.trim()) {
         Ok(_) => Ok(true),
         Err(_) => Ok(false),
@@ -28,8 +27,8 @@ pub fn validate_mnemonic(mnemonic: String) -> Result<bool, BarkError> {
 /// This only validates the format of the address, not whether it belongs
 /// to a specific Ark server. For full validation against a connected server,
 /// use Wallet::validate_arkoor_address() instead.
-#[cfg_attr(feature = "uniffi-bindings", uniffi::export)]
-pub fn validate_ark_address(address: String) -> Result<bool, BarkError> {
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn validate_ark_address(address: String) -> Result<bool, Error> {
     match address.parse::<ark::Address>() {
         Ok(_) => Ok(true),
         Err(_) => Ok(false),
@@ -48,19 +47,15 @@ pub fn validate_ark_address(address: String) -> Result<bool, BarkError> {
 /// # Returns
 ///
 /// Hex-encoded signed transaction ready for broadcasting
-#[cfg_attr(feature = "uniffi-bindings", uniffi::export)]
-pub fn extract_tx_from_psbt(psbt_base64: String) -> Result<String, BarkError> {
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn extract_tx_from_psbt(psbt_base64: String) -> Result<String, Error> {
     use bitcoin::consensus::encode::serialize_hex;
     use bitcoin::psbt::Psbt;
     use std::str::FromStr;
 
-    let psbt = Psbt::from_str(&psbt_base64).map_err(|e| BarkError::InvalidPsbt {
-        error_message: format!("{}", e),
-    })?;
+    let psbt = Psbt::from_str(&psbt_base64).context("invalid PSBT")?;
 
-    let tx = psbt.extract_tx().map_err(|e| BarkError::Internal {
-        error_message: format!("Failed to extract transaction: {}", e),
-    })?;
+    let tx = psbt.extract_tx().context("Failed to extract transaction")?;
 
     Ok(serialize_hex(&tx))
 }

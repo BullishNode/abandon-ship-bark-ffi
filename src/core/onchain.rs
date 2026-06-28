@@ -5,11 +5,14 @@ use bark::chain::{ChainSource, ChainSourceSpec};
 use bark::onchain::{ChainSync, GetAddress, OnchainWallet as BarkOnchainWallet};
 use bark::persist::BarkPersister;
 use bip39::Mnemonic;
-use bitcoin::Network as BtcNetwork;
+
+use anyhow::Context;
+use log::info;
 
 use crate::config::Config;
-use crate::error::BarkError;
+use crate::error::Error;
 use crate::types::OnchainBalance;
+use crate::Network;
 
 /// BDK-based onchain Bitcoin wallet for boarding and exits.
 ///
@@ -23,20 +26,19 @@ pub struct OnchainWallet {
 
 impl OnchainWallet {
     pub async fn default(
+        network: Network,
         mnemonic: String,
         config: Config,
         db: Arc<dyn BarkPersister>,
-    ) -> Result<Self, BarkError> {
-        let mnemonic = Mnemonic::parse(mnemonic.trim()).map_err(|e| BarkError::InvalidMnemonic {
-            error_message: e.to_string(),
-        })?;
+    ) -> Result<Self, Error> {
+        let mnemonic = Mnemonic::parse(mnemonic.trim()).context("invalid mnemonic")?;
 
         let seed = mnemonic.to_seed("");
-        let btc_network: BtcNetwork = config.network.into();
+        let network = network.into();
 
-        log::info!("[ONCHAIN] Creating onchain wallet for {:?} network", btc_network);
+        info!("[ONCHAIN] Creating onchain wallet for {:?} network", network);
 
-        let onchain = BarkOnchainWallet::load_or_create(btc_network, seed, db.clone()).await?;
+        let onchain = BarkOnchainWallet::load_or_create(network, seed, db.clone()).await?;
 
         let chain_spec = if let Some(url) = config.bitcoind_address.as_ref() {
             use bark_bitcoin_ext::rpc::Auth;
@@ -47,24 +49,22 @@ impl OnchainWallet {
             } else {
                 Auth::None
             };
-            log::info!("[ONCHAIN] Using Bitcoin Core RPC at {}", url);
+            info!("[ONCHAIN] Using Bitcoin Core RPC at {}", url);
             ChainSourceSpec::Bitcoind { url: url.clone(), auth }
         } else if let Some(url) = config.esplora_address {
-            log::info!("[ONCHAIN] Using Esplora at {}", url);
+            info!("[ONCHAIN] Using Esplora at {}", url);
             ChainSourceSpec::Esplora { url }
         } else {
-            return Err(BarkError::InvalidAddress {
-                error_message: "Config must specify either esplora_address or bitcoind_address"
-                    .to_string(),
-            });
+            return Err(anyhow::anyhow!(
+                "Config must specify either esplora_address or bitcoind_address"
+            )
+            .into());
         };
 
         let chain = Arc::new(
-            ChainSource::new(chain_spec, btc_network, None)
+            ChainSource::new(chain_spec, network, None)
                 .await
-                .map_err(|e| BarkError::Network {
-                    error_message: format!("Failed to create chain source: {}", e),
-                })?,
+                .context("Failed to create chain source")?,
         );
 
         Ok(Self {
@@ -73,25 +73,21 @@ impl OnchainWallet {
         })
     }
 
-    pub async fn sync(&self) -> Result<u64, BarkError> {
+    pub async fn sync(&self) -> Result<u64, Error> {
         let mut w = self.wallet.write().await;
-        w.sync(&self.chain).await.map_err(|e| BarkError::Network {
-            error_message: format!("Sync failed: {}", e),
-        })?;
+        w.sync(&self.chain).await.context("Sync failed")?;
         let balance = w.balance();
         Ok(balance.total().to_sat())
     }
 
-    pub async fn balance(&self) -> Result<OnchainBalance, BarkError> {
+    pub async fn balance(&self) -> Result<OnchainBalance, Error> {
         let w = self.wallet.write().await;
         Ok(w.balance().into())
     }
 
-    pub async fn new_address(&self) -> Result<String, BarkError> {
+    pub async fn new_address(&self) -> Result<String, Error> {
         let mut w = self.wallet.write().await;
-        let addr = w.address().await.map_err(|e| BarkError::Internal {
-            error_message: format!("Failed to generate address: {}", e),
-        })?;
+        let addr = w.address().await.context("Failed to generate address")?;
         Ok(addr.to_string())
     }
 
@@ -100,23 +96,19 @@ impl OnchainWallet {
         address: String,
         amount_sats: u64,
         fee_rate_sat_per_vb: u64,
-    ) -> Result<String, BarkError> {
+    ) -> Result<String, Error> {
         let addr = address
             .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-            .map_err(|e| BarkError::InvalidAddress { error_message: e.to_string() })?
+            .context("invalid address")?
             .assume_checked();
 
         let amount = bitcoin::Amount::from_sat(amount_sats);
 
         let fee_rate = bitcoin::FeeRate::from_sat_per_vb(fee_rate_sat_per_vb)
-            .ok_or_else(|| BarkError::Internal {
-                error_message: "Invalid fee rate".to_string(),
-            })?;
+            .context("Invalid fee rate")?;
 
         let mut w = self.wallet.write().await;
-        let txid = w.send(&self.chain, addr, amount, fee_rate).await.map_err(|e| BarkError::Internal {
-            error_message: format!("Send failed: {}", e),
-        })?;
+        let txid = w.send(&self.chain, addr, amount, fee_rate).await.context("Send failed")?;
 
         Ok(txid.to_string())
     }

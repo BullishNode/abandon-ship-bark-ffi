@@ -8,11 +8,12 @@ use wasm_bindgen::prelude::*;
 
 use crate::config::Config;
 use crate::core::onchain::OnchainWallet as CoreOnchainWallet;
-use crate::error::BarkError;
+use crate::error::Error;
 use crate::types::OnchainBalance;
-use crate::wasm_bindings::db::indexed_db_client;
+use crate::wasm::db::indexed_db_client;
+use crate::Network;
 
-fn bark_err(e: BarkError) -> JsError {
+fn bark_err(e: Error) -> JsError {
     JsError::new(&e.message())
 }
 
@@ -20,22 +21,23 @@ fn bark_err(e: BarkError) -> JsError {
 #[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct OnchainWalletDefaultArgs {
+    pub network: Network,
     pub mnemonic: String,
     pub config: Config,
-    pub dbName: String,
+    pub db_name: String,
 }
 
 #[wasm_bindgen]
 pub struct OnchainWallet {
-    inner: Arc<CoreOnchainWallet>,
+    pub(crate) inner: Arc<CoreOnchainWallet>,
 }
 
 #[wasm_bindgen]
 impl OnchainWallet {
     /// Open (or create) the onchain wallet against an IndexedDB-backed persister.
     pub async fn default(args: OnchainWalletDefaultArgs) -> Result<OnchainWallet, JsError> {
-        let db = indexed_db_client(&args.dbName).await.map_err(bark_err)?;
-        let core = CoreOnchainWallet::default(args.mnemonic, args.config, db)
+        let db = indexed_db_client(&args.db_name).await.map_err(bark_err)?;
+        let core = CoreOnchainWallet::default(args.network, args.mnemonic, args.config, db)
             .await
             .map_err(bark_err)?;
         Ok(Self { inner: Arc::new(core) })

@@ -3,14 +3,14 @@
 //! FFI bindings for the Bark wallet library.
 //!
 //! Two mutually exclusive bindings layers:
-//! - `uniffi-bindings` (default): UniFFI scaffolding for Dart/Swift/Kotlin/Python.
+//! - `uniffi` (default): UniFFI scaffolding for Dart/Swift/Kotlin/Python.
 //! - `wasm-web`: `wasm-bindgen` bindings for browsers (IndexedDB persister).
 
-#[cfg(all(feature = "uniffi-bindings", feature = "wasm-web"))]
-compile_error!("features `uniffi-bindings` and `wasm-web` are mutually exclusive");
+#[cfg(all(feature = "uniffi", feature = "wasm-web"))]
+compile_error!("features `uniffi` and `wasm-web` are mutually exclusive");
 
-#[cfg(not(any(feature = "uniffi-bindings", feature = "wasm-web")))]
-compile_error!("enable exactly one of `uniffi-bindings` or `wasm-web`");
+#[cfg(not(any(feature = "uniffi", feature = "wasm-web")))]
+compile_error!("enable exactly one of `uniffi` or `wasm-web`");
 
 mod config;
 mod core;
@@ -19,19 +19,19 @@ mod functions;
 mod types;
 
 pub use config::Config;
-pub use error::BarkError;
+pub use error::Error;
 pub use functions::*;
 pub use types::*;
 
-#[cfg(feature = "uniffi-bindings")]
-mod uniffi_bindings;
-#[cfg(feature = "uniffi-bindings")]
-pub use uniffi_bindings::*;
+#[cfg(feature = "uniffi")]
+mod muniffi; // nb can't clash with uniffi crate name
+#[cfg(feature = "uniffi")]
+pub use muniffi::*;
 
 #[cfg(feature = "wasm-web")]
-mod wasm_bindings;
+mod wasm;
 #[cfg(feature = "wasm-web")]
-pub use wasm_bindings::*;
+pub use wasm::*;
 
-#[cfg(feature = "uniffi-bindings")]
+#[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!("bark");

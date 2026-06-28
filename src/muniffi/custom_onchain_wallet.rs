@@ -6,18 +6,21 @@
 
 use std::sync::Arc;
 
+use anyhow::Context;
 use async_trait::async_trait;
+use log::error;
 use bitcoin::{
     address::NetworkChecked, Amount, BlockHash, FeeRate, OutPoint, Psbt, Transaction, Txid,
 };
 
+use bark::chain::ChainSource;
 use bark::onchain::{
-    CpfpError, GetBalance, GetSpendingTx, GetWalletTx, MakeCpfp, MakeCpfpFees, PreparePsbt,
-    SignPsbt,
+    ChainSync, CpfpError, GetBalance, GetSpendingTx, GetWalletTx, MakeCpfp, MakeCpfpFees,
+    PreparePsbt, SignPsbt,
 };
 use bark_bitcoin_ext::BlockRef;
 
-use crate::error::BarkError;
+use crate::error::Error;
 use crate::types::{BlockRef as FfiBlockRef, CpfpParams, Destination, OutPoint as FfiOutPoint};
 
 /// Callback interface for custom onchain wallet implementations
@@ -26,7 +29,7 @@ use crate::types::{BlockRef as FfiBlockRef, CpfpParams, Destination, OutPoint as
 #[uniffi::export(with_foreign)]
 pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// Get the wallet balance in satoshis
-    fn get_balance(&self) -> Result<u64, BarkError>;
+    fn get_balance(&self) -> Result<u64, Error>;
 
     /// Prepare a transaction to send to given destinations
     ///
@@ -40,7 +43,7 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
         &self,
         destinations: Vec<Destination>,
         fee_rate_sat_per_vb: u64,
-    ) -> Result<String, BarkError>;
+    ) -> Result<String, Error>;
 
     /// Prepare a transaction that drains the wallet to a single address
     ///
@@ -54,7 +57,7 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
         &self,
         address: String,
         fee_rate_sat_per_vb: u64,
-    ) -> Result<String, BarkError>;
+    ) -> Result<String, Error>;
 
     /// Sign and finalize a PSBT
     ///
@@ -63,7 +66,7 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     ///
     /// # Returns
     /// Base64-encoded fully signed PSBT (all witnesses filled in)
-    fn finish_psbt(&self, psbt_base64: String) -> Result<String, BarkError>;
+    fn finish_psbt(&self, psbt_base64: String) -> Result<String, Error>;
 
     /// Get a wallet transaction by txid
     ///
@@ -72,7 +75,7 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     ///
     /// # Returns
     /// Hex-encoded transaction, or null if not found
-    fn get_wallet_tx(&self, txid: String) -> Result<Option<String>, BarkError>;
+    fn get_wallet_tx(&self, txid: String) -> Result<Option<String>, Error>;
 
     /// Get the block hash where a transaction was confirmed
     ///
@@ -82,7 +85,7 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// # Returns
     /// Block reference with height and hash, or null if unconfirmed
     fn get_wallet_tx_confirmed_block(&self, txid: String)
-        -> Result<Option<FfiBlockRef>, BarkError>;
+        -> Result<Option<FfiBlockRef>, Error>;
 
     /// Find transaction that spends a given output
     ///
@@ -91,7 +94,7 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     ///
     /// # Returns
     /// Hex-encoded spending transaction, or null if unspent
-    fn get_spending_tx(&self, outpoint: FfiOutPoint) -> Result<Option<String>, BarkError>;
+    fn get_spending_tx(&self, outpoint: FfiOutPoint) -> Result<Option<String>, Error>;
 
     /// Create a signed P2A CPFP transaction
     ///
@@ -100,13 +103,21 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     ///
     /// # Returns
     /// Hex-encoded signed CPFP transaction
-    fn make_signed_p2a_cpfp(&self, params: CpfpParams) -> Result<String, BarkError>;
+    fn make_signed_p2a_cpfp(&self, params: CpfpParams) -> Result<String, Error>;
 
     /// Store a signed P2A CPFP transaction in the wallet
     ///
     /// # Arguments
     /// * `tx_hex` - Hex-encoded transaction
-    fn store_signed_p2a_cpfp(&self, tx_hex: String) -> Result<(), BarkError>;
+    fn store_signed_p2a_cpfp(&self, tx_hex: String) -> Result<(), Error>;
+
+    /// Sync the wallet with the chain.
+    ///
+    /// Called by Bark (e.g. the background daemon) to ask the wallet to refresh
+    /// its view of the chain before reading balances or building transactions.
+    /// Implementations bring their own chain backend up to date — Bark's chain
+    /// source is intentionally not passed across the FFI boundary.
+    fn sync(&self) -> Result<(), Error>;
 }
 
 /// Rust adapter that implements Bark traits using callback interface
@@ -126,12 +137,12 @@ impl GetBalance for CallbackWalletAdapter {
         match self.callbacks.get_balance() {
             Ok(sats) => Amount::from_sat(sats),
             Err(e) => {
-                log::error!(
+                error!(
                     "CustomOnchainWalletCallbacks::get_balance failed: {}",
                     e.message()
                 );
-                log::error!("Returning 0 balance - this may cause unexpected behavior!");
-                log::error!(
+                error!("Returning 0 balance - this may cause unexpected behavior!");
+                error!(
                     "Please fix the wallet implementation to ensure get_balance never fails"
                 );
                 Amount::ZERO
@@ -321,6 +332,21 @@ impl MakeCpfp for CallbackWalletAdapter {
             .store_signed_p2a_cpfp(tx_hex)
             .map_err(|e| CpfpError::StoreError(e.message()))?;
 
+        Ok(())
+    }
+}
+
+// Implement ChainSync trait.
+//
+// Forwards to the foreign wallet's own `sync`. Bark's `ChainSource`
+// (esplora/bitcoind) is not used by the foreign implementation — it owns its
+// chain backend — so it is not passed across the FFI. This impl is what
+// completes `DaemonizableOnchainWallet` for `CallbackWalletAdapter` (which
+// otherwise requires only `ExitUnilaterally`, already implemented above).
+#[async_trait]
+impl ChainSync for CallbackWalletAdapter {
+    async fn sync(&mut self, _chain: &ChainSource) -> anyhow::Result<()> {
+        self.callbacks.sync().context("sync failed")?;
         Ok(())
     }
 }
