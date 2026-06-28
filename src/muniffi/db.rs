@@ -1,4 +1,5 @@
 use anyhow::Context;
+use log::info;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -39,13 +40,13 @@ pub fn get_or_open_db(datadir: &str) -> anyhow::Result<Arc<SqliteClient>> {
     // Try to reuse existing connection
     if let Some(weak_db) = cache.get(&db_path) {
         if let Some(db) = weak_db.upgrade() {
-            log::info!("[DB] Reusing existing connection for {}", db_path.display());
+            info!("[DB] Reusing existing connection for {}", db_path.display());
             return Ok(db);
         }
     }
 
     // Open new connection
-    log::info!("[DB] Opening new connection for {}", db_path.display());
+    info!("[DB] Opening new connection for {}", db_path.display());
     let db = Arc::new(
         SqliteClient::open(&db_path)
             .with_context(|| format!("Failed to open database at {}", db_path.display(),))?,

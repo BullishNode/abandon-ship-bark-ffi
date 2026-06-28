@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use futures_util::StreamExt;
 use tokio::sync::oneshot;
 
-use crate::error::BarkError;
+use crate::error::Error;
 use crate::types::WalletNotification;
 
 /// Pull-based notification handle exposed over FFI.
@@ -19,7 +19,7 @@ use crate::types::WalletNotification;
 /// This holder is intended for a single consumer loop. Concurrent calls to
 /// `next_notification()` on the same holder are not supported and will return
 /// `None` immediately.
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Object))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct NotificationHolder {
     /// The bark notification stream. Held in a tokio Mutex because we need to
     /// hold it across the `.await` point inside `next_notification()`.
@@ -56,7 +56,7 @@ impl NotificationHolder {
     }
 }
 
-#[cfg_attr(feature = "uniffi-bindings", uniffi::export(async_runtime = "tokio"))]
+#[cfg_attr(feature = "uniffi", uniffi::export(async_runtime = "tokio"))]
 impl NotificationHolder {
     /// Wait for the next wallet notification.
     ///
@@ -65,23 +65,21 @@ impl NotificationHolder {
     ///   (cancellation only affects the current wait; the stream lives on)
     /// - The wallet's notification source was shut down permanently
     ///
-    /// Returns `Err(BarkError::Internal)` if called concurrently on the same holder.
+    /// Returns an error if called concurrently on the same holder.
     ///
     /// After a cancellation this method can be called again normally — the
     /// underlying `NotificationStream` is preserved in `self.stream` and a
     /// fresh per-wait cancel channel is created on every entry.
     pub async fn next_notification(
         self: Arc<Self>,
-    ) -> Result<Option<WalletNotification>, BarkError> {
+    ) -> Result<Option<WalletNotification>, Error> {
         // Enforce single-consumer: reject concurrent calls with an explicit error.
         if self
             .wait_in_progress
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
         {
-            return Err(BarkError::Internal {
-                error_message: "next_notification() called concurrently on the same holder".into(),
-            });
+            return Err("next_notification() called concurrently on the same holder".into());
         }
 
         // RAII guard resets wait_in_progress on exit, even on panic.

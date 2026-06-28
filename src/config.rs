@@ -1,7 +1,4 @@
-use bitcoin::Network as BtcNetwork;
 use serde::{Deserialize, Serialize};
-
-use crate::types::Network;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(
@@ -10,7 +7,7 @@ use crate::types::Network;
     tsify(from_wasm_abi, into_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Config {
     pub server_address: String,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
@@ -25,7 +22,6 @@ pub struct Config {
     pub bitcoind_user: Option<String>,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub bitcoind_pass: Option<String>,
-    pub network: Network,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub vtxo_refresh_expiry_threshold: Option<u32>,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
@@ -44,49 +40,55 @@ pub struct Config {
     pub daemon_manual_sync: Option<bool>,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub lightning_receive_claim_retries: Option<u8>,
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
+    pub user_agent: Option<String>,
 }
 
-impl From<Config> for bark::Config {
-    fn from(c: Config) -> Self {
-        let network: BtcNetwork = c.network.into();
-        let mut cfg = bark::Config::network_default(network);
+impl Config {
+    pub(crate) fn into_bark(self, network: bitcoin::Network) -> bark::Config {
+        let mut ret = bark::Config::network_default(network);
 
-        cfg.server_address = c.server_address;
-        cfg.server_access_token = c.server_access_token;
-        cfg.esplora_address = c.esplora_address;
-        cfg.bitcoind_address = c.bitcoind_address;
-        cfg.bitcoind_cookiefile = c.bitcoind_cookiefile.map(std::path::PathBuf::from);
-        cfg.bitcoind_user = c.bitcoind_user;
-        cfg.bitcoind_pass = c.bitcoind_pass;
+        ret.server_address = self.server_address;
+        ret.server_access_token = self.server_access_token;
+        ret.esplora_address = self.esplora_address;
+        ret.bitcoind_address = self.bitcoind_address;
+        ret.bitcoind_cookiefile = self.bitcoind_cookiefile.map(std::path::PathBuf::from);
+        ret.bitcoind_user = self.bitcoind_user;
+        ret.bitcoind_pass = self.bitcoind_pass;
 
-        if let Some(threshold) = c.vtxo_refresh_expiry_threshold {
-            cfg.vtxo_refresh_expiry_threshold = threshold;
+        if let Some(threshold) = self.vtxo_refresh_expiry_threshold {
+            ret.vtxo_refresh_expiry_threshold = threshold;
         }
-        if let Some(margin) = c.vtxo_exit_margin {
-            cfg.vtxo_exit_margin = margin;
+        if let Some(margin) = self.vtxo_exit_margin {
+            ret.vtxo_exit_margin = margin;
         }
-        if let Some(delta) = c.htlc_recv_claim_delta {
-            cfg.htlc_recv_claim_delta = delta;
+        if let Some(delta) = self.htlc_recv_claim_delta {
+            ret.htlc_recv_claim_delta = delta;
         }
-        if let Some(rate) = c.fallback_fee_rate {
-            cfg.fallback_fee_rate = Some(bitcoin::FeeRate::from_sat_per_kwu(rate));
+        if let Some(rate) = self.fallback_fee_rate {
+            ret.fallback_fee_rate = Some(bitcoin::FeeRate::from_sat_per_kwu(rate));
         }
-        if let Some(confs) = c.round_tx_required_confirmations {
-            cfg.round_tx_required_confirmations = confs;
+        if let Some(confs) = self.round_tx_required_confirmations {
+            ret.round_tx_required_confirmations = confs;
         }
-        if let Some(secs) = c.daemon_sync_interval_secs {
-            cfg.daemon_sync_interval_secs = secs;
+        if let Some(secs) = self.daemon_sync_interval_secs {
+            ret.daemon_sync_interval_secs = secs;
         }
-        if let Some(confs) = c.offboard_required_confirmations {
-            cfg.offboard_required_confirmations = confs;
+        if let Some(confs) = self.offboard_required_confirmations {
+            ret.offboard_required_confirmations = confs;
         }
-        if let Some(manual) = c.daemon_manual_sync {
-            cfg.daemon_manual_sync = manual;
+        if let Some(manual) = self.daemon_manual_sync {
+            ret.daemon_manual_sync = manual;
         }
-        if let Some(retries) = c.lightning_receive_claim_retries {
-            cfg.lightning_receive_claim_retries = retries;
+        if let Some(retries) = self.lightning_receive_claim_retries {
+            ret.lightning_receive_claim_retries = retries;
+        }
+        if let Some(ua) = self.user_agent {
+            ret.user_agent = Some(ua);
+        } else {
+            ret.user_agent = Some(format!("bark-ffi/{}", env!("CARGO_PKG_VERSION")));
         }
 
-        cfg
+        ret
     }
 }

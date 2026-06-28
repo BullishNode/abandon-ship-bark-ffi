@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
     derive(tsify::Tsify),
     tsify(from_wasm_abi, into_wasm_abi)
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Enum))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Network {
     Bitcoin,
     Testnet,
@@ -57,7 +57,7 @@ impl From<BtcNetwork> for Network {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct WalletProperties {
     pub network: Network,
     pub fingerprint: String,
@@ -83,7 +83,7 @@ impl From<BarkWalletProperties> for WalletProperties {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Balance {
     pub spendable_sats: u64,
     pub pending_in_round_sats: u64,
@@ -119,7 +119,7 @@ impl From<BarkBalance> for Balance {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Vtxo {
     pub id: String,
     pub amount_sats: u64,
@@ -159,7 +159,7 @@ impl From<BarkWalletVtxo> for Vtxo {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LightningInvoice {
     pub invoice: String,
     pub payment_hash: String,
@@ -177,7 +177,7 @@ pub struct LightningInvoice {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct OffboardResult {
     pub round_id: String,
 }
@@ -193,7 +193,7 @@ pub struct OffboardResult {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct AddressWithIndex {
     pub address: String,
     pub index: u32,
@@ -210,7 +210,7 @@ pub struct AddressWithIndex {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LightningReceive {
     pub payment_hash: String,
     pub payment_preimage: String,
@@ -248,7 +248,7 @@ impl From<bark::persist::models::LightningReceive> for LightningReceive {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LightningSend {
     pub invoice: String,
     /// Amount being paid, in sats (`payment_amount`).
@@ -290,7 +290,7 @@ impl From<bark::actions::lightning::pay::LightningSend> for LightningSend {
     tsify(into_wasm_abi),
     serde(tag = "type", rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Enum))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum LightningSendStatus {
     /// No record of this payment (never started, or already pruned).
     Unknown,
@@ -328,7 +328,7 @@ impl From<bark::actions::lightning::pay::LightningSendState> for LightningSendSt
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Movement {
     pub id: u32,
     pub status: String,
@@ -407,7 +407,7 @@ impl From<bark::movement::Movement> for Movement {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct FeeEstimate {
     pub gross_amount_sats: u64,
     pub fee_sats: u64,
@@ -437,7 +437,7 @@ impl From<bark::FeeEstimate> for FeeEstimate {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct OnchainBalance {
     pub confirmed_sats: u64,
     pub pending_sats: u64,
@@ -465,7 +465,7 @@ impl From<bark::onchain::bdk_wallet::Balance> for OnchainBalance {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PendingBoard {
     pub vtxo_id: String,
     pub amount_sats: u64,
@@ -493,7 +493,7 @@ impl From<BarkPendingBoard> for PendingBoard {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ArkInfo {
     pub network: Network,
     pub server_pubkey: String,
@@ -563,7 +563,7 @@ use bark::exit::ExitVtxo as BarkExitVtxo;
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ExitVtxo {
     pub vtxo_id: String,
     pub amount_sats: u64,
@@ -590,7 +590,7 @@ impl From<&BarkExitVtxo> for ExitVtxo {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ExitProgressStatus {
     pub vtxo_id: String,
     pub state: String,
@@ -615,7 +615,7 @@ impl From<BarkExitProgressStatus> for ExitProgressStatus {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ExitClaimTransaction {
     pub psbt_base64: String,
     pub fee_sats: u64,
@@ -629,7 +629,7 @@ pub struct ExitClaimTransaction {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ExitTransactionStatus {
     pub vtxo_id: String,
     pub state: String,
@@ -664,7 +664,7 @@ use bark::persist::models::{StoredRoundState, Unlocked};
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct RoundState {
     pub id: u32,
     /// Whether the round is ongoing
@@ -692,7 +692,7 @@ impl From<StoredRoundState<Unlocked>> for RoundState {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Destination {
     pub address: String,
     pub amount_sats: u64,
@@ -706,7 +706,7 @@ pub struct Destination {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct OutPoint {
     pub txid: String,
     pub vout: u32,
@@ -720,7 +720,7 @@ pub struct OutPoint {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BlockRef {
     pub height: u32,
     pub hash: String,
@@ -734,7 +734,7 @@ pub struct BlockRef {
     tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Record))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct CpfpParams {
     pub tx_hex: String,
     pub fees_type: String,
@@ -754,7 +754,7 @@ pub struct CpfpParams {
     tsify(into_wasm_abi),
     serde(tag = "type")
 )]
-#[cfg_attr(feature = "uniffi-bindings", derive(uniffi::Enum))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum WalletNotification {
     /// A new movement was created
     MovementCreated { movement: Movement },

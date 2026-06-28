@@ -3,10 +3,10 @@ use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
 use crate::core::notification::NotificationHolder as CoreHolder;
-use crate::error::BarkError;
+use crate::error::Error;
 use crate::types::WalletNotification;
 
-fn bark_err(e: BarkError) -> JsError {
+fn bark_err(e: Error) -> JsError {
     JsError::new(&e.message())
 }
 
