@@ -29,68 +29,15 @@ pub struct Wallet {
 
 /// Optional arguments for [`Wallet::open`].
 pub struct OpenArgs {
-    /// Whether to run the background daemon
-    ///
-    /// When disabled, you must manually call `Wallet::sync` to sync the wallet.
-    ///
-    /// Default: true
     pub run_daemon: bool,
-
-    /// The data directory to use for this wallet
-    ///
-    /// This field can be used under most platforms as an alternative to
-    /// providing the `persister` and `lock_manager` fields.
-    ///
-    /// This field is ignored if `persister` and `lock_manager` are provided.
-    ///
-    /// Default: none
     #[cfg(feature = "uniffi")]
     pub datadir: Option<String>,
-
-    /// The persister to use for this wallet
-    ///
-    /// Default: returned by [`bark::persist::platform_default`]
     pub persister: Option<Arc<dyn BarkPersister>>,
-
-    /// The lock manager to use for this wallet
-    ///
-    /// Default: returned by [`bark::lock_manager::platform_default`]
-    ///
-    /// On some platforms (linux, macos, windows) the default lock manager
-    /// requires a datadir be provided.
     #[cfg(not(feature = "wasm-web"))]
     pub lock_manager: Option<Box<dyn bark::lock_manager::LockManager>>,
-
-    /// The onchain wallet to use, if any
-    ///
-    /// Default: none
     pub onchain: Option<Arc<tokio::sync::RwLock<dyn DaemonizableOnchainWallet>>>,
-
-    /// Whether to create a new wallet if no wallet exists
-    ///
-    ///  Default: true
     pub create_if_not_exists: bool,
-
-    /// Whether to create a new wallet even if the Ark server cannot be reached
-    ///
-    /// Default: false
     pub create_without_server: bool,
-}
-
-impl Default for OpenArgs {
-    fn default() -> Self {
-        Self {
-            run_daemon: true,
-            #[cfg(feature = "uniffi")]
-            datadir: None,
-            persister: None,
-            #[cfg(not(feature = "wasm-web"))]
-            lock_manager: None,
-            onchain: None,
-            create_if_not_exists: true,
-            create_without_server: false,
-        }
-    }
 }
 
 impl OpenArgs {

@@ -58,7 +58,8 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 [[package]]
 name = "ark-lib"
 version = "0.3.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.3.0#46e41188d9d355173a6eece9190866c2b4455002"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "682b55f43c8cb9ec3dbe52f541926c38ef068c96b0706eeb2b5d6a06fc3bb619"
 dependencies = [
  "async-trait",
  "bark-bitcoin-ext",
@@ -169,7 +170,8 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 [[package]]
 name = "bark-bitcoin-ext"
 version = "0.3.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.3.0#46e41188d9d355173a6eece9190866c2b4455002"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5d010d799da6aa9f90a631c0a50caae950014959aa2ae661fdfabb1f629d529"
 dependencies = [
  "bdk_bitcoind_rpc",
  "bdk_wallet",
@@ -218,7 +220,8 @@ dependencies = [
 [[package]]
 name = "bark-server-rpc"
 version = "0.3.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.3.0#46e41188d9d355173a6eece9190866c2b4455002"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2705c0e35667b28f60b68c422e4bfb0ccc39dbee20beb918803b66601f9a1e1"
 dependencies = [
  "ark-lib",
  "bitcoin",
@@ -238,7 +241,8 @@ dependencies = [
 [[package]]
 name = "bark-wallet"
 version = "0.3.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.3.0#46e41188d9d355173a6eece9190866c2b4455002"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2885e70cdbe30450a82cc3860637165db6d60e2032036b5327b8096090de41b"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -390,7 +394,8 @@ checksum = "32637268377fc7b10a8c6d51de3e7fba1ce5dd371a96e342b34e6078db558e7f"
 [[package]]
 name = "bip321"
 version = "0.1.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.3.0#46e41188d9d355173a6eece9190866c2b4455002"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14538bd7af5559400f0c9402da86c29528510cbb6280189c9ab6c1c7d6a271c7"
 dependencies = [
  "bitcoin",
  "lightning",
