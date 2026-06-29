@@ -44,12 +44,23 @@ pub struct Config {
     pub user_agent: Option<String>,
 }
 
+/// Compile-time default user-agent. Each language wrapper sets
+/// `BARK_FFI_DEFAULT_LANG` in its `.cargo/config.toml [env]` (e.g. `"swift"`,
+/// `"wasm"`); cargo propagates it to dependency builds, and bark-ffi composes
+/// `bark-{lang}/{bark-ffi-version}` from it. Returns `None` when bark-ffi is
+/// built standalone.
+fn default_user_agent() -> Option<String> {
+    let lang = option_env!("BARK_FFI_DEFAULT_LANG")?;
+    Some(format!("bark-{}/{}", lang, env!("CARGO_PKG_VERSION")))
+}
+
 impl Config {
     pub(crate) fn into_bark(self, network: bitcoin::Network) -> bark::Config {
         let mut ret = bark::Config::network_default(network);
-
+        
         ret.server_address = self.server_address;
         ret.server_access_token = self.server_access_token;
+        ret.user_agent = self.user_agent.or_else(default_user_agent);
         ret.esplora_address = self.esplora_address;
         ret.bitcoind_address = self.bitcoind_address;
         ret.bitcoind_cookiefile = self.bitcoind_cookiefile.map(std::path::PathBuf::from);
@@ -82,11 +93,6 @@ impl Config {
         }
         if let Some(retries) = self.lightning_receive_claim_retries {
             ret.lightning_receive_claim_retries = retries;
-        }
-        if let Some(ua) = self.user_agent {
-            ret.user_agent = Some(ua);
-        } else {
-            ret.user_agent = Some(format!("bark-ffi/{}", env!("CARGO_PKG_VERSION")));
         }
 
         ret
