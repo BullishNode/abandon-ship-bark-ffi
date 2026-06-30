@@ -1,23 +1,14 @@
-use anyhow::Context;
-use log::info;
-use once_cell::sync::Lazy;
-use std::collections::HashMap;
+
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::Arc;
 
-use bark::persist::sqlite::SqliteClient;
+use anyhow::Context;
+use log::{info, warn};
 
-/// Global cache of database connections keyed by database path.
-/// Uses weak references to allow connections to be dropped when no longer in use.
-static DB_CACHE: Lazy<Mutex<HashMap<PathBuf, Weak<SqliteClient>>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+use bark::persist::sqlite::{SqliteClient, DEFAULT_DB_FILE};
 
-/// Get or open a SQLite database connection.
-///
-/// This function maintains a cache of database connections per path to ensure
-/// that multiple wallet instances in the same process share the same underlying
-/// database connection. This prevents SQLite locking issues and ensures data
-/// consistency.
+
+/// Open a SQLite database connection.
 ///
 /// # Arguments
 ///
@@ -26,24 +17,27 @@ static DB_CACHE: Lazy<Mutex<HashMap<PathBuf, Weak<SqliteClient>>>> =
 /// # Returns
 ///
 /// An `Arc<SqliteClient>` that can be shared across multiple wallet instances.
-pub fn get_or_open_db(datadir: &str) -> anyhow::Result<Arc<SqliteClient>> {
+pub fn open_sqlite_db(datadir: &str) -> anyhow::Result<Arc<SqliteClient>> {
     let datadir_path = PathBuf::from(datadir);
 
     // Ensure the directory exists
     std::fs::create_dir_all(&datadir_path)
         .with_context(|| format!("Failed to create datadir {}", datadir_path.display(),))?;
 
-    let db_path = datadir_path.join("bark.sqlite");
+    let db_path = {
+        let db_path = datadir_path.join(DEFAULT_DB_FILE);
 
-    let mut cache = DB_CACHE.lock().unwrap();
+        // bark-ffi pre v0.3.0 used bark.sqlite as the db filename,
+        let compat_db_path = datadir_path.join("bark.sqlite");
 
-    // Try to reuse existing connection
-    if let Some(weak_db) = cache.get(&db_path) {
-        if let Some(db) = weak_db.upgrade() {
-            info!("[DB] Reusing existing connection for {}", db_path.display());
-            return Ok(db);
+        if !db_path.exists() && compat_db_path.exists() {
+            warn!("You're using the old default filename bark.sqlite for your SQLite DB, \
+                while the new default is db.sqlite. You might want to rename your file.");
+            compat_db_path
+        } else {
+            db_path
         }
-    }
+    };
 
     // Open new connection
     info!("[DB] Opening new connection for {}", db_path.display());
@@ -51,9 +45,6 @@ pub fn get_or_open_db(datadir: &str) -> anyhow::Result<Arc<SqliteClient>> {
         SqliteClient::open(&db_path)
             .with_context(|| format!("Failed to open database at {}", db_path.display(),))?,
     );
-
-    // Store weak reference in cache
-    cache.insert(db_path, Arc::downgrade(&db));
 
     Ok(db)
 }

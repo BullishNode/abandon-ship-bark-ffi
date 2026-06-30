@@ -11,7 +11,7 @@ use crate::types::OnchainBalance;
 use crate::muniffi::custom_onchain_wallet::{
     CallbackWalletAdapter, CustomOnchainWalletCallbacks,
 };
-use crate::muniffi::db::get_or_open_db;
+use crate::muniffi::db::open_sqlite_db;
 use crate::muniffi::runtime::run_async;
 use crate::Network;
 
@@ -40,7 +40,7 @@ impl OnchainWallet {
         datadir: String,
     ) -> Result<Arc<Self>, Error> {
         run_async(async move {
-            let db = get_or_open_db(&datadir)?;
+            let db = open_sqlite_db(&datadir)?;
             let core = CoreOnchainWallet::default(network, mnemonic, config, db).await?;
             Ok(Arc::new(Self { inner: OnchainWalletInner::Bdk(Arc::new(core)) }))
         })

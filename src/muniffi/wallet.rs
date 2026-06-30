@@ -11,7 +11,7 @@ use crate::config::Config;
 use crate::core::notification::NotificationHolder;
 use crate::core::wallet::{Wallet as CoreWallet, OpenArgs as CoreOpenArgs};
 use crate::types::Network;
-use crate::muniffi::db::get_or_open_db;
+use crate::muniffi::db::open_sqlite_db;
 use crate::muniffi::onchain::OnchainWallet;
 use crate::muniffi::runtime::run_async;
 
@@ -93,7 +93,7 @@ pub async fn init_wallet(
     allow_unreachable_server: bool,
 ) -> Result<(), Error> {
     run_async(async move {
-        let db = get_or_open_db(&datadir)
+        let db = open_sqlite_db(&datadir)
             .with_context(|| format!("opening sqlite in {}", datadir))?;
         let lock_manager = bark::lock_manager::platform_default(Some(&datadir), None)?;
         CoreWallet::create(
@@ -113,7 +113,7 @@ impl Wallet {
     /// Open a wallet (creating it first if `create_if_not_exists` is set),
     /// mirroring [`bark::Wallet::open`]: a single entry point with everything
     /// else optional (see [`WalletOpenArgs`]). For the explicit
-    /// initialize-but-don't-open path, use the top-level `create_wallet`.
+    /// initialize-but-don't-open path, use the top-level `init_wallet`.
     ///
     /// `mnemonic_or_seed` accepts either a BIP-39 mnemonic phrase or a 64-byte
     /// hex-encoded seed.
@@ -125,11 +125,9 @@ impl Wallet {
         args: WalletOpenArgs,
     ) -> Result<Arc<Self>, Error> {
         run_async(async move {
-            // Per the chosen design, hand bark the datadir and let it build the
-            // default persister + lock manager rather than constructing them here.
             let core = CoreWallet::open(network, mnemonic_or_seed, config, CoreOpenArgs {
+                persister: Some(open_sqlite_db(&args.datadir)?),
                 datadir: Some(args.datadir),
-                persister: None,
                 lock_manager: None,
                 onchain: args.onchain.map(|w| w.inner_dyn()),
                 run_daemon: args.run_daemon,
