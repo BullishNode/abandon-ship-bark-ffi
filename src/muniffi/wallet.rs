@@ -3,7 +3,6 @@ use std::sync::Arc;
 use anyhow::Context;
 use lnurl::lightning_address::LightningAddress;
 use lnurl::lnurl::LnUrl;
-use log::{info, warn};
 use tokio_util::sync::CancellationToken;
 
 use crate::{types, Error};
@@ -164,52 +163,9 @@ impl Wallet {
         run_async(async move { core.maintenance().await }).await
     }
 
-    pub async fn maintenance_with_onchain(
-        &self,
-        onchain_wallet: Arc<OnchainWallet>,
-    ) -> Result<(), Error> {
-        let core = self.core.clone();
-        let inner = self.inner.clone();
-        run_async(async move {
-            if let Some(bdk) = onchain_wallet.inner_bdk() {
-                let _ = bdk; // core path uses bdk via core::OnchainWallet wrapper
-                core.maintenance_with_onchain(onchain_wallet.bdk_core().unwrap())
-                    .await
-            } else if let Some(adapter) = onchain_wallet.inner_callback() {
-                let mut o = adapter.write().await;
-                inner.maintenance_with_onchain(&mut *o).await?;
-                Ok(())
-            } else {
-                Err("Invalid onchain wallet".into())
-            }
-        })
-        .await
-    }
-
     pub async fn maintenance_delegated(&self) -> Result<(), Error> {
         let core = self.core.clone();
         run_async(async move { core.maintenance_delegated().await }).await
-    }
-
-    pub async fn maintenance_with_onchain_delegated(
-        &self,
-        onchain_wallet: Arc<OnchainWallet>,
-    ) -> Result<(), Error> {
-        let core = self.core.clone();
-        let inner = self.inner.clone();
-        run_async(async move {
-            if onchain_wallet.inner_bdk().is_some() {
-                core.maintenance_with_onchain_delegated(onchain_wallet.bdk_core().unwrap())
-                    .await
-            } else if let Some(adapter) = onchain_wallet.inner_callback() {
-                let mut o = adapter.write().await;
-                inner.maintenance_with_onchain_delegated(&mut *o).await?;
-                Ok(())
-            } else {
-                Err("Invalid onchain wallet state".into())
-            }
-        })
-        .await
     }
 
     // ------------------------------------------------------------------------
@@ -411,13 +367,15 @@ impl Wallet {
     // Lightning (receive)
     // ------------------------------------------------------------------------
 
+    #[uniffi::method(default(token = None))]
     pub async fn bolt11_invoice(
         &self,
         amount_sats: u64,
         description: Option<String>,
+        token: Option<String>,
     ) -> Result<types::LightningInvoice, Error> {
         let core = self.core.clone();
-        run_async(async move { core.bolt11_invoice(amount_sats, description).await }).await
+        run_async(async move { core.bolt11_invoice(amount_sats, description, token).await }).await
     }
 
     #[uniffi::method(default(wait = false))]
@@ -441,12 +399,14 @@ impl Wallet {
         run_async(async move { core.claimable_lightning_receive_balance_sats().await }).await
     }
 
-    pub async fn lightning_receive_status(
+    /// Triage a payment hash: settled or in-progress. Errors if no lightning
+    /// receive is known for this payment hash.
+    pub async fn lightning_receive_state(
         &self,
         payment_hash: String,
-    ) -> Result<Option<types::LightningReceive>, Error> {
+    ) -> Result<types::LightningReceive, Error> {
         let core = self.core.clone();
-        run_async(async move { core.lightning_receive_status(payment_hash).await }).await
+        run_async(async move { core.lightning_receive_state(payment_hash).await }).await
     }
 
     #[uniffi::method(default(wait = false))]
@@ -454,7 +414,7 @@ impl Wallet {
         &self,
         payment_hash: String,
         wait: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<types::LightningReceive, Error> {
         let core = self.core.clone();
         run_async(async move { core.try_claim_lightning_receive(payment_hash, wait).await }).await
     }
@@ -582,57 +542,15 @@ impl Wallet {
 
     pub async fn board_amount(
         &self,
-        onchain_wallet: Arc<OnchainWallet>,
         amount_sats: u64,
     ) -> Result<types::PendingBoard, Error> {
         let core = self.core.clone();
-        let inner = self.inner.clone();
-        run_async(async move {
-            if onchain_wallet.inner_bdk().is_some() {
-                core.board_amount(onchain_wallet.bdk_core().unwrap(), amount_sats)
-                    .await
-            } else if let Some(adapter) = onchain_wallet.inner_callback() {
-                let amount = bitcoin::Amount::from_sat(amount_sats);
-                info!("[BOARD] Boarding {} sats into Ark...", amount_sats);
-                let mut onchain = adapter.write().await;
-                let pb = inner
-                    .board_amount(&mut *onchain, amount)
-                    .await
-                    .context("Board failed")?;
-                Ok(pb.into())
-            } else {
-                Err("Boarding requires a valid onchain wallet. Create one with \
-                    OnchainWallet.default() or OnchainWallet.custom()"
-                    .into())
-            }
-        })
-        .await
+        run_async(async move { core.board_amount(amount_sats).await }).await
     }
 
-    pub async fn board_all(
-        &self,
-        onchain_wallet: Arc<OnchainWallet>,
-    ) -> Result<types::PendingBoard, Error> {
+    pub async fn board_all(&self) -> Result<types::PendingBoard, Error> {
         let core = self.core.clone();
-        let inner = self.inner.clone();
-        run_async(async move {
-            if onchain_wallet.inner_bdk().is_some() {
-                core.board_all(onchain_wallet.bdk_core().unwrap()).await
-            } else if let Some(adapter) = onchain_wallet.inner_callback() {
-                info!("[BOARD] Boarding ALL funds into Ark...");
-                let mut onchain = adapter.write().await;
-                let pb = inner
-                    .board_all(&mut *onchain)
-                    .await
-                    .context("Board all failed")?;
-                Ok(pb.into())
-            } else {
-                Err("Boarding requires a valid onchain wallet. Create one with \
-                    OnchainWallet.default() or OnchainWallet.custom()"
-                    .into())
-            }
-        })
-        .await
+        run_async(async move { core.board_all().await }).await
     }
 
     pub async fn sync_pending_boards(&self) -> Result<(), Error> {
@@ -669,58 +587,17 @@ impl Wallet {
         run_async(async move { core.start_exit_for_entire_wallet().await }).await
     }
 
-    pub async fn sync_exits(&self, onchain_wallet: Arc<OnchainWallet>) -> Result<(), Error> {
+    pub async fn sync_exits(&self) -> Result<(), Error> {
         let core = self.core.clone();
-        let inner = self.inner.clone();
-        run_async(async move {
-            if onchain_wallet.inner_bdk().is_some() {
-                core.sync_exits(onchain_wallet.bdk_core().unwrap()).await
-            } else if onchain_wallet.inner_callback().is_some() {
-                info!("[EXIT] Syncing exits...");
-                inner.sync_exits().await.context("Sync exits failed")?;
-                info!("[EXIT] Exits synced");
-                Ok(())
-            } else {
-                Err("Syncing exits requires a valid onchain wallet. Create one \
-                    with OnchainWallet.default() or OnchainWallet.custom()"
-                    .into())
-            }
-        })
-        .await
+        run_async(async move { core.sync_exits().await }).await
     }
 
     pub async fn progress_exits(
         &self,
-        onchain_wallet: Arc<OnchainWallet>,
         fee_rate_sat_per_vb: Option<u64>,
     ) -> Result<Vec<types::ExitProgressStatus>, Error> {
         let core = self.core.clone();
-        let inner = self.inner.clone();
-        run_async(async move {
-            if onchain_wallet.inner_bdk().is_some() {
-                core.progress_exits(onchain_wallet.bdk_core().unwrap(), fee_rate_sat_per_vb)
-                    .await
-            } else if let Some(adapter) = onchain_wallet.inner_callback() {
-                info!("[EXIT] Progressing exits...");
-                let fee_rate = fee_rate_sat_per_vb.and_then(bitcoin::FeeRate::from_sat_per_vb);
-                let mut onchain = adapter.write().await;
-                let result = inner
-                    .exit_mgr()
-                    .progress_exits_with_bdk(&inner, &mut *onchain, fee_rate)
-                    .await
-                    .context("Progress exits failed")?;
-                let statuses = result
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(Into::into)
-                    .collect();
-                info!("[EXIT] Exits progressed");
-                Ok(statuses)
-            } else {
-                Err("Progressing exits requires a valid onchain wallet".into())
-            }
-        })
-        .await
+        run_async(async move { core.progress_exits(fee_rate_sat_per_vb).await }).await
     }
 
     pub async fn start_exit_for_vtxos(&self, vtxo_ids: Vec<String>) -> Result<(), Error> {
@@ -945,31 +822,11 @@ impl Wallet {
     // Daemon
     // ------------------------------------------------------------------------
 
-    pub async fn run_daemon(
-        &self,
-        onchain_wallet: Option<Arc<OnchainWallet>>,
-    ) -> Result<(), Error> {
+    /// Start the background daemon. The onchain wallet used by the daemon is
+    /// the one supplied to `Wallet::open` (see `WalletOpenArgs.onchain`).
+    pub async fn run_daemon(&self) -> Result<(), Error> {
         let inner = self.inner.clone();
-        run_async(async move {
-            let bdk = onchain_wallet.as_ref().and_then(|w| w.inner_bdk());
-            if bdk.is_none() {
-                if onchain_wallet.as_ref().and_then(|w| w.inner_callback()).is_some() {
-                    warn!(
-                        "[OPEN] Callback wallets are not supported for daemon mode, running without onchain capabilities"
-                    );
-                } else {
-                    warn!(
-                        "[OPEN] No onchain wallet provided, running without onchain capabilities"
-                    );
-                }
-            }
-
-            match bdk {
-                Some(bdk) => inner.start_daemon(Some(bdk)).map_err(Error::from),
-                None => inner.start_daemon(None).map_err(Error::from),
-            }
-        })
-        .await?;
+        run_async(async move { inner.start_daemon().map_err(Error::from) }).await?;
         Ok(())
     }
 

@@ -1,27 +1,21 @@
 //! Callback-based onchain wallet adapter
 //!
 //! This module allows foreign languages (Dart, Swift, Kotlin) to provide their own
-//! onchain wallet implementations via UniFFI callbacks. The adapter implements all
-//! required Bark onchain traits by forwarding calls to the callback interface.
+//! onchain wallet implementations via UniFFI callbacks. The adapter implements the
+//! Bark onchain wallet trait by forwarding calls to the callback interface.
 
 use std::sync::Arc;
 
 use anyhow::Context;
 use async_trait::async_trait;
 use log::error;
-use bitcoin::{
-    address::NetworkChecked, Amount, BlockHash, FeeRate, OutPoint, Psbt, Transaction, Txid,
-};
+use bitcoin::{Address, Amount, FeeRate, Psbt, Script, Transaction};
 
 use bark::chain::ChainSource;
-use bark::onchain::{
-    ChainSync, CpfpError, GetBalance, GetSpendingTx, GetWalletTx, MakeCpfp, MakeCpfpFees,
-    PreparePsbt, SignPsbt,
-};
-use bark_bitcoin_ext::BlockRef;
+use bark::onchain::{CpfpError, MakeCpfpFees, OnchainWalletTrait};
 
 use crate::error::Error;
-use crate::types::{BlockRef as FfiBlockRef, CpfpParams, Destination, OutPoint as FfiOutPoint};
+use crate::types::{CpfpParams, Destination};
 
 /// Callback interface for custom onchain wallet implementations
 ///
@@ -68,33 +62,17 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// Base64-encoded fully signed PSBT (all witnesses filled in)
     fn finish_psbt(&self, psbt_base64: String) -> Result<String, Error>;
 
-    /// Get a wallet transaction by txid
+    /// Whether a script pubkey belongs to the wallet's keychains
     ///
     /// # Arguments
-    /// * `txid` - Transaction ID as hex string
-    ///
-    /// # Returns
-    /// Hex-encoded transaction, or null if not found
-    fn get_wallet_tx(&self, txid: String) -> Result<Option<String>, Error>;
+    /// * `script_pubkey_hex` - Hex-encoded script pubkey
+    fn is_mine(&self, script_pubkey_hex: String) -> Result<bool, Error>;
 
-    /// Get the block hash where a transaction was confirmed
+    /// Register an unconfirmed transaction relevant to the wallet
     ///
     /// # Arguments
-    /// * `txid` - Transaction ID as hex string
-    ///
-    /// # Returns
-    /// Block reference with height and hash, or null if unconfirmed
-    fn get_wallet_tx_confirmed_block(&self, txid: String)
-        -> Result<Option<FfiBlockRef>, Error>;
-
-    /// Find transaction that spends a given output
-    ///
-    /// # Arguments
-    /// * `outpoint` - Transaction outpoint to check
-    ///
-    /// # Returns
-    /// Hex-encoded spending transaction, or null if unspent
-    fn get_spending_tx(&self, outpoint: FfiOutPoint) -> Result<Option<String>, Error>;
+    /// * `tx_hex` - Hex-encoded transaction
+    fn register_tx(&self, tx_hex: String) -> Result<(), Error>;
 
     /// Create a signed P2A CPFP transaction
     ///
@@ -120,7 +98,7 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     fn sync(&self) -> Result<(), Error>;
 }
 
-/// Rust adapter that implements Bark traits using callback interface
+/// Rust adapter that implements Bark's onchain wallet trait using the callback interface
 pub struct CallbackWalletAdapter {
     callbacks: Arc<dyn CustomOnchainWalletCallbacks>,
 }
@@ -131,9 +109,9 @@ impl CallbackWalletAdapter {
     }
 }
 
-// Implement GetBalance trait
-impl GetBalance for CallbackWalletAdapter {
-    fn get_balance(&self) -> Amount {
+#[async_trait]
+impl OnchainWalletTrait for CallbackWalletAdapter {
+    async fn balance(&self) -> Amount {
         match self.callbacks.get_balance() {
             Ok(sats) => Amount::from_sat(sats),
             Err(e) => {
@@ -149,13 +127,39 @@ impl GetBalance for CallbackWalletAdapter {
             }
         }
     }
-}
 
-// Implement PreparePsbt trait
-impl PreparePsbt for CallbackWalletAdapter {
-    fn prepare_tx(
+    async fn address(&mut self) -> anyhow::Result<Address> {
+        // Callback wallets have no address callback; foreign wallets generate
+        // addresses on their own side.
+        Err(anyhow::anyhow!("address() not supported for callback wallets"))
+    }
+
+    async fn sync(&mut self, _chain: &ChainSource) -> anyhow::Result<()> {
+        // Forwards to the foreign wallet's own `sync`. Bark's `ChainSource`
+        // (esplora/bitcoind) is not used by the foreign implementation — it
+        // owns its chain backend — so it is not passed across the FFI.
+        self.callbacks.sync().context("sync failed")?;
+        Ok(())
+    }
+
+    async fn is_mine(&self, spk: &Script) -> anyhow::Result<bool> {
+        let spk_hex = hex::encode(spk.as_bytes());
+        self.callbacks
+            .is_mine(spk_hex)
+            .map_err(|e| anyhow::anyhow!("is_mine failed: {}", e.message()))
+    }
+
+    async fn register_tx(&mut self, tx: &Transaction) -> anyhow::Result<()> {
+        let tx_hex = hex::encode(bitcoin::consensus::serialize(tx));
+        self.callbacks
+            .register_tx(tx_hex)
+            .map_err(|e| anyhow::anyhow!("register_tx failed: {}", e.message()))?;
+        Ok(())
+    }
+
+    async fn prepare_tx(
         &mut self,
-        destinations: &[(bitcoin::Address<NetworkChecked>, Amount)],
+        destinations: &[(Address, Amount)],
         fee_rate: FeeRate,
     ) -> anyhow::Result<Psbt> {
         // Convert destinations to FFI-friendly type
@@ -184,16 +188,16 @@ impl PreparePsbt for CallbackWalletAdapter {
         Ok(psbt)
     }
 
-    fn prepare_drain_tx(
+    async fn prepare_drain_tx(
         &mut self,
-        address: bitcoin::Address<NetworkChecked>,
+        destination: Address,
         fee_rate: FeeRate,
     ) -> anyhow::Result<Psbt> {
         let fee_rate_sat_per_vb = fee_rate.to_sat_per_vb_ceil();
 
         let psbt_base64 = self
             .callbacks
-            .prepare_drain_tx(address.to_string(), fee_rate_sat_per_vb)
+            .prepare_drain_tx(destination.to_string(), fee_rate_sat_per_vb)
             .map_err(|e| anyhow::anyhow!("prepare_drain_tx failed: {}", e.message()))?;
 
         use base64::Engine;
@@ -202,11 +206,7 @@ impl PreparePsbt for CallbackWalletAdapter {
 
         Ok(psbt)
     }
-}
 
-// Implement SignPsbt trait
-#[async_trait]
-impl SignPsbt for CallbackWalletAdapter {
     async fn finish_psbt(&mut self, psbt: Psbt) -> anyhow::Result<Psbt> {
         // Serialize PSBT to base64
         use base64::Engine;
@@ -225,65 +225,8 @@ impl SignPsbt for CallbackWalletAdapter {
 
         Ok(signed_psbt)
     }
-}
 
-// Implement GetWalletTx trait
-impl GetWalletTx for CallbackWalletAdapter {
-    fn get_wallet_tx(&self, txid: Txid) -> Option<Arc<Transaction>> {
-        let tx_hex_opt = self.callbacks.get_wallet_tx(txid.to_string()).ok()??;
-
-        if let Ok(tx_bytes) = hex::decode(&tx_hex_opt) {
-            if let Ok(tx) = bitcoin::consensus::deserialize::<Transaction>(&tx_bytes) {
-                return Some(Arc::new(tx));
-            }
-        }
-        None
-    }
-
-    fn get_wallet_tx_confirmed_block(&self, txid: Txid) -> anyhow::Result<Option<BlockRef>> {
-        let block_ref_opt = self
-            .callbacks
-            .get_wallet_tx_confirmed_block(txid.to_string())
-            .map_err(|e| {
-                anyhow::anyhow!("get_wallet_tx_confirmed_block failed: {}", e.message())
-            })?;
-
-        if let Some(ffi_block_ref) = block_ref_opt {
-            let block_hash: BlockHash = ffi_block_ref.hash.parse()?;
-            Ok(Some(BlockRef {
-                height: ffi_block_ref.height,
-                hash: block_hash,
-            }))
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-// Implement GetSpendingTx trait
-impl GetSpendingTx for CallbackWalletAdapter {
-    fn get_spending_tx(&self, outpoint: OutPoint) -> Option<Arc<Transaction>> {
-        // Convert bitcoin::OutPoint to FFI OutPoint
-        let ffi_outpoint = FfiOutPoint {
-            txid: outpoint.txid.to_string(),
-            vout: outpoint.vout,
-        };
-
-        let tx_hex_opt = self.callbacks.get_spending_tx(ffi_outpoint).ok()??;
-
-        if let Ok(tx_bytes) = hex::decode(&tx_hex_opt) {
-            if let Ok(tx) = bitcoin::consensus::deserialize::<Transaction>(&tx_bytes) {
-                return Some(Arc::new(tx));
-            }
-        }
-        None
-    }
-}
-
-// Implement MakeCpfp trait
-#[async_trait]
-impl MakeCpfp for CallbackWalletAdapter {
-    fn make_signed_p2a_cpfp(
+    async fn make_signed_p2a_cpfp(
         &mut self,
         tx: &Transaction,
         fees: MakeCpfpFees,
@@ -332,21 +275,6 @@ impl MakeCpfp for CallbackWalletAdapter {
             .store_signed_p2a_cpfp(tx_hex)
             .map_err(|e| CpfpError::StoreError(e.message()))?;
 
-        Ok(())
-    }
-}
-
-// Implement ChainSync trait.
-//
-// Forwards to the foreign wallet's own `sync`. Bark's `ChainSource`
-// (esplora/bitcoind) is not used by the foreign implementation — it owns its
-// chain backend — so it is not passed across the FFI. This impl is what
-// completes `DaemonizableOnchainWallet` for `CallbackWalletAdapter` (which
-// otherwise requires only `ExitUnilaterally`, already implemented above).
-#[async_trait]
-impl ChainSync for CallbackWalletAdapter {
-    async fn sync(&mut self, _chain: &ChainSource) -> anyhow::Result<()> {
-        self.callbacks.sync().context("sync failed")?;
         Ok(())
     }
 }

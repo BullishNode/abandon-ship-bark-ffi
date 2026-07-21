@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use bark::onchain::DaemonizableOnchainWallet;
+use bark::onchain::OnchainWalletTrait;
 use bark::{Wallet as InnerWallet};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
@@ -57,6 +57,8 @@ pub struct Bolt11InvoiceArgs {
     pub amountSats: u64,
     #[tsify(optional)]
     pub description: Option<String>,
+    #[tsify(optional)]
+    pub token: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
@@ -227,10 +229,8 @@ impl Wallet {
     /// with everything optional. Set `createIfNotExists` to create the wallet
     /// if it doesn't exist yet (replacing the old `create` constructor).
     ///
-    /// There is no separate `withOnchain` variant: onchain operations
-    /// (boarding, exits, ...) take the onchain wallet per-call, and the web
-    /// build has no background daemon, so the onchain wallet is never needed
-    /// at open time.
+    /// The onchain wallet is supplied here at open time; onchain operations
+    /// (boarding, exits, ...) use it internally and no longer take it per-call.
     pub async fn open(
         network: Network,
         mnemonic_or_seed: String,
@@ -250,7 +250,7 @@ impl Wallet {
             run_daemon: args.run_daemon,
             persister: Some(db),
             onchain: onchain.map(|w| {
-                w.inner.inner() as Arc::<tokio::sync::RwLock<dyn DaemonizableOnchainWallet>>
+                w.inner.inner() as Arc::<tokio::sync::RwLock<dyn OnchainWalletTrait>>
             }),
             create_if_not_exists: args.create_if_not_exists,
             create_without_server: args.create_without_server,
@@ -300,25 +300,9 @@ impl Wallet {
         Ok(self.core.maintenance().await?)
     }
 
-    #[wasm_bindgen(js_name = maintenanceWithOnchain)]
-    pub async fn maintenance_with_onchain(
-        &self,
-        onchainWallet: &OnchainWallet,
-    ) -> Result<(), JsError> {
-        Ok(self.core.maintenance_with_onchain(onchainWallet.inner()).await?)
-    }
-
     #[wasm_bindgen(js_name = maintenanceDelegated)]
     pub async fn maintenance_delegated(&self) -> Result<(), JsError> {
         Ok(self.core.maintenance_delegated().await?)
-    }
-
-    #[wasm_bindgen(js_name = maintenanceWithOnchainDelegated)]
-    pub async fn maintenance_with_onchain_delegated(
-        &self,
-        onchainWallet: &OnchainWallet,
-    ) -> Result<(), JsError> {
-        Ok(self.core.maintenance_with_onchain_delegated(onchainWallet.inner()).await?)
     }
 
     // -- Address --------------------------------------------------------------
@@ -453,7 +437,7 @@ impl Wallet {
         &self,
         args: Bolt11InvoiceArgs,
     ) -> Result<LightningInvoice, JsError> {
-        Ok(self.core.bolt11_invoice(args.amountSats, args.description).await?)
+        Ok(self.core.bolt11_invoice(args.amountSats, args.description, args.token).await?)
     }
 
     #[wasm_bindgen(js_name = tryClaimAllLightningReceives)]
@@ -474,19 +458,21 @@ impl Wallet {
         Ok(self.core.claimable_lightning_receive_balance_sats().await? as f64)
     }
 
-    #[wasm_bindgen(js_name = lightningReceiveStatus)]
-    pub async fn lightning_receive_status(
+    /// Triage a payment hash: settled or in-progress. Errors if no lightning
+    /// receive is known for this payment hash.
+    #[wasm_bindgen(js_name = lightningReceiveState)]
+    pub async fn lightning_receive_state(
         &self,
         paymentHash: String,
-    ) -> Result<Option<LightningReceive>, JsError> {
-        Ok(self.core.lightning_receive_status(paymentHash).await?)
+    ) -> Result<LightningReceive, JsError> {
+        Ok(self.core.lightning_receive_state(paymentHash).await?)
     }
 
     #[wasm_bindgen(js_name = tryClaimLightningReceive)]
     pub async fn try_claim_lightning_receive(
         &self,
         args: TryClaimLightningReceiveArgs,
-    ) -> Result<(), JsError> {
+    ) -> Result<LightningReceive, JsError> {
         Ok(self.core.try_claim_lightning_receive(args.paymentHash, args.wait.unwrap_or(false)).await?)
     }
 
@@ -590,17 +576,13 @@ impl Wallet {
     // -- Boarding -------------------------------------------------------------
 
     #[wasm_bindgen(js_name = boardAmount)]
-    pub async fn board_amount(
-        &self,
-        onchainWallet: &OnchainWallet,
-        amountSats: f64,
-    ) -> Result<PendingBoard, JsError> {
-        Ok(self.core.board_amount(onchainWallet.inner(), amountSats as u64).await?)
+    pub async fn board_amount(&self, amountSats: f64) -> Result<PendingBoard, JsError> {
+        Ok(self.core.board_amount(amountSats as u64).await?)
     }
 
     #[wasm_bindgen(js_name = boardAll)]
-    pub async fn board_all(&self, onchainWallet: &OnchainWallet) -> Result<PendingBoard, JsError> {
-        Ok(self.core.board_all(onchainWallet.inner()).await?)
+    pub async fn board_all(&self) -> Result<PendingBoard, JsError> {
+        Ok(self.core.board_all().await?)
     }
 
     #[wasm_bindgen(js_name = syncPendingBoards)]
@@ -636,17 +618,16 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = syncExits)]
-    pub async fn sync_exits(&self, onchainWallet: &OnchainWallet) -> Result<(), JsError> {
-        Ok(self.core.sync_exits(onchainWallet.inner()).await?)
+    pub async fn sync_exits(&self) -> Result<(), JsError> {
+        Ok(self.core.sync_exits().await?)
     }
 
     #[wasm_bindgen(js_name = progressExits)]
     pub async fn progress_exits(
         &self,
-        onchainWallet: &OnchainWallet,
         args: ProgressExitsArgs,
     ) -> Result<Vec<ExitProgressStatus>, JsError> {
-        Ok(self.core.progress_exits(onchainWallet.inner(), args.feeRateSatPerVb).await?)
+        Ok(self.core.progress_exits(args.feeRateSatPerVb).await?)
     }
 
     #[wasm_bindgen(js_name = startExitForVtxos)]

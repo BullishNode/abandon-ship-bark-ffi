@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use bark::onchain::{DaemonizableOnchainWallet, OnchainWallet as BarkOnchainWallet};
+use bark::onchain::OnchainWalletTrait;
 use log::info;
 
 use crate::config::Config;
@@ -81,9 +81,8 @@ impl OnchainWallet {
             OnchainWalletInner::Callback(adapter) => {
                 let adapter = adapter.clone();
                 run_async(async move {
-                    use bark::onchain::GetBalance;
-                    let a = adapter.write().await;
-                    let amount = a.get_balance();
+                    let a = adapter.read().await;
+                    let amount = a.balance().await;
                     Ok(OnchainBalance {
                         confirmed_sats: amount.to_sat(),
                         pending_sats: 0,
@@ -127,36 +126,7 @@ impl OnchainWallet {
 }
 
 impl OnchainWallet {
-    /// Returns the inner BDK wallet handle for use by `bark::Wallet` operations
-    /// that require an `&mut OnchainWallet`. Used by daemon mode (which takes
-    /// the handle directly) and the core-bypass callback dispatch in the
-    /// Wallet wrapper.
-    pub(crate) fn inner_bdk(&self) -> Option<Arc<RwLock<BarkOnchainWallet>>> {
-        match &self.inner {
-            OnchainWalletInner::Bdk(core) => Some(core.inner()),
-            OnchainWalletInner::Callback(_) => None,
-        }
-    }
-
-    /// Returns the `core::OnchainWallet` wrapper, for delegating to core
-    /// `Wallet` methods that take `Arc<core::OnchainWallet>`.
-    pub(crate) fn bdk_core(&self) -> Option<Arc<CoreOnchainWallet>> {
-        match &self.inner {
-            OnchainWalletInner::Bdk(core) => Some(core.clone()),
-            OnchainWalletInner::Callback(_) => None,
-        }
-    }
-
-    /// Returns the callback adapter handle for the Wallet wrapper's
-    /// callback-onchain dispatch path.
-    pub(crate) fn inner_callback(&self) -> Option<Arc<RwLock<CallbackWalletAdapter>>> {
-        match &self.inner {
-            OnchainWalletInner::Bdk(_) => None,
-            OnchainWalletInner::Callback(adapter) => Some(adapter.clone()),
-        }
-    }
-
-    pub(crate) fn inner_dyn(&self) -> Arc<RwLock<dyn DaemonizableOnchainWallet>> {
+    pub(crate) fn inner_dyn(&self) -> Arc<RwLock<dyn OnchainWalletTrait>> {
         match &self.inner {
             OnchainWalletInner::Bdk(v) => v.inner(),
             OnchainWalletInner::Callback(v) => v.clone(),
