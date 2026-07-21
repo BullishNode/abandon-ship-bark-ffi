@@ -11,11 +11,10 @@ use ark::lightning::{Invoice, Offer, PaymentHash};
 use ark::{ProtocolEncoding, VtxoId};
 
 use bark::WalletSeed;
-use bark::onchain::DaemonizableOnchainWallet;
+use bark::onchain::OnchainWalletTrait;
 use bark::persist::BarkPersister;
 
 use crate::config::Config;
-use crate::core::onchain::OnchainWallet;
 use crate::error::Error;
 use crate::{types, Network};
 
@@ -35,7 +34,7 @@ pub struct OpenArgs {
     pub persister: Option<Arc<dyn BarkPersister>>,
     #[cfg(not(feature = "wasm-web"))]
     pub lock_manager: Option<Box<dyn bark::lock_manager::LockManager>>,
-    pub onchain: Option<Arc<tokio::sync::RwLock<dyn DaemonizableOnchainWallet>>>,
+    pub onchain: Option<Arc<tokio::sync::RwLock<dyn OnchainWalletTrait>>>,
     pub create_if_not_exists: bool,
     pub create_without_server: bool,
 }
@@ -206,30 +205,8 @@ impl Wallet {
         Ok(())
     }
 
-    pub async fn maintenance_with_onchain(
-        &self,
-        onchain_wallet: Arc<OnchainWallet>,
-    ) -> Result<(), Error> {
-        let bdk = onchain_wallet.inner();
-        let mut onchain = bdk.write().await;
-        self.inner.maintenance_with_onchain(&mut *onchain).await?;
-        Ok(())
-    }
-
     pub async fn maintenance_delegated(&self) -> Result<(), Error> {
         self.inner.maintenance_delegated().await?;
-        Ok(())
-    }
-
-    pub async fn maintenance_with_onchain_delegated(
-        &self,
-        onchain_wallet: Arc<OnchainWallet>,
-    ) -> Result<(), Error> {
-        let bdk = onchain_wallet.inner();
-        let mut onchain = bdk.write().await;
-        self.inner
-            .maintenance_with_onchain_delegated(&mut *onchain)
-            .await?;
         Ok(())
     }
 
@@ -487,9 +464,10 @@ impl Wallet {
         &self,
         amount_sats: u64,
         description: Option<String>,
+        token: Option<String>,
     ) -> Result<types::LightningInvoice, Error> {
         let amount = bitcoin::Amount::from_sat(amount_sats);
-        let invoice = self.inner.bolt11_invoice(amount, description).await?;
+        let invoice = self.inner.bolt11_invoice(amount, description, token).await?;
         Ok(types::LightningInvoice {
             invoice: invoice.to_string(),
             payment_hash: invoice.payment_hash().to_string(),
@@ -525,30 +503,33 @@ impl Wallet {
             .to_sat())
     }
 
-    pub async fn lightning_receive_status(
+    /// Triage a payment hash: settled or in-progress. Errors if no lightning
+    /// receive is known for this payment hash.
+    pub async fn lightning_receive_state(
         &self,
         payment_hash: String,
-    ) -> Result<Option<types::LightningReceive>, Error> {
+    ) -> Result<types::LightningReceive, Error> {
         let payment_hash_obj =
             PaymentHash::from_str(&payment_hash).context("invalid payment hash")?;
         Ok(self
             .inner
-            .lightning_receive_status(payment_hash_obj)
+            .lightning_receive_state(payment_hash_obj)
             .await?
-            .map(Into::into))
+            .into())
     }
 
     pub async fn try_claim_lightning_receive(
         &self,
         payment_hash: String,
         wait: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<types::LightningReceive, Error> {
         let payment_hash_obj =
             PaymentHash::from_str(&payment_hash).context("invalid payment hash")?;
-        self.inner
-            .try_claim_lightning_receive(payment_hash_obj, wait, None)
+        let state = self
+            .inner
+            .try_claim_lightning_receive(payment_hash_obj, wait)
             .await?;
-        Ok(())
+        Ok(state.into())
     }
 
     pub async fn cancel_lightning_receive(&self, payment_hash: String) -> Result<(), Error> {
@@ -740,17 +721,14 @@ impl Wallet {
 
     pub async fn board_amount(
         &self,
-        onchain_wallet: Arc<OnchainWallet>,
         amount_sats: u64,
     ) -> Result<types::PendingBoard, Error> {
         let amount = bitcoin::Amount::from_sat(amount_sats);
         info!("[BOARD] Boarding {} sats into Ark...", amount_sats);
 
-        let bdk = onchain_wallet.inner();
-        let mut onchain = bdk.write().await;
         let pb = self
             .inner
-            .board_amount(&mut *onchain, amount)
+            .board_amount(amount)
             .await
             .context("Board failed")?;
 
@@ -765,17 +743,12 @@ impl Wallet {
         Ok(pb.into())
     }
 
-    pub async fn board_all(
-        &self,
-        onchain_wallet: Arc<OnchainWallet>,
-    ) -> Result<types::PendingBoard, Error> {
+    pub async fn board_all(&self) -> Result<types::PendingBoard, Error> {
         info!("[BOARD] Boarding ALL funds into Ark...");
 
-        let bdk = onchain_wallet.inner();
-        let mut onchain = bdk.write().await;
         let pb = self
             .inner
-            .board_all(&mut *onchain)
+            .board_all()
             .await
             .context("Board all failed")?;
 
@@ -856,7 +829,7 @@ impl Wallet {
         Ok(())
     }
 
-    pub async fn sync_exits(&self, _onchain_wallet: Arc<OnchainWallet>) -> Result<(), Error> {
+    pub async fn sync_exits(&self) -> Result<(), Error> {
         info!("[EXIT] Syncing exits...");
         self.inner
             .sync_exits()
@@ -868,19 +841,16 @@ impl Wallet {
 
     pub async fn progress_exits(
         &self,
-        onchain_wallet: Arc<OnchainWallet>,
         fee_rate_sat_per_vb: Option<u64>,
     ) -> Result<Vec<types::ExitProgressStatus>, Error> {
         info!("[EXIT] Progressing exits...");
 
         let fee_rate = fee_rate_sat_per_vb.and_then(bitcoin::FeeRate::from_sat_per_vb);
 
-        let bdk = onchain_wallet.inner();
-        let mut onchain = bdk.write().await;
         let result = self
             .inner
             .exit_mgr()
-            .progress_exits_with_bdk(&self.inner, &mut *onchain, fee_rate)
+            .progress_exits_with_cpfp(&self.inner, fee_rate)
             .await
             .context("Progress exits failed")?;
 

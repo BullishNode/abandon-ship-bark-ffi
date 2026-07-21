@@ -68,9 +68,3 @@ impl OnchainWallet {
             .map_err(bark_err)
     }
 }
-
-impl OnchainWallet {
-    pub(crate) fn inner(&self) -> Arc<CoreOnchainWallet> {
-        self.inner.clone()
-    }
-}

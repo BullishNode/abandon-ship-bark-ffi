@@ -213,26 +213,59 @@ pub struct AddressWithIndex {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LightningReceive {
     pub payment_hash: String,
-    pub payment_preimage: String,
     pub invoice: String,
     pub amount_sats: u64,
-    pub has_htlc_vtxos: bool,
-    pub preimage_revealed: bool,
+    /// Receive progress: "awaiting-payment" | "htlcs-ready" |
+    /// "preimage-revealed" | "settled"
+    pub state: String,
+    /// Known while in-progress; present when settled.
+    pub payment_preimage: Option<String>,
+    /// Unix timestamp (seconds), set only when the receive is settled.
+    pub settled_at: Option<i64>,
 }
 
-impl From<bark::persist::models::LightningReceive> for LightningReceive {
-    fn from(r: bark::persist::models::LightningReceive) -> Self {
+impl From<bark::actions::lightning::receive::LightningReceive> for LightningReceive {
+    fn from(r: bark::actions::lightning::receive::LightningReceive) -> Self {
+        use bark::actions::lightning::receive::Progress;
+        let state = match r.progress {
+            Progress::AwaitingPayment => "awaiting-payment",
+            Progress::HtlcsReady(_) => "htlcs-ready",
+            Progress::PreimageRevealed(_) => "preimage-revealed",
+        };
         Self {
             payment_hash: r.payment_hash.to_string(),
-            payment_preimage: r.payment_preimage.to_string(),
             invoice: r.invoice.to_string(),
             amount_sats: r
                 .invoice
                 .amount_milli_satoshis()
                 .map(|a| bitcoin::Amount::from_msat_floor(a).to_sat())
                 .unwrap_or(0),
-            has_htlc_vtxos: !r.htlc_vtxos.is_empty(),
-            preimage_revealed: r.preimage_revealed_at.is_some(),
+            state: state.to_string(),
+            payment_preimage: Some(r.payment_preimage.to_string()),
+            settled_at: None,
+        }
+    }
+}
+
+impl From<bark::persist::models::SettledLightningReceive> for LightningReceive {
+    fn from(r: bark::persist::models::SettledLightningReceive) -> Self {
+        Self {
+            payment_hash: r.payment_hash.to_string(),
+            invoice: r.invoice.to_string(),
+            amount_sats: r.amount.to_sat(),
+            state: "settled".to_string(),
+            payment_preimage: Some(r.preimage.to_string()),
+            settled_at: Some(r.settled_at.timestamp()),
+        }
+    }
+}
+
+impl From<bark::actions::lightning::receive::LightningReceiveState> for LightningReceive {
+    fn from(s: bark::actions::lightning::receive::LightningReceiveState) -> Self {
+        use bark::actions::lightning::receive::LightningReceiveState;
+        match s {
+            LightningReceiveState::InProgress(r) => r.into(),
+            LightningReceiveState::Settled(r) => r.into(),
         }
     }
 }
