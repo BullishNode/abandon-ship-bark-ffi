@@ -12,6 +12,7 @@ use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
 use crate::config::Config;
+use crate::core::onchain::OnchainWallet as CoreOnchainWallet;
 use crate::core::wallet::{seed_from_str, OpenArgs as CoreOpenArgs, Wallet as CoreWallet};
 use crate::error::Error;
 use crate::types::{
@@ -157,19 +158,51 @@ fn default_true() -> bool { true }
 #[wasm_bindgen]
 pub struct Wallet {
     core: CoreWallet,
+    /// The onchain wallet supplied at open time, if any. Kept so JS can
+    /// recover a usable handle via [`Wallet::onchain_wallet`] after `open`
+    /// consumed the one it was given.
+    onchain: Option<Arc<CoreOnchainWallet>>,
     #[allow(dead_code)]
     mailbox_cancel: CancellationToken,
 }
 
 impl Wallet {
-    fn wrap(core: CoreWallet) -> Self {
+    fn wrap(core: CoreWallet, onchain: Option<Arc<CoreOnchainWallet>>) -> Self {
         let inner = core.inner().clone();
         let cancel = CancellationToken::new();
         Self::start_mailbox_processor(inner, cancel.clone());
         Self {
             core,
+            onchain,
             mailbox_cancel: cancel,
         }
+    }
+
+    async fn open_impl(
+        network: Network,
+        mnemonic_or_seed: String,
+        config: Config,
+        onchain: Option<Arc<CoreOnchainWallet>>,
+        args: OpenWalletArgs,
+    ) -> Result<Wallet, JsError> {
+        let btc_network = network.into();
+        let seed = seed_from_str(btc_network, &mnemonic_or_seed)?;
+        let db = if let Some(db) = args.indexed_db_name {
+            indexed_db_client(&db).await?
+        } else {
+            bark::persist::platform_default(Option::<&str>::None, Some(seed.fingerprint())).await
+                .map_err(js_err)?
+        };
+        let core = CoreWallet::open(network, mnemonic_or_seed, config, CoreOpenArgs {
+            run_daemon: args.run_daemon,
+            persister: Some(db),
+            onchain: onchain.as_ref().map(|w| {
+                w.inner() as Arc::<tokio::sync::RwLock<dyn OnchainWalletTrait>>
+            }),
+            create_if_not_exists: args.create_if_not_exists,
+            create_without_server: args.create_without_server,
+        }).await?;
+        Ok(Self::wrap(core, onchain))
     }
 
     fn start_mailbox_processor(inner: InnerWallet, cancel: CancellationToken) {
@@ -231,6 +264,12 @@ impl Wallet {
     ///
     /// The onchain wallet is supplied here at open time; onchain operations
     /// (boarding, exits, ...) use it internally and no longer take it per-call.
+    ///
+    /// NOTE: passing `onchain` here CONSUMES the JS handle (wasm-bindgen moves
+    /// exported types passed by value): after this call its methods throw
+    /// `null pointer passed to rust`. Prefer `openWithOnchain`, which borrows
+    /// the handle and leaves it usable, or recover a fresh handle with
+    /// `onchainWallet()` after opening.
     pub async fn open(
         network: Network,
         mnemonic_or_seed: String,
@@ -238,24 +277,34 @@ impl Wallet {
         onchain: Option<OnchainWallet>,
         args: OpenWalletArgs,
     ) -> Result<Wallet, JsError> {
-        let btc_network = network.into();
-        let seed = seed_from_str(btc_network, &mnemonic_or_seed)?;
-        let db = if let Some(db) = args.indexed_db_name {
-            indexed_db_client(&db).await?
-        } else {
-            bark::persist::platform_default(Option::<&str>::None, Some(seed.fingerprint())).await
-                .map_err(js_err)?
-        };
-        let core = CoreWallet::open(network, mnemonic_or_seed, config, CoreOpenArgs {
-            run_daemon: args.run_daemon,
-            persister: Some(db),
-            onchain: onchain.map(|w| {
-                w.inner.inner() as Arc::<tokio::sync::RwLock<dyn OnchainWalletTrait>>
-            }),
-            create_if_not_exists: args.create_if_not_exists,
-            create_without_server: args.create_without_server,
-        }).await?;
-        Ok(Self::wrap(core))
+        Self::open_impl(network, mnemonic_or_seed, config, onchain.map(|w| w.inner), args).await
+    }
+
+    /// Like [`Wallet::open`], but borrows the onchain wallet handle instead of
+    /// consuming it: the same `OnchainWallet` instance stays valid for
+    /// `balance()` / `newAddress()` / `send()` / `sync()`, and it and the
+    /// wallet share one underlying bdk wallet (no persister divergence).
+    ///
+    /// Both handles should still be `free()`d on teardown; each drop only
+    /// releases its own reference.
+    #[wasm_bindgen(js_name = openWithOnchain)]
+    pub async fn open_with_onchain(
+        network: Network,
+        mnemonic_or_seed: String,
+        config: Config,
+        onchain: &OnchainWallet,
+        args: OpenWalletArgs,
+    ) -> Result<Wallet, JsError> {
+        Self::open_impl(network, mnemonic_or_seed, config, Some(onchain.inner.clone()), args).await
+    }
+
+    /// A handle to the onchain wallet this wallet was opened with, or
+    /// `undefined` if it was opened without one. The returned handle shares
+    /// the underlying bdk wallet with this wallet and must be `free()`d by the
+    /// caller when no longer needed.
+    #[wasm_bindgen(js_name = onchainWallet)]
+    pub fn onchain_wallet(&self) -> Option<OnchainWallet> {
+        self.onchain.as_ref().map(|inner| OnchainWallet { inner: inner.clone() })
     }
 
     /// Low-level function to initialize a wallet
