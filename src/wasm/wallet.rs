@@ -787,11 +787,19 @@ impl Wallet {
         Ok(self.core.mailbox_authorization()?)
     }
 
-    // -- VTXO Import ----------------------------------------------------------
+    // -- VTXO Import / Export -------------------------------------------------
 
+    /// Import a VTXO from its serialized form (hex or base64).
     #[wasm_bindgen(js_name = importVtxo)]
-    pub async fn import_vtxo(&self, vtxoBase64: String) -> Result<(), JsError> {
-        Ok(self.core.import_vtxo(vtxoBase64).await?)
+    pub async fn import_vtxo(&self, encodedVtxo: String) -> Result<(), JsError> {
+        Ok(self.core.import_vtxo(encodedVtxo).await?)
+    }
+
+    /// Hex-encoded serialization of the full VTXO (genesis chain included),
+    /// re-importable via `importVtxo`. Mirrors bark-rest `GET /vtxos/{id}/encoded`.
+    #[wasm_bindgen(js_name = vtxoEncoded)]
+    pub async fn vtxo_encoded(&self, vtxoId: String) -> Result<String, JsError> {
+        Ok(self.core.vtxo_encoded(vtxoId).await?)
     }
 
     // -- Fee Estimation -------------------------------------------------------
