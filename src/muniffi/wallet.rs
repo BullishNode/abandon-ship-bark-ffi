@@ -732,12 +732,25 @@ impl Wallet {
     }
 
     // ------------------------------------------------------------------------
-    // VTXO Import
+    // VTXO Import / Export
     // ------------------------------------------------------------------------
 
+    /// Import a VTXO from its serialized form (hex or base64).
+    ///
+    /// The parameter keeps its historical `vtxo_base64` name for foreign
+    /// binding compatibility (uniffi exposes parameter names), but hex as
+    /// returned by [`Wallet::vtxo_encoded`] is accepted too.
     pub async fn import_vtxo(&self, vtxo_base64: String) -> Result<(), Error> {
         let core = self.core.clone();
         run_async(async move { core.import_vtxo(vtxo_base64).await }).await
+    }
+
+    /// Hex-encoded serialization of the full VTXO (genesis chain included),
+    /// re-importable via [`Wallet::import_vtxo`]. Mirrors bark-rest
+    /// `GET /vtxos/{id}/encoded`.
+    pub async fn vtxo_encoded(&self, vtxo_id: String) -> Result<String, Error> {
+        let core = self.core.clone();
+        run_async(async move { core.vtxo_encoded(vtxo_id).await }).await
     }
 
     // ------------------------------------------------------------------------

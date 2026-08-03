@@ -1117,15 +1117,14 @@ impl Wallet {
     }
 
     // ------------------------------------------------------------------------
-    // VTXO Import
+    // VTXO Import / Export
     // ------------------------------------------------------------------------
 
-    pub async fn import_vtxo(&self, vtxo_base64: String) -> Result<(), Error> {
-        let vtxo_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&vtxo_base64)
-            .context("Invalid base64")?;
-
-        let vtxo = ark::Vtxo::deserialize(&vtxo_bytes).context("Invalid VTXO data")?;
+    /// Import a VTXO from its serialized form, as produced by
+    /// [`Wallet::vtxo_encoded`] or bark-rest `GET /vtxos/{id}/encoded`.
+    /// Accepts hex as well as base64.
+    pub async fn import_vtxo(&self, encoded_vtxo: String) -> Result<(), Error> {
+        let vtxo = parse_vtxo(&encoded_vtxo)?;
 
         self.inner
             .import_vtxo(&vtxo)
@@ -1134,6 +1133,21 @@ impl Wallet {
 
         info!("[IMPORT] VTXO imported successfully");
         Ok(())
+    }
+
+    /// Hex-encoded serialization of the full VTXO (genesis chain included),
+    /// re-importable via [`Wallet::import_vtxo`]. Mirrors bark-rest
+    /// `GET /vtxos/{id}/encoded`.
+    pub async fn vtxo_encoded(&self, vtxo_id: String) -> Result<String, Error> {
+        let id: VtxoId = vtxo_id.parse().context("invalid vtxo id")?;
+
+        let vtxo = self
+            .inner
+            .get_full_vtxo(id)
+            .await
+            .context("Failed to export VTXO")?;
+
+        Ok(vtxo.serialize_hex())
     }
 
     // ------------------------------------------------------------------------
@@ -1284,5 +1298,101 @@ impl Wallet {
             .estimate_send_onchain(&btc_addr, amount)
             .await?;
         Ok(estimate.into())
+    }
+}
+
+/// Parse a VTXO from its serialized form.
+///
+/// Hex is the canonical encoding ([`Wallet::vtxo_encoded`] and bark-rest use
+/// it); base64 is also accepted since `import_vtxo` historically took it.
+fn parse_vtxo(encoded: &str) -> Result<ark::Vtxo, Error> {
+    let encoded = encoded.trim();
+
+    if let Ok(vtxo) = ark::Vtxo::deserialize_hex(encoded) {
+        return Ok(vtxo);
+    }
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .context("Invalid VTXO encoding: expected hex or base64")?;
+    Ok(ark::Vtxo::deserialize(&bytes).context("Invalid VTXO data")?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Current-version board VTXO test vector, copied from bark's
+    /// `ark::test_util::VTXO_VECTORS` (`lib/src/test_util/vectors.rs`).
+    /// Deserializing and re-serializing it is hex-identical.
+    const BOARD_VTXO_HEX: &str = "02001027000000000000928a01000365a81233741893bbe2461b8d479dadc5880594fe6f7479180d5843820af72b62e0075111d0df3738fe77c8f05b0f71292ae6ae5eddf911f8d2bb4dbde598fcbe768f00000000010102030a752219f1b94bbdf8994a0a980cdda08c2ad094cb29dd834878db6dee1612ee0365a81233741893bbe2461b8d479dadc5880594fe6f7479180d5843820af72b629c9c63d9c0f739011368e00c2441d85816c01d637da8d57ac343c95982dd3604d8bf847bcf8a2aac44483d7ea01ec9a99f7720d0694cb3cdd3cbcca97504adaf01004a0100000000000000030a752219f1b94bbdf8994a0a980cdda08c2ad094cb29dd834878db6dee1612ee24e9a421d9018690eea79b11e4e4fe59d36aa8f46d110017e09abe350b5e315600000000";
+
+    #[test]
+    fn parse_vtxo_accepts_hex_and_roundtrips() {
+        let vtxo = parse_vtxo(BOARD_VTXO_HEX).unwrap();
+        assert_eq!(vtxo.serialize_hex(), BOARD_VTXO_HEX);
+    }
+
+    #[test]
+    fn parse_vtxo_accepts_uppercase_hex() {
+        let vtxo = parse_vtxo(&BOARD_VTXO_HEX.to_uppercase()).unwrap();
+        assert_eq!(vtxo.serialize_hex(), BOARD_VTXO_HEX);
+    }
+
+    #[test]
+    fn parse_vtxo_accepts_base64() {
+        let from_hex = parse_vtxo(BOARD_VTXO_HEX).unwrap();
+        let base64_vtxo = base64::engine::general_purpose::STANDARD.encode(from_hex.serialize());
+
+        let vtxo = parse_vtxo(&base64_vtxo).unwrap();
+        assert_eq!(vtxo.id(), from_hex.id());
+        assert_eq!(vtxo.serialize_hex(), BOARD_VTXO_HEX);
+    }
+
+    #[test]
+    fn parse_vtxo_trims_whitespace() {
+        let vtxo = parse_vtxo(&format!("  {}\n", BOARD_VTXO_HEX)).unwrap();
+        assert_eq!(vtxo.serialize_hex(), BOARD_VTXO_HEX);
+    }
+
+    /// `vtxo_encoded` takes the id string shown in the VTXO DTO
+    /// (`vtxo.id().to_string()`); it must parse back to the same `VtxoId`.
+    #[test]
+    fn vtxo_id_string_roundtrips() {
+        let vtxo = parse_vtxo(BOARD_VTXO_HEX).unwrap();
+        let id_str = vtxo.id().to_string();
+        assert_eq!(id_str.parse::<VtxoId>().unwrap(), vtxo.id());
+    }
+
+    #[test]
+    fn parse_vtxo_rejects_garbage() {
+        assert!(parse_vtxo("").is_err());
+        assert!(parse_vtxo("not a vtxo at all!!").is_err());
+        // Valid hex, but not a VTXO.
+        assert!(parse_vtxo("deadbeef").is_err());
+        // Valid base64, but not a VTXO.
+        assert!(parse_vtxo("aGVsbG8gd29ybGQ=").is_err());
+    }
+
+    /// Same board VTXO, but in the previous encoding version (v1, no fee
+    /// amount), from bark's `VTXO_NO_FEE_AMOUNT_VERSION_HEXES`. Old exports
+    /// must stay importable; re-serializing upgrades to the current version.
+    const BOARD_VTXO_V1_HEX: &str = "01001027000000000000928a01000365a81233741893bbe2461b8d479dadc5880594fe6f7479180d5843820af72b62e007ed4d23932a2625a78fe5c75bded751da3a99e23a297a527c01bd7bc8372128f200000000010102030a752219f1b94bbdf8994a0a980cdda08c2ad094cb29dd834878db6dee1612ee0365a81233741893bbe2461b8d479dadc5880594fe6f7479180d5843820af72b62655d61f465693e1fbf39814e9cb1d57d5eabc49548ed042626cc39c4d5fe5c1836c8c2fb634bceab363212ed4c6a8e78c9ff33884587830ffa2a1cbd84c95e77010000030a752219f1b94bbdf8994a0a980cdda08c2ad094cb29dd834878db6dee1612ee4c99b744ad009b7070f330794bf003fa8e5cd46ea1a6eb854aaf469385e3080000000000";
+
+    #[test]
+    fn parse_vtxo_accepts_legacy_encoding_version() {
+        let vtxo = parse_vtxo(BOARD_VTXO_V1_HEX).unwrap();
+
+        // Re-serialization uses the current version, so the hex differs but
+        // must still parse to the same VTXO.
+        let reserialized = vtxo.serialize_hex();
+        assert_ne!(reserialized, BOARD_VTXO_V1_HEX);
+        assert_eq!(parse_vtxo(&reserialized).unwrap().id(), vtxo.id());
+    }
+
+    #[test]
+    fn parse_vtxo_rejects_truncated() {
+        let truncated = &BOARD_VTXO_HEX[..BOARD_VTXO_HEX.len() - 8];
+        assert!(parse_vtxo(truncated).is_err());
     }
 }
