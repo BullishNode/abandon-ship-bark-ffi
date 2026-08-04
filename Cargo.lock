@@ -57,8 +57,8 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "ark-lib"
-version = "0.4.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.4.0#1538235d2e1fa166c7fc3c5d2d5531b9e09ba9de"
+version = "0.5.0"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.5.0#e0c73bbb3da785366160a0a220914255c5ba904d"
 dependencies = [
  "async-trait",
  "bark-bitcoin-ext",
@@ -168,8 +168,8 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "bark-bitcoin-ext"
-version = "0.4.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.4.0#1538235d2e1fa166c7fc3c5d2d5531b9e09ba9de"
+version = "0.5.0"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.5.0#e0c73bbb3da785366160a0a220914255c5ba904d"
 dependencies = [
  "bdk_bitcoind_rpc",
  "bdk_wallet",
@@ -185,7 +185,7 @@ dependencies = [
 
 [[package]]
 name = "bark-ffi"
-version = "0.17.0+bark-0.4.0.uniffi-0.31.1"
+version = "0.18.0+bark-0.5.0.uniffi-0.31.1"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -218,8 +218,8 @@ dependencies = [
 
 [[package]]
 name = "bark-server-rpc"
-version = "0.3.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.4.0#1538235d2e1fa166c7fc3c5d2d5531b9e09ba9de"
+version = "0.5.0"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.5.0#e0c73bbb3da785366160a0a220914255c5ba904d"
 dependencies = [
  "ark-lib",
  "bitcoin",
@@ -238,8 +238,8 @@ dependencies = [
 
 [[package]]
 name = "bark-wallet"
-version = "0.4.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.4.0#1538235d2e1fa166c7fc3c5d2d5531b9e09ba9de"
+version = "0.5.0"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.5.0#e0c73bbb3da785366160a0a220914255c5ba904d"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -391,7 +391,7 @@ checksum = "32637268377fc7b10a8c6d51de3e7fba1ce5dd371a96e342b34e6078db558e7f"
 [[package]]
 name = "bip321"
 version = "0.4.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.4.0#1538235d2e1fa166c7fc3c5d2d5531b9e09ba9de"
+source = "git+https://gitlab.com/ark-bitcoin/bark?rev=bark-0.5.0#e0c73bbb3da785366160a0a220914255c5ba904d"
 dependencies = [
  "bark-bitcoin-ext",
  "bitcoin",

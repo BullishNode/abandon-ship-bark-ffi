@@ -24,6 +24,9 @@ use crate::{types, Network};
 #[derive(Clone)]
 pub struct Wallet {
     inner: bark::Wallet,
+    /// Result of the seed recovery scan `bark::Wallet::open` ran, if it ran.
+    /// See [`Wallet::recovery_report`].
+    recovery_report: Option<types::RecoveryReport>,
 }
 
 /// Optional arguments for [`Wallet::open`].
@@ -37,6 +40,9 @@ pub struct OpenArgs {
     pub onchain: Option<Arc<tokio::sync::RwLock<dyn OnchainWalletTrait>>>,
     pub create_if_not_exists: bool,
     pub create_without_server: bool,
+    /// Skip the seed-recovery mailbox scan that otherwise runs when this open
+    /// creates the wallet locally.
+    pub skip_recovery: bool,
 }
 
 impl OpenArgs {
@@ -59,6 +65,8 @@ impl OpenArgs {
             onchain: self.onchain,
             create_if_not_exists: self.create_if_not_exists,
             create_without_server: self.create_without_server,
+            skip_recovery: self.skip_recovery,
+            on_recovery_finished: None,
         }
     }
 }
@@ -91,7 +99,7 @@ impl Wallet {
     /// wrappers that construct the inner wallet themselves (e.g. the uniffi
     /// callback-onchain path) can reuse it.
     pub(crate) fn from_inner(inner: bark::Wallet) -> Self {
-        Self { inner }
+        Self { inner, recovery_report: None }
     }
 
     pub(crate) fn inner(&self) -> &bark::Wallet {
@@ -142,7 +150,29 @@ impl Wallet {
         let network = network.into();
         let cfg = config.into_bark(network);
         let seed = seed_from_str(network, &mnemonic_or_seed)?;
-        let args = args.into_bark();
+        let mut args = args.into_bark();
+
+        // The seed recovery scan runs inside `bark::Wallet::open` and reports
+        // through this callback, so stash its result and hand it to callers via
+        // [`Self::recovery_report`] once open returns. Keeps the report
+        // available without plumbing a foreign callback across the FFI.
+        let slot = Arc::new(std::sync::Mutex::new(None));
+        let sink = slot.clone();
+        args.on_recovery_finished = Some(Box::new(move |report| {
+            let report = types::recovery_report_from!(&report);
+            info!(
+                "[OPEN] Seed recovery finished: {} recovered ({} sats), {} skipped, \
+                 {} exited, {} foreign, {} failed, complete={}",
+                report.recovered.vtxo_ids.len(),
+                report.recovered.total_sats,
+                report.skipped.vtxo_ids.len(),
+                report.exited.vtxo_ids.len(),
+                report.foreign.vtxo_ids.len(),
+                report.failed.vtxo_ids.len(),
+                report.is_complete,
+            );
+            *sink.lock().unwrap() = Some(report);
+        }));
 
         let inner = bark::Wallet::open(network, seed, cfg, args).await?;
 
@@ -154,7 +184,21 @@ impl Wallet {
             );
         }
 
-        Ok(Self::from_inner(inner))
+        let recovery_report = slot.lock().unwrap().take();
+        Ok(Self { inner, recovery_report })
+    }
+
+    /// Result of the seed-recovery mailbox scan that ran during
+    /// [`Self::open`], or `None` if no report was produced.
+    ///
+    /// Recovery only runs on the open that creates the wallet locally, and not
+    /// at all when `OpenArgs::skip_recovery` is set, so this is `None` on every
+    /// subsequent open. It is also `None` when the scan itself failed outright
+    /// — upstream logs that and lets open succeed, so `None` does not prove no
+    /// funds are missing. A report with `is_complete == false` means funds may
+    /// still be missing; retry its `failed` ids with [`Self::recover_vtxos`].
+    pub fn recovery_report(&self) -> Option<types::RecoveryReport> {
+        self.recovery_report.clone()
     }
 
     // ------------------------------------------------------------------------
@@ -475,6 +519,43 @@ impl Wallet {
         })
     }
 
+    /// Create an invoice whose claimed VTXO is delivered to `claim_destination`
+    /// (an Ark address), letting the recipient receive while offline.
+    ///
+    /// The claim is signed directly to that address's own policy, so this wallet
+    /// never holds a key that can spend the funds and cannot redirect them. It
+    /// can still strand them: delivering the signed output to the destination's
+    /// mailbox is a separate step only this wallet can perform, and nobody else
+    /// can discover or recover that output until it happens. Delivery resumes
+    /// automatically on restart, so a crash recovers on its own — but while this
+    /// wallet stays offline the destination cannot claim funds already signed to
+    /// it. Running this for someone else means they trust you to come back
+    /// online and deliver, not that they trust you with custody.
+    ///
+    /// A `claim_destination` owned by this wallet is claimed locally instead of
+    /// going through its mailbox.
+    pub async fn bolt11_invoice_for_address(
+        &self,
+        amount_sats: u64,
+        claim_destination: String,
+        description: Option<String>,
+        token: Option<String>,
+    ) -> Result<types::LightningInvoice, Error> {
+        let addr: ark::Address = claim_destination
+            .parse()
+            .context("invalid ark address")?;
+        let amount = bitcoin::Amount::from_sat(amount_sats);
+        let invoice = self
+            .inner
+            .bolt11_invoice_for_address(amount, addr, description, token)
+            .await?;
+        Ok(types::LightningInvoice {
+            invoice: invoice.to_string(),
+            payment_hash: invoice.payment_hash().to_string(),
+            amount_sats,
+        })
+    }
+
     pub async fn try_claim_all_lightning_receives(
         &self,
         wait: bool,
@@ -660,6 +741,51 @@ impl Wallet {
         Ok(state.map(|s| s.into()))
     }
 
+    /// Schedule a delegated refresh for `scheduled_height` instead of the next
+    /// round. The refresh fee is priced against the VTXO's remaining lifetime
+    /// at that height, and the server's fee table charges less the closer a
+    /// VTXO is to expiry, so scheduling further out never costs more than
+    /// refreshing now. The height is used verbatim: one at or below the current
+    /// tip just prices higher and becomes eligible for the next round, and the
+    /// server rejects a height at or past any input VTXO's expiry.
+    pub async fn refresh_vtxos_scheduled(
+        &self,
+        vtxo_ids: Vec<String>,
+        scheduled_height: u32,
+    ) -> Result<Option<types::RoundState>, Error> {
+        let ids: Result<Vec<_>, _> = vtxo_ids.iter().map(|s| s.parse::<VtxoId>()).collect();
+        let ids = ids.context("invalid VTXO id")?;
+
+        let state = self
+            .inner
+            .refresh_vtxos_scheduled(ids, scheduled_height)
+            .await?;
+        Ok(state.map(|s| s.into()))
+    }
+
+    // ------------------------------------------------------------------------
+    // Recovery
+    // ------------------------------------------------------------------------
+
+    /// Recover the given VTXO ids from the server: fetch each one, keep the
+    /// ones this wallet owns and that are still spendable, and import them.
+    ///
+    /// Takes known ids only — the full seed-derived mailbox rescan is internal
+    /// to bark and runs at wallet open (see [`Self::recovery_report`]). Use this
+    /// to retry ids a previous scan reported as `failed`.
+    pub async fn recover_vtxos(
+        &self,
+        vtxo_ids: Vec<String>,
+    ) -> Result<types::RecoveryReport, Error> {
+        let ids: Result<Vec<_>, _> = vtxo_ids
+            .iter()
+            .map(|id| id.parse::<VtxoId>().context("invalid vtxo id"))
+            .collect();
+
+        let report = self.inner.recover_vtxos(ids?).await?;
+        Ok(types::recovery_report_from!(&report))
+    }
+
     // ------------------------------------------------------------------------
     // Info
     // ------------------------------------------------------------------------
@@ -680,6 +806,7 @@ impl Wallet {
         let cfg = self.inner.config();
         Config {
             server_address: cfg.server_address.clone(),
+            #[allow(deprecated)]
             server_access_token: cfg.server_access_token.clone(),
             esplora_address: cfg.esplora_address.clone(),
             bitcoind_address: cfg.bitcoind_address.clone(),
