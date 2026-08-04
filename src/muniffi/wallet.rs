@@ -47,6 +47,16 @@ pub struct WalletOpenArgs {
     /// Default: false
     #[uniffi(default = false)]
     pub create_without_server: bool,
+
+    /// Whether to skip the seed-recovery mailbox scan
+    ///
+    /// The scan runs on the open that creates the wallet locally and makes
+    /// network calls; its result is available from `Wallet::recovery_report`.
+    /// Set this to open without it.
+    ///
+    /// Default: false
+    #[uniffi(default = false)]
+    pub skip_recovery: bool,
 }
 
 /// UniFFI-facing Bark wallet.
@@ -132,6 +142,7 @@ impl Wallet {
                 run_daemon: args.run_daemon,
                 create_if_not_exists: args.create_if_not_exists,
                 create_without_server: args.create_without_server,
+                skip_recovery: args.skip_recovery,
             })
             .await?;
             Ok(Self::wrap(core))
@@ -378,6 +389,38 @@ impl Wallet {
         run_async(async move { core.bolt11_invoice(amount_sats, description, token).await }).await
     }
 
+    /// Create an invoice whose claimed VTXO is delivered to `claim_destination`
+    /// (an Ark address), letting that wallet receive while offline.
+    ///
+    /// The claim is signed directly to that address's own policy, so this wallet
+    /// has no custodial control and cannot redirect the payment. It can still
+    /// strand it: delivering the signed output to the destination's mailbox is a
+    /// separate step only this wallet can perform, and the recipient has no
+    /// independent way to recover the funds until it happens. Delivery resumes
+    /// automatically on restart, so a crash recovers on its own — but running
+    /// this for someone else means they trust you to stay online and eventually
+    /// deliver, not that they trust you with custody.
+    ///
+    /// A `claim_destination` owned by this wallet is claimed locally instead of
+    /// going through its mailbox.
+    #[uniffi::method(default(description = None, token = None))]
+    pub async fn bolt11_invoice_for_address(
+        &self,
+        amount_sats: u64,
+        claim_destination: String,
+        description: Option<String>,
+        token: Option<String>,
+    ) -> Result<types::LightningInvoice, Error> {
+        let core = self.core.clone();
+        run_async(async move {
+            core.bolt11_invoice_for_address(
+                amount_sats, claim_destination, description, token,
+            )
+            .await
+        })
+        .await
+    }
+
     #[uniffi::method(default(wait = false))]
     pub async fn try_claim_all_lightning_receives(
         &self,
@@ -501,6 +544,50 @@ impl Wallet {
     ) -> Result<Option<types::RoundState>, Error> {
         let core = self.core.clone();
         run_async(async move { core.refresh_vtxos_delegated(vtxo_ids).await }).await
+    }
+
+    /// Schedule a delegated refresh for `scheduled_height` instead of the next
+    /// round. The refresh fee is priced against the VTXO's remaining lifetime at
+    /// that height, and the server charges less the closer a VTXO is to expiry,
+    /// so scheduling further out never costs more than refreshing now.
+    pub async fn refresh_vtxos_scheduled(
+        &self,
+        vtxo_ids: Vec<String>,
+        scheduled_height: u32,
+    ) -> Result<Option<types::RoundState>, Error> {
+        let core = self.core.clone();
+        run_async(async move {
+            core.refresh_vtxos_scheduled(vtxo_ids, scheduled_height).await
+        })
+        .await
+    }
+
+    // ------------------------------------------------------------------------
+    // Recovery
+    // ------------------------------------------------------------------------
+
+    /// Recover the given VTXO ids from the server, importing the ones this
+    /// wallet owns that are still spendable. Use it to retry ids a previous
+    /// scan reported as `failed`.
+    pub async fn recover_vtxos(
+        &self,
+        vtxo_ids: Vec<String>,
+    ) -> Result<types::RecoveryReport, Error> {
+        let core = self.core.clone();
+        run_async(async move { core.recover_vtxos(vtxo_ids).await }).await
+    }
+
+    /// Result of the seed-recovery scan that ran during `Wallet::open`, or none
+    /// if no report was produced.
+    ///
+    /// Recovery only runs on the open that creates the wallet locally, and not
+    /// at all when `WalletOpenArgs.skip_recovery` is set, so this is empty on
+    /// every subsequent open. It is also empty when the scan itself failed
+    /// outright — bark logs that and lets open succeed, so an empty result does
+    /// not prove no funds are missing. `isComplete == false` means funds may
+    /// still be missing; retry the report's `failed` ids with `recoverVtxos`.
+    pub fn recovery_report(&self) -> Option<types::RecoveryReport> {
+        self.core.recovery_report()
     }
 
     // ------------------------------------------------------------------------

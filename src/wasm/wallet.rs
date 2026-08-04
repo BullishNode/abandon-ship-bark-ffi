@@ -19,7 +19,7 @@ use crate::types::{
     AddressWithIndex, ArkInfo, Balance, ExitClaimTransaction, ExitProgressStatus,
     ExitTransactionStatus, ExitVtxo, FeeEstimate, LightningInvoice, LightningReceive,
     LightningSend, LightningSendStatus, Movement, Network, OffboardResult, PendingBoard,
-    RoundState, Vtxo, WalletProperties,
+    RecoveryReport, RoundState, Vtxo, WalletProperties,
 };
 use crate::wasm::db::indexed_db_client;
 use crate::wasm::notification::NotificationHolder;
@@ -56,6 +56,19 @@ pub struct PayLightningOfferArgs {
 #[serde(rename_all = "camelCase")]
 pub struct Bolt11InvoiceArgs {
     pub amountSats: u64,
+    #[tsify(optional)]
+    pub description: Option<String>,
+    #[tsify(optional)]
+    pub token: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct Bolt11InvoiceForAddressArgs {
+    pub amountSats: u64,
+    /// Ark address the claimed VTXO is delivered to.
+    pub claimDestination: String,
     #[tsify(optional)]
     pub description: Option<String>,
     #[tsify(optional)]
@@ -151,6 +164,17 @@ pub struct OpenWalletArgs {
     #[tsify(optional)]
     #[serde(default)]
     pub create_without_server: bool,
+
+    /// Whether to skip the seed-recovery mailbox scan
+    ///
+    /// The scan runs on the open that creates the wallet locally and makes
+    /// network calls; its result is available from `recoveryReport()`. Set this
+    /// to open without it.
+    ///
+    /// Default: false
+    #[tsify(optional)]
+    #[serde(default)]
+    pub skip_recovery: bool,
 }
 
 fn default_true() -> bool { true }
@@ -201,6 +225,7 @@ impl Wallet {
             }),
             create_if_not_exists: args.create_if_not_exists,
             create_without_server: args.create_without_server,
+            skip_recovery: args.skip_recovery,
         }).await?;
         Ok(Self::wrap(core, onchain))
     }
@@ -489,6 +514,30 @@ impl Wallet {
         Ok(self.core.bolt11_invoice(args.amountSats, args.description, args.token).await?)
     }
 
+    /// Create an invoice whose claimed VTXO is delivered to `claimDestination`
+    /// (an Ark address), letting that wallet receive while offline.
+    ///
+    /// The claim is signed directly to that address's own policy, so this wallet
+    /// has no custodial control and cannot redirect the payment. It can still
+    /// strand it: delivering the signed output to the destination's mailbox is a
+    /// separate step only this wallet can perform, and the recipient has no
+    /// independent way to recover the funds until it happens. Delivery resumes
+    /// automatically on restart, so a crash recovers on its own — but running
+    /// this for someone else means they trust you to stay online and eventually
+    /// deliver, not that they trust you with custody.
+    ///
+    /// A `claimDestination` owned by this wallet is claimed locally instead of
+    /// going through its mailbox.
+    #[wasm_bindgen(js_name = bolt11InvoiceForAddress)]
+    pub async fn bolt11_invoice_for_address(
+        &self,
+        args: Bolt11InvoiceForAddressArgs,
+    ) -> Result<LightningInvoice, JsError> {
+        Ok(self.core.bolt11_invoice_for_address(
+            args.amountSats, args.claimDestination, args.description, args.token,
+        ).await?)
+    }
+
     #[wasm_bindgen(js_name = tryClaimAllLightningReceives)]
     pub async fn try_claim_all_lightning_receives(
         &self,
@@ -592,6 +641,43 @@ impl Wallet {
         vtxoIds: Vec<String>,
     ) -> Result<Option<RoundState>, JsError> {
         Ok(self.core.refresh_vtxos_delegated(vtxoIds).await?)
+    }
+
+    /// Schedule a delegated refresh for `scheduledHeight` instead of the next
+    /// round. The refresh fee is priced against the VTXO's remaining lifetime at
+    /// that height, and the server charges less the closer a VTXO is to expiry,
+    /// so scheduling further out never costs more than refreshing now.
+    #[wasm_bindgen(js_name = refreshVtxosScheduled)]
+    pub async fn refresh_vtxos_scheduled(
+        &self,
+        vtxoIds: Vec<String>,
+        scheduledHeight: u32,
+    ) -> Result<Option<RoundState>, JsError> {
+        Ok(self.core.refresh_vtxos_scheduled(vtxoIds, scheduledHeight).await?)
+    }
+
+    // -- Recovery -------------------------------------------------------------
+
+    /// Recover the given VTXO ids from the server, importing the ones this
+    /// wallet owns that are still spendable. Use it to retry ids a previous scan
+    /// reported as `failed`.
+    #[wasm_bindgen(js_name = recoverVtxos)]
+    pub async fn recover_vtxos(&self, vtxoIds: Vec<String>) -> Result<RecoveryReport, JsError> {
+        Ok(self.core.recover_vtxos(vtxoIds).await?)
+    }
+
+    /// Result of the seed-recovery scan that ran during `open`, or `undefined`
+    /// if no report was produced.
+    ///
+    /// Recovery only runs on the open that creates the wallet locally, and not
+    /// at all when `skipRecovery` is set, so this is `undefined` on every
+    /// subsequent open. It is also `undefined` when the scan itself failed
+    /// outright — bark logs that and lets open succeed, so `undefined` does not
+    /// prove no funds are missing. `isComplete === false` means funds may still
+    /// be missing; retry the report's `failed` ids with `recoverVtxos`.
+    #[wasm_bindgen(js_name = recoveryReport)]
+    pub fn recovery_report(&self) -> Option<RecoveryReport> {
+        self.core.recovery_report()
     }
 
     // -- Info -----------------------------------------------------------------

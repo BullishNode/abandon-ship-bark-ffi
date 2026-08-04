@@ -132,6 +132,11 @@ pub struct Vtxo {
     /// Weight units of the unilateral exit transaction chain. Lets clients
     /// estimate exit cost without loading the full genesis.
     pub exit_tx_weight_wu: u64,
+    /// Whether this VTXO's recovery state has been asserted with the server:
+    /// its id posted to the recovery mailbox and its signed transaction chain
+    /// registered. Only ever moves from `false` to `true`; the sync-time
+    /// catch-up re-uploads the ones still `false`.
+    pub registered: bool,
 }
 
 impl From<BarkWalletVtxo> for Vtxo {
@@ -144,6 +149,7 @@ impl From<BarkWalletVtxo> for Vtxo {
             state: format!("{:?}", v.state.kind()),
             exit_depth: v.exit_depth as u32,
             exit_tx_weight_wu: v.exit_tx_weight.to_wu(),
+            registered: v.registered,
         }
     }
 }
@@ -216,12 +222,17 @@ pub struct LightningReceive {
     pub invoice: String,
     pub amount_sats: u64,
     /// Receive progress: "awaiting-payment" | "htlcs-ready" |
-    /// "preimage-revealed" | "settled"
+    /// "preimage-revealed" | "delivering" | "settled"
     pub state: String,
     /// Known while in-progress; present when settled.
     pub payment_preimage: Option<String>,
     /// Unix timestamp (seconds), set only when the receive is settled.
     pub settled_at: Option<i64>,
+    /// Ark address the claimed VTXO is delivered to, for receives created with
+    /// `bolt11_invoice_for_address`. `None` for ordinary receives claimed by
+    /// this wallet, and always `None` once settled — the settled record does
+    /// not carry the destination.
+    pub claim_destination: Option<String>,
 }
 
 impl From<bark::actions::lightning::receive::LightningReceive> for LightningReceive {
@@ -231,6 +242,7 @@ impl From<bark::actions::lightning::receive::LightningReceive> for LightningRece
             Progress::AwaitingPayment => "awaiting-payment",
             Progress::HtlcsReady(_) => "htlcs-ready",
             Progress::PreimageRevealed(_) => "preimage-revealed",
+            Progress::Delivering(_) => "delivering",
         };
         Self {
             payment_hash: r.payment_hash.to_string(),
@@ -243,6 +255,7 @@ impl From<bark::actions::lightning::receive::LightningReceive> for LightningRece
             state: state.to_string(),
             payment_preimage: Some(r.payment_preimage.to_string()),
             settled_at: None,
+            claim_destination: r.claim_destination.map(|a| a.to_string()),
         }
     }
 }
@@ -256,6 +269,8 @@ impl From<bark::persist::models::SettledLightningReceive> for LightningReceive {
             state: "settled".to_string(),
             payment_preimage: Some(r.preimage.to_string()),
             settled_at: Some(r.settled_at.timestamp()),
+            // The settled persist model doesn't carry the claim destination.
+            claim_destination: None,
         }
     }
 }
@@ -712,6 +727,97 @@ impl From<StoredRoundState<Unlocked>> for RoundState {
         }
     }
 }
+
+// ============================================================================
+// Recovery Types
+// ============================================================================
+
+/// One bucket of a [`RecoveryReport`].
+///
+/// `total_sats` only sums the VTXOs whose amount is known, so it can
+/// under-count `failed`, where a VTXO may have failed before being fetched.
+/// `vtxo_ids` is sorted, since upstream buckets them unordered.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi),
+    serde(rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct RecoveryBucket {
+    pub vtxo_ids: Vec<String>,
+    pub total_sats: u64,
+}
+
+/// Outcome of a recovery scan: every VTXO id the scan looked at, bucketed by
+/// what was decided about it.
+///
+/// `skipped` vs `failed` is the load-bearing distinction: a `skipped` VTXO was
+/// decided not to be spendable (spent, exited, or reported non-spendable),
+/// while a `failed` one could not be decided because of an error, so its funds
+/// may still be missing. `failed` is retryable via `recover_vtxos`; a `foreign`
+/// id instead sits beyond the key-derivation gap limit and needs a wider scan.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi),
+    serde(rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct RecoveryReport {
+    /// Spendable VTXOs that were successfully re-imported.
+    pub recovered: RecoveryBucket,
+    /// Deliberately left out: spent into a newer recovered VTXO, exited
+    /// on-chain, or reported non-spendable by the server.
+    pub skipped: RecoveryBucket,
+    /// No matching key could be derived within the gap limit (50 consecutive
+    /// unused indices). For a mailbox scan these are most likely this wallet's
+    /// own VTXOs, keyed beyond the limit, so funds may be missing; retrying
+    /// won't help, only a wider gap limit. For `recover_vtxos` it just means
+    /// the caller passed an id this wallet doesn't own.
+    pub foreign: RecoveryBucket,
+    /// Could not be decided due to an error. Not known to be spent, so funds
+    /// may be missing. Retryable.
+    pub failed: RecoveryBucket,
+    /// Already fully exited on-chain.
+    pub exited: RecoveryBucket,
+    /// Whether the scan accounted for every VTXO: no `failed`, no `foreign`.
+    pub is_complete: bool,
+}
+
+/// Convert bark's recovery report into the FFI [`RecoveryReport`].
+///
+/// A macro rather than a `From` impl because upstream's `bark::recovery` module
+/// is private: the report type is reachable through public signatures
+/// (`Wallet::recover_vtxos`, `OpenWalletArgs::on_recovery_finished`) but cannot
+/// be named, so no impl can be written for it.
+macro_rules! recovery_report_from {
+    ($report:expr) => {{
+        let r = $report;
+        $crate::types::RecoveryReport {
+            recovered: $crate::types::recovery_bucket_from!(r.recovered()),
+            skipped: $crate::types::recovery_bucket_from!(r.skipped()),
+            foreign: $crate::types::recovery_bucket_from!(r.foreign()),
+            failed: $crate::types::recovery_bucket_from!(r.failed()),
+            exited: $crate::types::recovery_bucket_from!(r.exited()),
+            is_complete: r.is_complete(),
+        }
+    }};
+}
+
+macro_rules! recovery_bucket_from {
+    ($entry:expr) => {{
+        let e = $entry;
+        // Upstream keeps entries in a HashMap, so sort for a stable order.
+        let mut vtxo_ids = e.ids().map(|id| id.to_string()).collect::<Vec<_>>();
+        vtxo_ids.sort_unstable();
+        $crate::types::RecoveryBucket { vtxo_ids, total_sats: e.total_amount().to_sat() }
+    }};
+}
+
+pub(crate) use {recovery_bucket_from, recovery_report_from};
 
 // ============================================================================
 // Callback Wallet Types

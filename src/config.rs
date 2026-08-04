@@ -59,7 +59,11 @@ impl Config {
         let mut ret = bark::Config::network_default(network);
         
         ret.server_address = self.server_address;
-        ret.server_access_token = self.server_access_token;
+        // upstream deprecated this field; the FFI keeps exposing it until it's removed
+        #[allow(deprecated)]
+        {
+            ret.server_access_token = self.server_access_token;
+        }
         ret.user_agent = self.user_agent.or_else(default_user_agent);
         ret.esplora_address = self.esplora_address;
         ret.bitcoind_address = self.bitcoind_address;
