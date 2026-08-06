@@ -112,6 +112,78 @@ impl From<BarkBalance> for Balance {
 // Vtxo
 // ============================================================================
 
+/// Who holds the lock on a [`VtxoState::Locked`] VTXO.
+///
+/// Mirrors `bark::vtxo::VtxoLockHolder`. Action-based subsystems lock with
+/// `Action`; pre-action subsystems (round, offboard, board, lightning
+/// receive) lock with `Movement`. As upstream converts subsystems to
+/// actions, new locks migrate from `Movement` to `Action` per-subsystem.
+///
+/// Serde/TS tags match upstream's serialization: `"action"` / `"movement"`.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum VtxoLockHolder {
+    /// A wallet action checkpoint. `id` is upstream's `WalletActionId`
+    /// (an opaque string).
+    Action { id: String },
+    /// A pre-action subsystem, keyed by its movement.
+    Movement { id: u32 },
+}
+
+impl From<&bark::vtxo::VtxoLockHolder> for VtxoLockHolder {
+    fn from(h: &bark::vtxo::VtxoLockHolder) -> Self {
+        match h {
+            bark::vtxo::VtxoLockHolder::Action { id } => Self::Action { id: id.clone() },
+            bark::vtxo::VtxoLockHolder::Movement { id } => Self::Movement { id: id.0 },
+        }
+    }
+}
+
+/// Rich VTXO state, mirroring `bark::vtxo::VtxoState`.
+///
+/// Serde/TS tags match upstream's kebab-case serialization:
+/// `"spendable"` | `"locked"` | `"spent"` | `"exited"`.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum VtxoState {
+    /// Available; can be spent in a future round.
+    Spendable,
+    /// Locked by an operation. `holder` is `None` only for the narrow
+    /// window between creating a fresh locked VTXO and pinning it to a
+    /// specific operation, so a locked VTXO can legitimately carry no
+    /// lock reason yet.
+    Locked { holder: Option<VtxoLockHolder> },
+    /// Consumed.
+    Spent,
+    /// In (or completed) a unilateral exit.
+    Exited,
+}
+
+impl From<&bark::vtxo::VtxoState> for VtxoState {
+    fn from(s: &bark::vtxo::VtxoState) -> Self {
+        match s {
+            bark::vtxo::VtxoState::Spendable => Self::Spendable,
+            bark::vtxo::VtxoState::Locked { holder } => Self::Locked {
+                holder: holder.as_ref().map(Into::into),
+            },
+            bark::vtxo::VtxoState::Spent => Self::Spent,
+            bark::vtxo::VtxoState::Exited => Self::Exited,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "wasm-web",
@@ -125,7 +197,7 @@ pub struct Vtxo {
     pub amount_sats: u64,
     pub expiry_height: u32,
     pub kind: String,
-    pub state: String,
+    pub state: VtxoState,
     /// Genesis chain length. Compare against `ArkInfo.max_vtxo_exit_depth` to
     /// detect VTXOs nearing the server's OOR-cosign refusal threshold.
     pub exit_depth: u32,
@@ -146,7 +218,7 @@ impl From<BarkWalletVtxo> for Vtxo {
             amount_sats: v.vtxo.amount().to_sat(),
             expiry_height: v.vtxo.expiry_height(),
             kind: format!("{:?}", v.vtxo.policy_type()),
-            state: format!("{:?}", v.state.kind()),
+            state: (&v.state).into(),
             exit_depth: v.exit_depth as u32,
             exit_tx_weight_wu: v.exit_tx_weight.to_wu(),
             registered: v.registered,
@@ -503,6 +575,125 @@ impl From<bark::onchain::bdk_wallet::Balance> for OnchainBalance {
 }
 
 // ============================================================================
+// Onchain wallet data (transactions, UTXOs, fee rates)
+// ============================================================================
+
+/// Network fee rates by urgency, mirroring `bark::chain::FeeRates`.
+///
+/// Rates are in sat/kwu (satoshis per 1000 weight units) — divide by 250 for
+/// sat/vB.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct FeeRates {
+    pub fast_sat_per_kwu: u64,
+    pub regular_sat_per_kwu: u64,
+    pub slow_sat_per_kwu: u64,
+}
+
+impl From<bark::chain::FeeRates> for FeeRates {
+    fn from(f: bark::chain::FeeRates) -> Self {
+        Self {
+            fast_sat_per_kwu: f.fast.to_sat_per_kwu(),
+            regular_sat_per_kwu: f.regular.to_sat_per_kwu(),
+            slow_sat_per_kwu: f.slow.to_sat_per_kwu(),
+        }
+    }
+}
+
+/// Summary of one onchain wallet transaction, mirroring
+/// `bark::onchain::WalletTxInfo`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi),
+    serde(rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct WalletTransaction {
+    pub txid: String,
+    /// The raw transaction, consensus-serialized as hex.
+    pub tx_hex: String,
+    /// Total fee paid by the transaction, when computable. `None` for
+    /// inbound or collaboratively-funded txs whose foreign prevouts the
+    /// wallet has not indexed.
+    pub onchain_fee_sats: Option<u64>,
+    /// Net change to the wallet's balance: received minus sent over
+    /// wallet-owned outputs.
+    pub balance_change_sats: i64,
+    /// `Some` if confirmed in a block, `None` if still in the mempool.
+    pub confirmation: Option<BlockRef>,
+    /// `true` when this tx spends a P2A fee anchor — i.e. it is a CPFP
+    /// child bumping the parent that created the anchor (exit fee txs).
+    pub is_cpfp: bool,
+}
+
+impl From<&bark::onchain::WalletTxInfo> for WalletTransaction {
+    fn from(info: &bark::onchain::WalletTxInfo) -> Self {
+        Self {
+            txid: info.txid.to_string(),
+            tx_hex: bitcoin::consensus::encode::serialize_hex(info.tx.as_ref()),
+            onchain_fee_sats: info.onchain_fees.map(|a| a.to_sat()),
+            balance_change_sats: info.balance_change.to_sat(),
+            confirmation: info.confirmation.as_ref().map(Into::into),
+            is_cpfp: info.is_cpfp,
+        }
+    }
+}
+
+/// An onchain UTXO known to the wallet, mirroring `bark::onchain::Utxo`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case", rename_all_fields = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum OnchainUtxo {
+    /// A standard wallet UTXO.
+    Local {
+        outpoint: OutPoint,
+        amount_sats: u64,
+        /// `None` if unconfirmed.
+        confirmation_height: Option<u32>,
+    },
+    /// A spendable unilateral-exit output claimed from a VTXO.
+    Exit {
+        vtxo_id: String,
+        amount_sats: u64,
+        /// Block height associated with the exit's validity window.
+        height: u32,
+    },
+}
+
+impl From<&bark::onchain::Utxo> for OnchainUtxo {
+    fn from(u: &bark::onchain::Utxo) -> Self {
+        match u {
+            bark::onchain::Utxo::Local(l) => Self::Local {
+                outpoint: OutPoint {
+                    txid: l.outpoint.txid.to_string(),
+                    vout: l.outpoint.vout,
+                },
+                amount_sats: l.amount.to_sat(),
+                confirmation_height: l.confirmation_height,
+            },
+            bark::onchain::Utxo::Exit(e) => Self::Exit {
+                vtxo_id: e.vtxo.id().to_string(),
+                amount_sats: e.vtxo.amount().to_sat(),
+                height: e.height,
+            },
+        }
+    }
+}
+
+// ============================================================================
 // PendingBoard
 // ============================================================================
 
@@ -526,6 +717,160 @@ impl From<BarkPendingBoard> for PendingBoard {
             vtxo_id: pb.vtxos.first().map(|v| v.to_string()).unwrap_or_default(),
             amount_sats: pb.amount.to_sat(),
             txid: pb.funding_tx.compute_txid().to_string(),
+        }
+    }
+}
+
+// ============================================================================
+// FeeSchedule
+// ============================================================================
+
+/// One tier of a PPM-by-expiry fee table.
+///
+/// The entry applies when a VTXO expires in at most `expiry_blocks_threshold`
+/// blocks and no other entry has a threshold between this one and the VTXO's
+/// actual expiry distance. Tables are sorted ascending by threshold.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct PpmExpiryFeeEntry {
+    pub expiry_blocks_threshold: u32,
+    /// Parts-per-million fee rate applied for this expiry period.
+    pub ppm: u64,
+}
+
+/// Fees for boarding onchain funds into the Ark.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct BoardFees {
+    pub min_fee_sats: u64,
+    pub base_fee_sats: u64,
+    /// Parts-per-million fee rate on the boarded amount.
+    pub ppm: u64,
+}
+
+/// Fees for offboarding VTXOs to an onchain address.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct OffboardFees {
+    pub base_fee_sats: u64,
+    /// Fixed number of virtual bytes charged on top of the output size.
+    pub fixed_additional_vb: u64,
+    pub ppm_expiry_table: Vec<PpmExpiryFeeEntry>,
+}
+
+/// Fees for refreshing VTXOs in a round.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct RefreshFees {
+    pub base_fee_sats: u64,
+    pub ppm_expiry_table: Vec<PpmExpiryFeeEntry>,
+}
+
+/// Fees for receiving over lightning.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct LightningReceiveFees {
+    pub base_fee_sats: u64,
+    /// Parts-per-million fee rate on the received amount.
+    pub ppm: u64,
+}
+
+/// Fees for sending over lightning.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct LightningSendFees {
+    pub min_fee_sats: u64,
+    pub base_fee_sats: u64,
+    pub ppm_expiry_table: Vec<PpmExpiryFeeEntry>,
+}
+
+/// The Ark server's complete fee schedule, mirroring `ark::fees::FeeSchedule`.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct FeeSchedule {
+    pub board: BoardFees,
+    pub offboard: OffboardFees,
+    pub refresh: RefreshFees,
+    pub lightning_receive: LightningReceiveFees,
+    pub lightning_send: LightningSendFees,
+}
+
+impl From<&ark::fees::FeeSchedule> for FeeSchedule {
+    fn from(f: &ark::fees::FeeSchedule) -> Self {
+        let table = |t: &[ark::fees::PpmExpiryFeeEntry]| {
+            t.iter()
+                .map(|e| PpmExpiryFeeEntry {
+                    expiry_blocks_threshold: e.expiry_blocks_threshold,
+                    ppm: e.ppm.0,
+                })
+                .collect()
+        };
+        Self {
+            board: BoardFees {
+                min_fee_sats: f.board.min_fee.to_sat(),
+                base_fee_sats: f.board.base_fee.to_sat(),
+                ppm: f.board.ppm.0,
+            },
+            offboard: OffboardFees {
+                base_fee_sats: f.offboard.base_fee.to_sat(),
+                fixed_additional_vb: f.offboard.fixed_additional_vb,
+                ppm_expiry_table: table(&f.offboard.ppm_expiry_table),
+            },
+            refresh: RefreshFees {
+                base_fee_sats: f.refresh.base_fee.to_sat(),
+                ppm_expiry_table: table(&f.refresh.ppm_expiry_table),
+            },
+            lightning_receive: LightningReceiveFees {
+                base_fee_sats: f.lightning_receive.base_fee.to_sat(),
+                ppm: f.lightning_receive.ppm.0,
+            },
+            lightning_send: LightningSendFees {
+                min_fee_sats: f.lightning_send.min_fee.to_sat(),
+                base_fee_sats: f.lightning_send.base_fee.to_sat(),
+                ppm_expiry_table: table(&f.lightning_send.ppm_expiry_table),
+            },
         }
     }
 }
@@ -556,8 +901,8 @@ pub struct ArkInfo {
     pub max_user_invoice_cltv_delta: u16,
     pub min_board_amount_sats: u64,
     pub ln_receive_anti_dos_required: bool,
-    /// Fee schedule as JSON string (contains board, offboard, refresh, lightning fees)
-    pub fee_schedule_json: String,
+    /// The server's fee schedule (board, offboard, refresh, lightning fees).
+    pub fee_schedule: FeeSchedule,
     /// Maximum exit depth (genesis chain length) allowed for a VTXO before the
     /// server refuses to cosign further OOR transactions spending it.
     pub max_vtxo_exit_depth: u16,
@@ -566,9 +911,6 @@ pub struct ArkInfo {
 impl From<&bark::ark::ArkInfo> for ArkInfo {
     fn from(info: &bark::ark::ArkInfo) -> Self {
         use bitcoin::hex::DisplayHex;
-
-        let fee_schedule_json =
-            serde_json::to_string(&info.fees).unwrap_or_else(|_| "{}".to_string());
 
         Self {
             network: match info.network {
@@ -590,7 +932,7 @@ impl From<&bark::ark::ArkInfo> for ArkInfo {
             max_user_invoice_cltv_delta: info.max_user_invoice_cltv_delta,
             min_board_amount_sats: info.min_board_amount.to_sat(),
             ln_receive_anti_dos_required: info.ln_receive_anti_dos_required,
-            fee_schedule_json,
+            fee_schedule: (&info.fees).into(),
             max_vtxo_exit_depth: info.max_vtxo_exit_depth,
         }
     }
@@ -602,6 +944,205 @@ impl From<&bark::ark::ArkInfo> for ArkInfo {
 
 use bark::exit::ExitProgressStatus as BarkExitProgressStatus;
 use bark::exit::ExitVtxo as BarkExitVtxo;
+
+/// Where an exit transaction was first seen, mirroring `bark::exit::ExitTxOrigin`.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "kebab-case", rename_all_fields = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ExitTxOrigin {
+    /// Broadcast by this wallet.
+    Wallet { confirmed_in: Option<BlockRef> },
+    /// Seen in the mempool.
+    Mempool,
+    /// Seen confirmed in a block.
+    Block { confirmed_in: BlockRef },
+}
+
+impl From<&bark::exit::ExitTxOrigin> for ExitTxOrigin {
+    fn from(o: &bark::exit::ExitTxOrigin) -> Self {
+        use bark::exit::ExitTxOrigin as B;
+        match o {
+            B::Wallet { confirmed_in } => Self::Wallet {
+                confirmed_in: confirmed_in.as_ref().map(Into::into),
+            },
+            B::Mempool => Self::Mempool,
+            B::Block { confirmed_in } => Self::Block {
+                confirmed_in: confirmed_in.into(),
+            },
+        }
+    }
+}
+
+/// Broadcast/confirmation status of one transaction in an exit chain,
+/// mirroring `bark::exit::ExitTxStatus`.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "kebab-case", rename_all_fields = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ExitTxStatus {
+    /// Inputs are still being verified.
+    VerifyInputs,
+    /// Waiting for the given input txids to confirm. Sorted for a stable
+    /// order (upstream keeps them in a set).
+    AwaitingInputConfirmation { txids: Vec<String> },
+    /// Ready for its CPFP child to be broadcast.
+    AwaitingCpfpBroadcast,
+    /// CPFP child broadcast; waiting for confirmation.
+    AwaitingConfirmation {
+        child_txid: String,
+        origin: ExitTxOrigin,
+    },
+    /// Confirmed in a block.
+    Confirmed {
+        child_txid: String,
+        block: BlockRef,
+        origin: ExitTxOrigin,
+    },
+}
+
+impl From<&bark::exit::ExitTxStatus> for ExitTxStatus {
+    fn from(s: &bark::exit::ExitTxStatus) -> Self {
+        use bark::exit::ExitTxStatus as B;
+        match s {
+            B::VerifyInputs => Self::VerifyInputs,
+            B::AwaitingInputConfirmation { txids } => {
+                let mut txids: Vec<String> = txids.iter().map(|t| t.to_string()).collect();
+                txids.sort_unstable();
+                Self::AwaitingInputConfirmation { txids }
+            }
+            B::AwaitingCpfpBroadcast => Self::AwaitingCpfpBroadcast,
+            B::AwaitingConfirmation { child_txid, origin } => Self::AwaitingConfirmation {
+                child_txid: child_txid.to_string(),
+                origin: origin.into(),
+            },
+            B::Confirmed { child_txid, block, origin } => Self::Confirmed {
+                child_txid: child_txid.to_string(),
+                block: block.into(),
+                origin: origin.into(),
+            },
+        }
+    }
+}
+
+/// One transaction in an exit's unilateral broadcast chain.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ExitTx {
+    pub txid: String,
+    pub status: ExitTxStatus,
+}
+
+impl From<&bark::exit::ExitTx> for ExitTx {
+    fn from(t: &bark::exit::ExitTx) -> Self {
+        Self {
+            txid: t.txid.to_string(),
+            status: (&t.status).into(),
+        }
+    }
+}
+
+/// State of a unilateral exit, mirroring `bark::exit::ExitState`.
+///
+/// Serde/TS tags match upstream's kebab-case serialization (`"start"`,
+/// `"processing"`, `"awaiting-delta"`, `"claimable"`, `"claim-in-progress"`,
+/// `"claimed"`, `"vtxo-already-spent"`, `"canceled"`), with camelCase fields.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "kebab-case", rename_all_fields = "camelCase")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ExitState {
+    /// The exit was requested at the given tip.
+    Start { tip_height: u32 },
+    /// The exit transaction chain is being broadcast and confirmed.
+    Processing {
+        tip_height: u32,
+        transactions: Vec<ExitTx>,
+    },
+    /// Fully confirmed; waiting out the exit delta until claimable.
+    AwaitingDelta {
+        tip_height: u32,
+        confirmed_block: BlockRef,
+        claimable_height: u32,
+    },
+    /// The exit output can be claimed.
+    Claimable {
+        tip_height: u32,
+        claimable_since: BlockRef,
+        last_scanned_block: Option<BlockRef>,
+    },
+    /// A claim transaction has been broadcast.
+    ClaimInProgress {
+        tip_height: u32,
+        claimable_since: BlockRef,
+        claim_txid: String,
+    },
+    /// Terminal: the exit output was claimed (or spent deeper in the tree).
+    Claimed {
+        tip_height: u32,
+        txid: String,
+        block: BlockRef,
+    },
+    /// Terminal: the VTXO was already spent offchain, so the exit cannot
+    /// proceed.
+    VtxoAlreadySpent { tip_height: u32 },
+    /// Resumable: the user canceled the exit before its final transaction
+    /// was broadcast. The VTXO stays spendable.
+    Canceled { tip_height: u32 },
+}
+
+impl From<&bark::exit::ExitState> for ExitState {
+    fn from(s: &bark::exit::ExitState) -> Self {
+        use bark::exit::ExitState as B;
+        match s {
+            B::Start(v) => Self::Start { tip_height: v.tip_height },
+            B::Processing(v) => Self::Processing {
+                tip_height: v.tip_height,
+                transactions: v.transactions.iter().map(Into::into).collect(),
+            },
+            B::AwaitingDelta(v) => Self::AwaitingDelta {
+                tip_height: v.tip_height,
+                confirmed_block: (&v.confirmed_block).into(),
+                claimable_height: v.claimable_height,
+            },
+            B::Claimable(v) => Self::Claimable {
+                tip_height: v.tip_height,
+                claimable_since: (&v.claimable_since).into(),
+                last_scanned_block: v.last_scanned_block.as_ref().map(Into::into),
+            },
+            B::ClaimInProgress(v) => Self::ClaimInProgress {
+                tip_height: v.tip_height,
+                claimable_since: (&v.claimable_since).into(),
+                claim_txid: v.claim_txid.to_string(),
+            },
+            B::Claimed(v) => Self::Claimed {
+                tip_height: v.tip_height,
+                txid: v.txid.to_string(),
+                block: (&v.block).into(),
+            },
+            B::VtxoAlreadySpent(v) => Self::VtxoAlreadySpent { tip_height: v.tip_height },
+            B::Canceled(v) => Self::Canceled { tip_height: v.tip_height },
+        }
+    }
+}
 
 /// A VTXO that is being unilaterally exited
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -615,7 +1156,7 @@ use bark::exit::ExitVtxo as BarkExitVtxo;
 pub struct ExitVtxo {
     pub vtxo_id: String,
     pub amount_sats: u64,
-    pub state: String,
+    pub state: ExitState,
     pub is_claimable: bool,
 }
 
@@ -624,7 +1165,7 @@ impl From<&BarkExitVtxo> for ExitVtxo {
         Self {
             vtxo_id: ev.id().to_string(),
             amount_sats: ev.amount().to_sat(),
-            state: format!("{:?}", ev.state()),
+            state: ev.state().into(),
             is_claimable: ev.is_claimable(),
         }
     }
@@ -641,7 +1182,7 @@ impl From<&BarkExitVtxo> for ExitVtxo {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ExitProgressStatus {
     pub vtxo_id: String,
-    pub state: String,
+    pub state: ExitState,
     pub error: Option<String>,
 }
 
@@ -649,7 +1190,7 @@ impl From<BarkExitProgressStatus> for ExitProgressStatus {
     fn from(eps: BarkExitProgressStatus) -> Self {
         Self {
             vtxo_id: eps.vtxo_id.to_string(),
-            state: format!("{:?}", eps.state),
+            state: (&eps.state).into(),
             error: eps.error.map(|e| e.to_string()),
         }
     }
@@ -680,8 +1221,8 @@ pub struct ExitClaimTransaction {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ExitTransactionStatus {
     pub vtxo_id: String,
-    pub state: String,
-    pub history: Option<Vec<String>>,
+    pub state: ExitState,
+    pub history: Option<Vec<ExitState>>,
     pub transaction_count: u32,
 }
 
@@ -689,10 +1230,10 @@ impl From<bark::exit::ExitTransactionStatus> for ExitTransactionStatus {
     fn from(ets: bark::exit::ExitTransactionStatus) -> Self {
         Self {
             vtxo_id: ets.vtxo_id.to_string(),
-            state: format!("{:?}", ets.state),
+            state: (&ets.state).into(),
             history: ets
                 .history
-                .map(|h| h.iter().map(|s| format!("{:?}", s)).collect()),
+                .map(|h| h.iter().map(Into::into).collect()),
             transaction_count: ets.transactions.len() as u32,
         }
     }
@@ -852,7 +1393,7 @@ pub struct OutPoint {
 }
 
 /// Reference to a block in the blockchain
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
@@ -863,6 +1404,15 @@ pub struct OutPoint {
 pub struct BlockRef {
     pub height: u32,
     pub hash: String,
+}
+
+impl From<&bark_bitcoin_ext::BlockRef> for BlockRef {
+    fn from(br: &bark_bitcoin_ext::BlockRef) -> Self {
+        Self {
+            height: br.height,
+            hash: br.hash.to_string(),
+        }
+    }
 }
 
 /// Parameters for creating a CPFP (Child Pays For Parent) transaction
@@ -918,5 +1468,295 @@ impl From<bark::WalletNotification> for WalletNotification {
             }
             bark::WalletNotification::ChannelLagging => WalletNotification::ChannelLagging,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    fn txid(byte: u8) -> bitcoin::Txid {
+        bitcoin::Txid::from_str(&hex::encode([byte; 32])).unwrap()
+    }
+
+    fn block_ref(height: u32, byte: u8) -> bark_bitcoin_ext::BlockRef {
+        bark_bitcoin_ext::BlockRef {
+            height,
+            hash: bitcoin::BlockHash::from_str(&hex::encode([byte; 32])).unwrap(),
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // VtxoState (item: locked-VTXO lock reasons)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn vtxo_state_conversion_carries_lock_holder() {
+        use bark::movement::MovementId;
+        use bark::vtxo::{VtxoLockHolder as B, VtxoState as BS};
+
+        let cases: Vec<(BS, VtxoState)> = vec![
+            (BS::Spendable, VtxoState::Spendable),
+            (BS::Spent, VtxoState::Spent),
+            (BS::Exited, VtxoState::Exited),
+            (
+                BS::Locked { holder: None },
+                VtxoState::Locked { holder: None },
+            ),
+            (
+                BS::Locked { holder: Some(B::Movement { id: MovementId(7) }) },
+                VtxoState::Locked {
+                    holder: Some(VtxoLockHolder::Movement { id: 7 }),
+                },
+            ),
+            (
+                BS::Locked { holder: Some(B::Action { id: "ln-pay:abc".into() }) },
+                VtxoState::Locked {
+                    holder: Some(VtxoLockHolder::Action { id: "ln-pay:abc".into() }),
+                },
+            ),
+        ];
+        for (upstream, expected) in cases {
+            assert_eq!(VtxoState::from(&upstream), expected);
+        }
+    }
+
+    #[test]
+    fn vtxo_state_serde_tags_match_upstream() {
+        let locked = VtxoState::Locked {
+            holder: Some(VtxoLockHolder::Movement { id: 42 }),
+        };
+        let json = serde_json::to_value(&locked).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "type": "locked",
+                "holder": { "type": "movement", "id": 42 }
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(&VtxoState::Spendable).unwrap(),
+            serde_json::json!({ "type": "spendable" })
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // ExitState (item: exit state block refs / txids)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn exit_state_conversion_carries_payloads() {
+        use bark::exit as be;
+
+        let claimed: ExitState = (&be::ExitState::Claimed(be::ExitClaimedState {
+            tip_height: 900,
+            txid: txid(0xaa),
+            block: block_ref(890, 0xbb),
+        }))
+            .into();
+        assert_eq!(
+            claimed,
+            ExitState::Claimed {
+                tip_height: 900,
+                txid: hex::encode([0xaa; 32]),
+                block: BlockRef { height: 890, hash: hex::encode([0xbb; 32]) },
+            }
+        );
+
+        let awaiting: ExitState = (&be::ExitState::AwaitingDelta(be::ExitAwaitingDeltaState {
+            tip_height: 100,
+            confirmed_block: block_ref(95, 0xcc),
+            claimable_height: 107,
+        }))
+            .into();
+        assert_eq!(
+            awaiting,
+            ExitState::AwaitingDelta {
+                tip_height: 100,
+                confirmed_block: BlockRef { height: 95, hash: hex::encode([0xcc; 32]) },
+                claimable_height: 107,
+            }
+        );
+    }
+
+    #[test]
+    fn exit_state_awaiting_inputs_txids_are_sorted() {
+        use bark::exit as be;
+        use std::collections::HashSet;
+
+        let upstream = be::ExitState::Processing(be::ExitProcessingState {
+            tip_height: 5,
+            transactions: vec![be::ExitTx {
+                txid: txid(0x01),
+                status: be::ExitTxStatus::AwaitingInputConfirmation {
+                    txids: HashSet::from([txid(0xff), txid(0x02), txid(0x0a)]),
+                },
+            }],
+        });
+        let state: ExitState = (&upstream).into();
+        let ExitState::Processing { transactions, .. } = state else {
+            panic!("expected processing");
+        };
+        let ExitTxStatus::AwaitingInputConfirmation { txids } = &transactions[0].status else {
+            panic!("expected awaiting-input-confirmation");
+        };
+        let mut sorted = txids.clone();
+        sorted.sort_unstable();
+        assert_eq!(txids, &sorted);
+        assert_eq!(txids.len(), 3);
+    }
+
+    #[test]
+    fn exit_state_serde_tags_match_bark_web_domain() {
+        // bark-web's domain type expects kebab-case `type` tags with
+        // camelCase fields (same shape barkd serves). Guard the contract.
+        let state = ExitState::ClaimInProgress {
+            tip_height: 12,
+            claimable_since: BlockRef { height: 10, hash: "ab".into() },
+            claim_txid: "deadbeef".into(),
+        };
+        assert_eq!(
+            serde_json::to_value(&state).unwrap(),
+            serde_json::json!({
+                "type": "claim-in-progress",
+                "tipHeight": 12,
+                "claimableSince": { "height": 10, "hash": "ab" },
+                "claimTxid": "deadbeef"
+            })
+        );
+
+        let state = ExitState::VtxoAlreadySpent { tip_height: 3 };
+        assert_eq!(
+            serde_json::to_value(&state).unwrap(),
+            serde_json::json!({ "type": "vtxo-already-spent", "tipHeight": 3 })
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // FeeSchedule (item: fee schedule as raw JSON)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn fee_schedule_conversion_and_serde_shape() {
+        use ark::fees as af;
+        use bitcoin::Amount;
+
+        let upstream = af::FeeSchedule {
+            board: af::BoardFees {
+                min_fee: Amount::from_sat(100),
+                base_fee: Amount::from_sat(10),
+                ppm: af::PpmFeeRate(4000),
+            },
+            offboard: af::OffboardFees {
+                base_fee: Amount::from_sat(20),
+                fixed_additional_vb: 110,
+                ppm_expiry_table: vec![af::PpmExpiryFeeEntry {
+                    expiry_blocks_threshold: 144,
+                    ppm: af::PpmFeeRate(500),
+                }],
+            },
+            refresh: af::RefreshFees {
+                base_fee: Amount::from_sat(30),
+                ppm_expiry_table: vec![
+                    af::PpmExpiryFeeEntry {
+                        expiry_blocks_threshold: 144,
+                        ppm: af::PpmFeeRate(100),
+                    },
+                    af::PpmExpiryFeeEntry {
+                        expiry_blocks_threshold: 288,
+                        ppm: af::PpmFeeRate(200),
+                    },
+                ],
+            },
+            lightning_receive: af::LightningReceiveFees {
+                base_fee: Amount::from_sat(40),
+                ppm: af::PpmFeeRate(600),
+            },
+            lightning_send: af::LightningSendFees {
+                min_fee: Amount::from_sat(50),
+                base_fee: Amount::from_sat(5),
+                ppm_expiry_table: vec![],
+            },
+        };
+
+        let ffi: FeeSchedule = (&upstream).into();
+        assert_eq!(ffi.board.min_fee_sats, 100);
+        assert_eq!(ffi.board.ppm, 4000);
+        assert_eq!(ffi.offboard.fixed_additional_vb, 110);
+        assert_eq!(ffi.refresh.ppm_expiry_table.len(), 2);
+        assert_eq!(ffi.refresh.ppm_expiry_table[1].expiry_blocks_threshold, 288);
+        assert_eq!(ffi.refresh.ppm_expiry_table[1].ppm, 200);
+        assert_eq!(ffi.lightning_receive.ppm, 600);
+        assert_eq!(ffi.lightning_send.min_fee_sats, 50);
+        assert!(ffi.lightning_send.ppm_expiry_table.is_empty());
+
+        // Field naming contract for the wasm surface.
+        let json = serde_json::to_value(&ffi).unwrap();
+        assert_eq!(json["board"]["minFeeSats"], 100);
+        assert_eq!(json["refresh"]["ppmExpiryTable"][0]["expiryBlocksThreshold"], 144);
+        assert_eq!(json["lightningReceive"]["ppm"], 600);
+        assert_eq!(json["lightningSend"]["baseFeeSats"], 5);
+    }
+
+    // ------------------------------------------------------------------
+    // Onchain data (item: on-chain data, CPFP detection, raw tx hex)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn wallet_transaction_conversion_roundtrips_tx_hex() {
+        use bitcoin::absolute::LockTime;
+        use bitcoin::transaction::Version;
+        use std::sync::Arc;
+
+        let tx = bitcoin::Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![],
+            output: vec![bitcoin::TxOut {
+                value: bitcoin::Amount::from_sat(1234),
+                script_pubkey: bitcoin::ScriptBuf::new(),
+            }],
+        };
+        let info = bark::onchain::WalletTxInfo {
+            txid: tx.compute_txid(),
+            tx: Arc::new(tx.clone()),
+            onchain_fees: Some(bitcoin::Amount::from_sat(200)),
+            balance_change: bitcoin::SignedAmount::from_sat(-1434),
+            confirmation: Some(block_ref(500, 0x11)),
+            is_cpfp: true,
+        };
+
+        let ffi: WalletTransaction = (&info).into();
+        assert_eq!(ffi.txid, tx.compute_txid().to_string());
+        assert_eq!(ffi.onchain_fee_sats, Some(200));
+        assert_eq!(ffi.balance_change_sats, -1434);
+        assert!(ffi.is_cpfp);
+        assert_eq!(ffi.confirmation.as_ref().unwrap().height, 500);
+
+        // The hex must decode back to the same transaction.
+        let decoded: bitcoin::Transaction =
+            bitcoin::consensus::encode::deserialize_hex(&ffi.tx_hex).unwrap();
+        assert_eq!(decoded.compute_txid(), tx.compute_txid());
+    }
+
+    #[test]
+    fn onchain_utxo_local_conversion_and_tags() {
+        let upstream = bark::onchain::Utxo::Local(bark::onchain::LocalUtxo {
+            outpoint: bitcoin::OutPoint { txid: txid(0x33), vout: 1 },
+            amount: bitcoin::Amount::from_sat(5000),
+            confirmation_height: None,
+        });
+        let ffi: OnchainUtxo = (&upstream).into();
+        let json = serde_json::to_value(&ffi).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "type": "local",
+                "outpoint": { "txid": hex::encode([0x33; 32]), "vout": 1 },
+                "amountSats": 5000,
+                "confirmationHeight": null
+            })
+        );
     }
 }

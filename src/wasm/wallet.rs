@@ -54,6 +54,30 @@ pub struct PayLightningOfferArgs {
 #[derive(Serialize, Deserialize, Tsify)]
 #[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
+pub struct PayLightningAddressArgs {
+    pub lightningAddress: String,
+    pub amountSats: u64,
+    #[tsify(optional)]
+    pub comment: Option<String>,
+    #[tsify(optional)]
+    pub wait: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PayLnurlArgs {
+    pub lnurl: String,
+    pub amountSats: u64,
+    #[tsify(optional)]
+    pub comment: Option<String>,
+    #[tsify(optional)]
+    pub wait: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
 pub struct Bolt11InvoiceArgs {
     pub amountSats: u64,
     #[tsify(optional)]
@@ -463,6 +487,44 @@ impl Wallet {
         args: PayLightningOfferArgs,
     ) -> Result<LightningSendStatus, JsError> {
         Ok(self.core.pay_lightning_offer(args.offer, args.amountSats, args.wait.unwrap_or(false)).await?)
+    }
+
+    /// Pay to a Lightning Address (`user@domain`), resolved via LNURL-pay.
+    ///
+    /// The LNURL endpoint is fetched with the browser's `fetch`, so it must
+    /// allow cross-origin requests (and the page's CSP `connect-src` must
+    /// permit it).
+    #[wasm_bindgen(js_name = payLightningAddress)]
+    pub async fn pay_lightning_address(
+        &self,
+        args: PayLightningAddressArgs,
+    ) -> Result<LightningSendStatus, JsError> {
+        Ok(self
+            .core
+            .pay_lightning_address(
+                args.lightningAddress,
+                args.amountSats,
+                args.comment,
+                args.wait.unwrap_or(false),
+            )
+            .await?)
+    }
+
+    /// Pay a raw LNURL-pay link (`lnurl1…`). Errors if the link decodes to a
+    /// non-pay LNURL (auth, withdraw, channel).
+    ///
+    /// Same cross-origin caveat as `payLightningAddress`.
+    #[wasm_bindgen(js_name = payLnurl)]
+    pub async fn pay_lnurl(&self, args: PayLnurlArgs) -> Result<LightningSendStatus, JsError> {
+        Ok(self
+            .core
+            .pay_lnurl(
+                args.lnurl,
+                args.amountSats,
+                args.comment,
+                args.wait.unwrap_or(false),
+            )
+            .await?)
     }
 
     #[wasm_bindgen(js_name = checkLightningPayment)]

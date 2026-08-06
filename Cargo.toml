@@ -1,6 +1,6 @@
 [package]
 name = "bark-ffi"
-version = "0.19.0+bark-0.6.0.uniffi-0.31.1"
+version = "0.20.0+bark-0.6.0.uniffi-0.31.1"
 edition = "2021"
 license = "MIT"
 authors = ["Team Second <hello@second.tech>"]
@@ -16,7 +16,6 @@ default = ["uniffi"]
 
 uniffi = [
     "dep:uniffi",
-    "dep:lnurl-rs",
     "dep:rusqlite",
     "dep:once_cell",
     "dep:tokio-util",
@@ -81,7 +80,6 @@ futures-util = "0.3"
 
 # uniffi-only optional deps
 uniffi = { version = "=0.31.1", features = ["cli", "tokio"], optional = true }
-lnurl-rs = { version = "0.10.0", features = ["async", "async-https-rustls"], default-features = false, optional = true }
 rusqlite = { version = "0.31.0", features = ["bundled", "chrono"], optional = true }
 once_cell = { version = "1.20", optional = true }
 tokio-util = { version = "0.7.18", optional = true }

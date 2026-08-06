@@ -185,7 +185,7 @@ dependencies = [
 
 [[package]]
 name = "bark-ffi"
-version = "0.19.0+bark-0.6.0.uniffi-0.31.1"
+version = "0.20.0+bark-0.6.0.uniffi-0.31.1"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -200,7 +200,6 @@ dependencies = [
  "gloo-timers",
  "hex",
  "lightning-invoice",
- "lnurl-rs",
  "log",
  "once_cell",
  "rusqlite",

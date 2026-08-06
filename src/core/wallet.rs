@@ -414,6 +414,55 @@ impl Wallet {
         self.lightning_send_status(resolved).await
     }
 
+    /// Pay to a Lightning Address (`user@domain`). Resolves the address to a
+    /// BOLT11 invoice via LNURL-pay and pays it. `comment` is forwarded as
+    /// the LNURL-pay comment field; the endpoint may reject or truncate it.
+    ///
+    /// Available on every target: `bark` resolves LNURL over its HTTP client,
+    /// which on wasm is the browser's `fetch` — so in a browser the endpoint
+    /// must allow cross-origin requests, or this fails with a network error.
+    pub async fn pay_lightning_address(
+        &self,
+        lightning_address: String,
+        amount_sats: u64,
+        comment: Option<String>,
+        wait: bool,
+    ) -> Result<types::LightningSendStatus, Error> {
+        let addr: bark::lnurllib::lightning_address::LightningAddress = lightning_address
+            .trim()
+            .parse()
+            .context("invalid lightning address")?;
+        let amount = bitcoin::Amount::from_sat(amount_sats);
+        let resolved = self
+            .inner
+            .pay_lightning_address(&addr, amount, comment.as_deref(), wait)
+            .await?;
+        self.lightning_send_status(resolved).await
+    }
+
+    /// Pay a raw LNURL-pay link (`lnurl1…`). Resolves the LNURL-pay endpoint
+    /// to a BOLT11 invoice and pays it. Errors if the link decodes to a
+    /// non-pay LNURL (auth, withdraw, channel).
+    ///
+    /// Same cross-origin caveat as [`Self::pay_lightning_address`] in
+    /// browsers.
+    pub async fn pay_lnurl(
+        &self,
+        lnurl: String,
+        amount_sats: u64,
+        comment: Option<String>,
+        wait: bool,
+    ) -> Result<types::LightningSendStatus, Error> {
+        let lnurl: bark::lnurllib::lnurl::LnUrl =
+            lnurl.trim().parse().context("invalid lnurl")?;
+        let amount = bitcoin::Amount::from_sat(amount_sats);
+        let resolved = self
+            .inner
+            .pay_lnurl(&lnurl, amount, comment.as_deref(), wait)
+            .await?;
+        self.lightning_send_status(resolved).await
+    }
+
     /// Resolve the [`types::LightningSendStatus`] for a just-initiated send.
     /// `bark` now returns only the resolved [`Invoice`] from `pay_lightning_*`,
     /// so the send state is read back from the state machine by payment hash.
