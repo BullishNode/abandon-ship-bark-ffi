@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use lnurl::lightning_address::LightningAddress;
-use lnurl::lnurl::LnUrl;
 use tokio_util::sync::CancellationToken;
 
 use crate::{types, Error};
@@ -276,7 +274,7 @@ impl Wallet {
         run_async(async move { core.pay_lightning_invoice(invoice, amount_sats, wait).await }).await
     }
 
-    /// Pay to a Lightning Address (LNURL). UniFFI-only — lnurl-rs is not wasm-compatible.
+    /// Pay to a Lightning Address (`user@domain`), resolved via LNURL-pay.
     #[uniffi::method(default(wait = false))]
     pub async fn pay_lightning_address(
         &self,
@@ -286,18 +284,14 @@ impl Wallet {
         wait: bool,
     ) -> Result<types::LightningSendStatus, Error> {
         let core = self.core.clone();
-        let inner = self.inner.clone();
         run_async(async move {
-            let addr: LightningAddress = lightning_address.parse()
-                .context("invalid lightning address")?;
-            let amount = bitcoin::Amount::from_sat(amount_sats);
-            let resolved = inner.pay_lightning_address(&addr, amount, comment.as_deref(), wait).await?;
-            core.lightning_send_status(resolved).await
+            core.pay_lightning_address(lightning_address, amount_sats, comment, wait)
+                .await
         })
         .await
     }
 
-    /// Pay a raw LNURL-pay link (`lnurl1…`). UniFFI-only — lnurl-rs is not wasm-compatible.
+    /// Pay a raw LNURL-pay link (`lnurl1…`).
     ///
     /// Resolves the LNURL-pay endpoint to a BOLT11 invoice and pays it. Errors
     /// if the link decodes to a non-pay LNURL (auth, withdraw, channel).
@@ -310,14 +304,7 @@ impl Wallet {
         wait: bool,
     ) -> Result<types::LightningSendStatus, Error> {
         let core = self.core.clone();
-        let inner = self.inner.clone();
-        run_async(async move {
-            let lnurl: LnUrl = lnurl.parse().context("invalid lnurl")?;
-            let amount = bitcoin::Amount::from_sat(amount_sats);
-            let resolved = inner.pay_lnurl(&lnurl, amount, comment.as_deref(), wait).await?;
-            core.lightning_send_status(resolved).await
-        })
-        .await
+        run_async(async move { core.pay_lnurl(lnurl, amount_sats, comment, wait).await }).await
     }
 
     #[uniffi::method(default(wait = false))]

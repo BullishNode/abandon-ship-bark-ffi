@@ -67,4 +67,27 @@ impl OnchainWallet {
             .await
             .map_err(bark_err)
     }
+
+    /// Current chain tip height from the wallet's chain source.
+    #[wasm_bindgen(js_name = tipHeight)]
+    pub async fn tip_height(&self) -> Result<u32, JsError> {
+        self.inner.tip_height().await.map_err(bark_err)
+    }
+
+    /// Cached network fee-rate estimates from the wallet's chain source.
+    #[wasm_bindgen(js_name = feeRates)]
+    pub async fn fee_rates(&self) -> Result<crate::types::FeeRates, JsError> {
+        self.inner.fee_rates().await.map_err(bark_err)
+    }
+
+    /// Every wallet transaction with fee, balance change, confirmation and
+    /// CPFP flag. Requires a prior `sync` to be meaningful.
+    pub async fn transactions(&self) -> Result<Vec<crate::types::WalletTransaction>, JsError> {
+        self.inner.transactions().await.map_err(bark_err)
+    }
+
+    /// The wallet's unspent outputs. Requires a prior `sync` to be meaningful.
+    pub async fn utxos(&self) -> Result<Vec<crate::types::OnchainUtxo>, JsError> {
+        self.inner.utxos().await.map_err(bark_err)
+    }
 }

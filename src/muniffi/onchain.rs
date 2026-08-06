@@ -123,6 +123,59 @@ impl OnchainWallet {
             }
         }
     }
+
+    /// Current chain tip height from the wallet's chain source.
+    pub async fn tip_height(&self) -> Result<u32, Error> {
+        match &self.inner {
+            OnchainWalletInner::Bdk(core) => {
+                let core = core.clone();
+                run_async(async move { core.tip_height().await }).await
+            }
+            OnchainWalletInner::Callback(_) => {
+                Err("tip_height() not supported for callback wallets".into())
+            }
+        }
+    }
+
+    /// Cached network fee-rate estimates from the wallet's chain source.
+    pub async fn fee_rates(&self) -> Result<crate::types::FeeRates, Error> {
+        match &self.inner {
+            OnchainWalletInner::Bdk(core) => {
+                let core = core.clone();
+                run_async(async move { core.fee_rates().await }).await
+            }
+            OnchainWalletInner::Callback(_) => {
+                Err("fee_rates() not supported for callback wallets".into())
+            }
+        }
+    }
+
+    /// Every wallet transaction with fee, balance change, confirmation and
+    /// CPFP flag. Requires a prior `sync` to be meaningful.
+    pub async fn transactions(&self) -> Result<Vec<crate::types::WalletTransaction>, Error> {
+        match &self.inner {
+            OnchainWalletInner::Bdk(core) => {
+                let core = core.clone();
+                run_async(async move { core.transactions().await }).await
+            }
+            OnchainWalletInner::Callback(_) => {
+                Err("transactions() not supported for callback wallets".into())
+            }
+        }
+    }
+
+    /// The wallet's unspent outputs. Requires a prior `sync` to be meaningful.
+    pub async fn utxos(&self) -> Result<Vec<crate::types::OnchainUtxo>, Error> {
+        match &self.inner {
+            OnchainWalletInner::Bdk(core) => {
+                let core = core.clone();
+                run_async(async move { core.utxos().await }).await
+            }
+            OnchainWalletInner::Callback(_) => {
+                Err("utxos() not supported for callback wallets".into())
+            }
+        }
+    }
 }
 
 impl OnchainWallet {

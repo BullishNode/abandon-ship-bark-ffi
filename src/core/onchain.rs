@@ -11,7 +11,7 @@ use log::info;
 
 use crate::config::Config;
 use crate::error::Error;
-use crate::types::OnchainBalance;
+use crate::types::{self, OnchainBalance};
 use crate::Network;
 
 /// BDK-based onchain Bitcoin wallet for boarding and exits.
@@ -111,6 +111,34 @@ impl OnchainWallet {
         let txid = w.send(&self.chain, addr, amount, fee_rate).await.context("Send failed")?;
 
         Ok(txid.to_string())
+    }
+
+    /// Current chain tip height, from the wallet's chain source (cached
+    /// upstream with a short TTL).
+    pub async fn tip_height(&self) -> Result<u32, Error> {
+        let height = self.chain.tip().await.context("Failed to fetch tip")?;
+        Ok(height)
+    }
+
+    /// Cached network fee-rate estimates from the wallet's chain source.
+    pub async fn fee_rates(&self) -> Result<types::FeeRates, Error> {
+        Ok(self.chain.fee_rates().await.into())
+    }
+
+    /// Every wallet transaction with fee, balance change, confirmation and
+    /// CPFP flag. Requires a prior `sync` to be meaningful.
+    pub async fn transactions(&self) -> Result<Vec<types::WalletTransaction>, Error> {
+        let w = self.wallet.read().await;
+        let infos = w
+            .list_transaction_infos()
+            .context("Failed to list transactions")?;
+        Ok(infos.iter().map(Into::into).collect())
+    }
+
+    /// The wallet's unspent outputs. Requires a prior `sync` to be meaningful.
+    pub async fn utxos(&self) -> Result<Vec<types::OnchainUtxo>, Error> {
+        let w = self.wallet.read().await;
+        Ok(w.utxos().iter().map(Into::into).collect())
     }
 
     pub(crate) fn inner(&self) -> Arc<RwLock<BarkOnchainWallet>> {
