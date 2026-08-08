@@ -1,6 +1,6 @@
 [package]
 name = "bark-ffi"
-version = "0.20.0+bark-0.6.0.uniffi-0.31.1"
+version = "0.20.1+bark-0.6.1.uniffi-0.31.1"
 edition = "2021"
 license = "MIT"
 authors = ["Team Second <hello@second.tech>"]
@@ -45,19 +45,19 @@ wasm-web = [
 [dependencies.ark]
 package = "ark-lib"
 git = "https://gitlab.com/ark-bitcoin/bark"
-rev = "bark-0.6.0"
+rev = "bark-0.6.1"
 default-features = false
 
 [dependencies.bark]
 package = "bark-wallet"
 git = "https://gitlab.com/ark-bitcoin/bark"
-rev = "bark-0.6.0"
+rev = "bark-0.6.1"
 default-features = false
 
 [dependencies.bark-bitcoin-ext]
 package = "bark-bitcoin-ext"
 git = "https://gitlab.com/ark-bitcoin/bark"
-rev = "bark-0.6.0"
+rev = "bark-0.6.1"
 default-features = false
 
 [dependencies]
