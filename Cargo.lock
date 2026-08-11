@@ -185,7 +185,7 @@ dependencies = [
 
 [[package]]
 name = "bark-ffi"
-version = "0.20.1+bark-0.6.1.uniffi-0.31.1"
+version = "0.21.0+bark-0.6.1.uniffi-0.31.1"
 dependencies = [
  "anyhow",
  "ark-lib",

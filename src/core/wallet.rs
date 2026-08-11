@@ -355,16 +355,17 @@ impl Wallet {
             .context("invalid address")?
             .assume_checked();
 
-        let status = self.inner.offboard_all(addr).await?;
-        let round_id = format!("{:?}", status);
-        Ok(types::OffboardResult { round_id })
+        let txid = self.inner.offboard_all(addr).await?;
+        Ok(types::OffboardResult {
+            txid: txid.to_string(),
+        })
     }
 
     pub async fn offboard_vtxos(
         &self,
         vtxo_ids: Vec<String>,
         bitcoin_address: String,
-    ) -> Result<String, Error> {
+    ) -> Result<types::OffboardResult, Error> {
         let addr = bitcoin_address
             .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
             .context("invalid address")?
@@ -375,8 +376,10 @@ impl Wallet {
             .map(|id| id.parse::<VtxoId>().context("invalid vtxo id"))
             .collect();
 
-        let status = self.inner.offboard_vtxos(ids?, addr).await?;
-        Ok(format!("{:?}", status))
+        let txid = self.inner.offboard_vtxos(ids?, addr).await?;
+        Ok(types::OffboardResult {
+            txid: txid.to_string(),
+        })
     }
 
     // ------------------------------------------------------------------------
