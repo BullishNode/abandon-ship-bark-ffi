@@ -467,7 +467,7 @@ impl Wallet {
         &self,
         vtxoIds: Vec<String>,
         bitcoinAddress: String,
-    ) -> Result<String, JsError> {
+    ) -> Result<OffboardResult, JsError> {
         Ok(self.core.offboard_vtxos(vtxoIds, bitcoinAddress).await?)
     }
 

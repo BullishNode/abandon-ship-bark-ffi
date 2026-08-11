@@ -254,7 +254,7 @@ impl Wallet {
         &self,
         vtxo_ids: Vec<String>,
         bitcoin_address: String,
-    ) -> Result<String, Error> {
+    ) -> Result<types::OffboardResult, Error> {
         let core = self.core.clone();
         run_async(async move { core.offboard_vtxos(vtxo_ids, bitcoin_address).await }).await
     }

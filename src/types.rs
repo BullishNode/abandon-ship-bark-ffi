@@ -257,7 +257,7 @@ pub struct LightningInvoice {
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct OffboardResult {
-    pub round_id: String,
+    pub txid: String,
 }
 
 // ============================================================================
