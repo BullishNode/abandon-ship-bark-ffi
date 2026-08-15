@@ -125,7 +125,9 @@ impl From<BarkBalance> for Balance {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi)
+    // Both directions: read back off `Vtxo.state`, and passed in when
+    // locking or unlocking.
+    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum VtxoLockHolder {
@@ -141,6 +143,17 @@ impl From<&bark::vtxo::VtxoLockHolder> for VtxoLockHolder {
         match h {
             bark::vtxo::VtxoLockHolder::Action { id } => Self::Action { id: id.clone() },
             bark::vtxo::VtxoLockHolder::Movement { id } => Self::Movement { id: id.0 },
+        }
+    }
+}
+
+impl From<VtxoLockHolder> for bark::vtxo::VtxoLockHolder {
+    fn from(h: VtxoLockHolder) -> Self {
+        match h {
+            VtxoLockHolder::Action { id } => Self::Action { id },
+            VtxoLockHolder::Movement { id } => Self::Movement {
+                id: bark::movement::MovementId::new(id),
+            },
         }
     }
 }
@@ -1144,6 +1157,103 @@ impl From<&bark::exit::ExitState> for ExitState {
     }
 }
 
+/// Lightweight discriminator for [`ExitState`], mirroring
+/// `bark::exit::ExitStateKind`.
+///
+/// Carries no payload — use it where only the variant matters (e.g. reporting
+/// which state blocked a cancellation). Serde/TS tags match upstream's
+/// kebab-case serialization.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ExitStateKind {
+    Start,
+    Processing,
+    AwaitingDelta,
+    Claimable,
+    ClaimInProgress,
+    Claimed,
+    VtxoAlreadySpent,
+    Canceled,
+}
+
+impl From<bark::exit::ExitStateKind> for ExitStateKind {
+    fn from(k: bark::exit::ExitStateKind) -> Self {
+        use bark::exit::ExitStateKind as B;
+        match k {
+            B::Start => Self::Start,
+            B::Processing => Self::Processing,
+            B::AwaitingDelta => Self::AwaitingDelta,
+            B::Claimable => Self::Claimable,
+            B::ClaimInProgress => Self::ClaimInProgress,
+            B::Claimed => Self::Claimed,
+            B::VtxoAlreadySpent => Self::VtxoAlreadySpent,
+            B::Canceled => Self::Canceled,
+        }
+    }
+}
+
+/// Why a [`Wallet::cancel_exit`](crate::core::Wallet::cancel_exit) did not
+/// cancel the exit.
+///
+/// These are the *expected* negative outcomes of asking to cancel, not faults:
+/// each is a normal state the exit can legitimately be in. Genuine failures
+/// (database, chain source unreachable) still surface as `Err`.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ExitCancelFailure {
+    /// No exit was ever started for this VTXO.
+    NotExiting,
+    /// The exit has progressed past its abortable window. `state` is the
+    /// state that blocked the cancellation.
+    TooLate { state: ExitStateKind },
+    /// The final exit transaction is already in the mempool or a block, so
+    /// the exit can no longer be called off.
+    AlreadyBroadcast { txid: String },
+}
+
+/// Outcome of a cancellation request.
+///
+/// `canceled` is `true` when the exit is now canceled — including when it was
+/// already canceled by an earlier call, since cancellation is idempotent.
+/// When `false`, `reason` says why.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi),
+    serde(rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ExitCancelResult {
+    pub canceled: bool,
+    /// Present exactly when `canceled` is `false`.
+    pub reason: Option<ExitCancelFailure>,
+}
+
+impl ExitCancelResult {
+    /// The exit is canceled.
+    pub(crate) fn canceled() -> Self {
+        Self { canceled: true, reason: None }
+    }
+
+    /// The exit was left as-is, for the given reason.
+    pub(crate) fn refused(reason: ExitCancelFailure) -> Self {
+        Self { canceled: false, reason: Some(reason) }
+    }
+}
+
 /// A VTXO that is being unilaterally exited
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(
@@ -1520,6 +1630,52 @@ mod tests {
         for (upstream, expected) in cases {
             assert_eq!(VtxoState::from(&upstream), expected);
         }
+    }
+
+    #[test]
+    fn vtxo_lock_holder_roundtrips_through_upstream() {
+        // The lock guard in `unlock_vtxos` compares a holder the caller passed
+        // in against one read back from the database, so the two directions
+        // must agree exactly or a caller could never release its own lock.
+        let cases = vec![
+            VtxoLockHolder::Action { id: "exit:abc123".into() },
+            VtxoLockHolder::Movement { id: 42 },
+        ];
+        for holder in cases {
+            let upstream = bark::vtxo::VtxoLockHolder::from(holder.clone());
+            assert_eq!(VtxoLockHolder::from(&upstream), holder);
+        }
+    }
+
+    #[test]
+    fn exit_state_kind_conversion_covers_all_variants() {
+        for kind in bark::exit::ExitStateKind::ALL {
+            // Exercises every arm; a new upstream variant fails to compile
+            // rather than silently mapping to something wrong.
+            let _: ExitStateKind = (*kind).into();
+        }
+    }
+
+    #[test]
+    fn exit_cancel_result_serde_shape() {
+        let ok = serde_json::to_value(&ExitCancelResult::canceled()).unwrap();
+        assert_eq!(ok["canceled"], serde_json::json!(true));
+        assert!(ok["reason"].is_null());
+
+        let refused = ExitCancelResult::refused(ExitCancelFailure::TooLate {
+            state: ExitStateKind::Claimed,
+        });
+        let v = serde_json::to_value(&refused).unwrap();
+        assert_eq!(v["canceled"], serde_json::json!(false));
+        assert_eq!(v["reason"]["type"], serde_json::json!("too-late"));
+        assert_eq!(v["reason"]["state"], serde_json::json!("claimed"));
+
+        let broadcast = ExitCancelResult::refused(ExitCancelFailure::AlreadyBroadcast {
+            txid: "ff00".into(),
+        });
+        let v = serde_json::to_value(&broadcast).unwrap();
+        assert_eq!(v["reason"]["type"], serde_json::json!("already-broadcast"));
+        assert_eq!(v["reason"]["txid"], serde_json::json!("ff00"));
     }
 
     #[test]

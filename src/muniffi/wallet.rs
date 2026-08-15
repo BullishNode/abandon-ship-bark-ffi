@@ -239,6 +239,28 @@ impl Wallet {
     }
 
     // ------------------------------------------------------------------------
+    // VTXO locking
+    // ------------------------------------------------------------------------
+
+    pub async fn lock_vtxos(
+        &self,
+        vtxo_ids: Vec<String>,
+        holder: Option<types::VtxoLockHolder>,
+    ) -> Result<(), Error> {
+        let core = self.core.clone();
+        run_async(async move { core.lock_vtxos(vtxo_ids, holder).await }).await
+    }
+
+    pub async fn unlock_vtxos(
+        &self,
+        vtxo_ids: Vec<String>,
+        expected_holder: Option<types::VtxoLockHolder>,
+    ) -> Result<(), Error> {
+        let core = self.core.clone();
+        run_async(async move { core.unlock_vtxos(vtxo_ids, expected_holder).await }).await
+    }
+
+    // ------------------------------------------------------------------------
     // Offboarding
     // ------------------------------------------------------------------------
 
@@ -677,6 +699,25 @@ impl Wallet {
     pub async fn start_exit_for_vtxos(&self, vtxo_ids: Vec<String>) -> Result<(), Error> {
         let core = self.core.clone();
         run_async(async move { core.start_exit_for_vtxos(vtxo_ids).await }).await
+    }
+
+    pub async fn start_exit_for_vtxos_including_non_standard(
+        &self,
+        vtxo_ids: Vec<String>,
+    ) -> Result<(), Error> {
+        let core = self.core.clone();
+        run_async(async move {
+            core.start_exit_for_vtxos_including_non_standard(vtxo_ids).await
+        })
+        .await
+    }
+
+    pub async fn cancel_exit(
+        &self,
+        vtxo_id: String,
+    ) -> Result<types::ExitCancelResult, Error> {
+        let core = self.core.clone();
+        run_async(async move { core.cancel_exit(vtxo_id).await }).await
     }
 
     pub async fn list_claimable_exits(&self) -> Result<Vec<types::ExitVtxo>, Error> {
