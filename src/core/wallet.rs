@@ -93,6 +93,32 @@ pub(crate) fn seed_from_str(
     }
 }
 
+/// Parse a batch of VTXO id strings, failing on the first malformed one.
+pub(crate) fn parse_vtxo_ids(vtxo_ids: &[String]) -> Result<Vec<VtxoId>, Error> {
+    vtxo_ids
+        .iter()
+        .map(|id| {
+            id.parse::<VtxoId>()
+                .with_context(|| format!("invalid vtxo id: {}", id))
+                .map_err(Error::from)
+        })
+        .collect()
+}
+
+/// Human-readable one-liner for a VTXO state, for error messages.
+fn describe_state(state: &types::VtxoState) -> String {
+    match state {
+        types::VtxoState::Spendable => "spendable".to_owned(),
+        types::VtxoState::Locked { holder: None } => "locked by an unnamed holder".to_owned(),
+        types::VtxoState::Locked { holder: Some(h) } => match h {
+            types::VtxoLockHolder::Action { id } => format!("locked by action {}", id),
+            types::VtxoLockHolder::Movement { id } => format!("locked by movement {}", id),
+        },
+        types::VtxoState::Spent => "spent".to_owned(),
+        types::VtxoState::Exited => "exited".to_owned(),
+    }
+}
+
 #[allow(dead_code)] // some methods are wired only via the uniffi layer
 impl Wallet {
     /// Build from an already-constructed `bark::Wallet`. `pub(crate)` so binding
@@ -340,6 +366,155 @@ impl Wallet {
             .into_iter()
             .map(Into::into)
             .collect())
+    }
+
+    // ------------------------------------------------------------------------
+    // VTXO locking
+    // ------------------------------------------------------------------------
+
+    /// Reserve VTXOs so wallet-driven flows leave them alone.
+    ///
+    /// A locked VTXO is excluded from coin selection, which means maintenance
+    /// and delegated refresh rounds skip it. That makes locking the durable way
+    /// to protect a VTXO the caller is handling itself — for example one whose
+    /// unilateral exit is in progress, since starting an exit does not by
+    /// itself change a VTXO's state.
+    ///
+    /// `holder` records who the reservation belongs to. Pass
+    /// [`types::VtxoLockHolder::Action`] with an id the application chooses
+    /// (say `"exit:<vtxo-id>"`); that same value is what
+    /// [`Self::unlock_vtxos`] matches against, so it is what stops one
+    /// subsystem from releasing another's lock. `None` leaves the lock
+    /// unattributed and should be avoided when the reason is known.
+    ///
+    /// The batch is atomic: if any VTXO is not spendable — including one
+    /// already locked by a *different* holder — nothing is locked. Re-locking
+    /// with the identical holder is a no-op success, so retries are safe.
+    pub async fn lock_vtxos(
+        &self,
+        vtxo_ids: Vec<String>,
+        holder: Option<types::VtxoLockHolder>,
+    ) -> Result<(), Error> {
+        let ids = parse_vtxo_ids(&vtxo_ids)?;
+        if ids.is_empty() {
+            return Ok(());
+        }
+
+        self.inner
+            .lock_vtxos(ids, holder.map(Into::into))
+            .await
+            .context("Lock VTXOs failed")?;
+
+        info!("Locked {} VTXOs", vtxo_ids.len());
+        Ok(())
+    }
+
+    /// Release VTXOs locked by [`Self::lock_vtxos`], returning them to the
+    /// spendable set.
+    ///
+    /// `expected_holder` guards the release: every VTXO must currently be
+    /// locked by that holder, otherwise nothing is unlocked and this returns an
+    /// error naming the mismatch. This is what keeps an application's cleanup —
+    /// unlocking after cancelling an exit, say — from freeing a VTXO that a
+    /// lightning payment or an in-flight round has since locked for itself.
+    ///
+    /// Pass `None` to unlock regardless of holder. That bypasses the guard
+    /// entirely, so reserve it for recovery paths where the original holder is
+    /// genuinely unknown.
+    ///
+    /// Already-spendable VTXOs are accepted as a no-op, so retries are safe.
+    ///
+    /// # Concurrency
+    ///
+    /// The holder check and the release are two steps, so a lock taken by
+    /// another subsystem in between can still be released. bark 0.6.1 offers no
+    /// way to close that window: its only atomic guard,
+    /// `update_vtxo_states_checked`, matches on [`bark::vtxo::VtxoStateKind`],
+    /// which records *that* a VTXO is locked but not *by whom*. Narrowing the
+    /// allowed prior states to `Locked` (below) keeps a concurrent `Spent` or
+    /// `Exited` transition from being clobbered, which is the part that is
+    /// enforceable atomically; the holder itself is only advisory. Closing the
+    /// rest needs a holder-aware guard upstream.
+    ///
+    /// Treat this as a guard against subsystems releasing each other's locks by
+    /// mistake, not as mutual exclusion between racing writers.
+    pub async fn unlock_vtxos(
+        &self,
+        vtxo_ids: Vec<String>,
+        expected_holder: Option<types::VtxoLockHolder>,
+    ) -> Result<(), Error> {
+        use bark::vtxo::{VtxoState, VtxoStateKind};
+
+        let ids = parse_vtxo_ids(&vtxo_ids)?;
+        if ids.is_empty() {
+            return Ok(());
+        }
+
+        match expected_holder.as_ref() {
+            Some(expected) => {
+                self.ensure_locked_by(&ids, expected).await?;
+
+                // Re-assert the guard at write time. This cannot check the
+                // holder, but it does reject a VTXO that became `Spent` or
+                // `Exited` since the read above, and the whole batch fails
+                // together rather than partially applying.
+                self.inner
+                    .set_vtxo_states(
+                        ids,
+                        &VtxoState::Spendable,
+                        &[VtxoStateKind::Locked, VtxoStateKind::Spendable],
+                    )
+                    .await
+                    .context("Unlock VTXOs failed")?;
+            },
+            // No expected holder: release unconditionally, matching upstream.
+            None => {
+                self.inner
+                    .unlock_vtxos(ids)
+                    .await
+                    .context("Unlock VTXOs failed")?;
+            },
+        }
+
+        info!("Unlocked {} VTXOs", vtxo_ids.len());
+        Ok(())
+    }
+
+    /// Verify every VTXO is either locked by `expected` or already spendable.
+    ///
+    /// Checks the whole batch before reporting, so the caller sees each
+    /// offending VTXO rather than only the first.
+    async fn ensure_locked_by(
+        &self,
+        ids: &[VtxoId],
+        expected: &types::VtxoLockHolder,
+    ) -> Result<(), Error> {
+        let mut mismatches = Vec::new();
+
+        for id in ids {
+            let vtxo = self
+                .inner
+                .get_vtxo_by_id(*id)
+                .await
+                .with_context(|| format!("VTXO not found: {}", id))?;
+
+            match types::VtxoState::from(&vtxo.state) {
+                // Unlocking is idempotent, so an already-released VTXO is fine.
+                types::VtxoState::Spendable => {},
+                types::VtxoState::Locked { holder: Some(h) } if &h == expected => {},
+                other => mismatches.push(format!("{} is {}", id, describe_state(&other))),
+            }
+        }
+
+        if !mismatches.is_empty() {
+            return Err(Error::from(anyhow::anyhow!(
+                "refusing to unlock {} VTXO(s) not locked by the expected holder: {}",
+                mismatches.len(),
+                mismatches.join(", "),
+            )));
+        }
+
+        Ok(())
     }
 
     // ------------------------------------------------------------------------
@@ -1042,37 +1217,122 @@ impl Wallet {
         Ok(statuses)
     }
 
-    pub async fn start_exit_for_vtxos(&self, vtxo_ids: Vec<String>) -> Result<(), Error> {
-        info!("[EXIT] Starting exit for {} VTXOs...", vtxo_ids.len());
+    /// Parse VTXO id strings and load each VTXO from the wallet in bare form.
+    ///
+    /// Ids are parsed up front so a malformed one fails before any lookup runs.
+    async fn bare_vtxos_by_id(
+        &self,
+        vtxo_ids: &[String],
+    ) -> Result<Vec<ark::Vtxo<ark::vtxo::Bare>>, Error> {
+        let ids = parse_vtxo_ids(vtxo_ids)?;
 
-        let ids: Result<Vec<_>, _> = vtxo_ids
-            .iter()
-            .map(|id| {
-                id.parse::<VtxoId>().context("invalid vtxo id")
-            })
-            .collect();
-
-        let mut vtxos = Vec::new();
-        for id in ids? {
+        let mut vtxos = Vec::with_capacity(ids.len());
+        for id in ids {
             let vtxo = self
                 .inner
                 .get_vtxo_by_id(id)
                 .await
-                .context("VTXO not found")?;
-            vtxos.push(vtxo);
+                .with_context(|| format!("VTXO not found: {}", id))?;
+            vtxos.push(vtxo.vtxo.to_bare());
         }
 
-        let vtxo_refs: Vec<ark::Vtxo<ark::vtxo::Bare>> =
-            vtxos.iter().map(|v| v.vtxo.to_bare()).collect();
+        Ok(vtxos)
+    }
+
+    pub async fn start_exit_for_vtxos(&self, vtxo_ids: Vec<String>) -> Result<(), Error> {
+        info!("[EXIT] Starting exit for {} VTXOs...", vtxo_ids.len());
+
+        let vtxos = self.bare_vtxos_by_id(&vtxo_ids).await?;
 
         self.inner
             .exit_mgr()
-            .start_exit_for_vtxos(&vtxo_refs)
+            .start_exit_for_vtxos(&vtxos)
             .await
             .context("Start exit for VTXOs failed")?;
 
         info!("[EXIT] Exit initiated for {} VTXOs", vtxo_ids.len());
         Ok(())
+    }
+
+    /// Like [`Self::start_exit_for_vtxos`], but skips dust and standardness
+    /// checks.
+    ///
+    /// Only use this when the VTXOs are already onchain, or when broadcasting
+    /// through a node that accepts non-standard transactions — otherwise the
+    /// resulting exit transactions may be unrelayable.
+    pub async fn start_exit_for_vtxos_including_non_standard(
+        &self,
+        vtxo_ids: Vec<String>,
+    ) -> Result<(), Error> {
+        info!(
+            "[EXIT] Starting exit (non-standard allowed) for {} VTXOs...",
+            vtxo_ids.len(),
+        );
+
+        let vtxos = self.bare_vtxos_by_id(&vtxo_ids).await?;
+
+        self.inner
+            .exit_mgr()
+            .start_exit_for_vtxos_including_non_standard(&vtxos)
+            .await
+            .context("Start exit for VTXOs failed")?;
+
+        info!("[EXIT] Exit initiated for {} VTXOs", vtxo_ids.len());
+        Ok(())
+    }
+
+    /// Cancel a unilateral exit that is still in its abortable window.
+    ///
+    /// Starting an exit never changes the VTXO's state, so there is nothing to
+    /// undo on the VTXO side: it stays spendable and a fresh exit can be
+    /// started later. If the caller locked the VTXO themselves after starting
+    /// the exit (see [`Self::lock_vtxos`]), they are responsible for unlocking
+    /// it — this method deliberately does not, since it cannot know whether the
+    /// lock was theirs.
+    ///
+    /// Cancelling an already-cancelled exit succeeds, so retries are safe.
+    ///
+    /// Expected refusals (already claimed, never exiting, transaction already
+    /// broadcast) come back in the returned [`types::ExitCancelResult`] rather
+    /// than as errors; `Err` is reserved for genuine faults such as a database
+    /// failure or an unreachable chain source.
+    pub async fn cancel_exit(
+        &self,
+        vtxo_id: String,
+    ) -> Result<types::ExitCancelResult, Error> {
+        use bark::exit::ExitError;
+
+        let id = vtxo_id.parse::<VtxoId>().context("invalid vtxo id")?;
+
+        info!("[EXIT] Cancelling exit for VTXO {}...", id);
+
+        match self.inner.exit_mgr().cancel_exit(id).await {
+            Ok(()) => {
+                info!("[EXIT] Exit cancelled for VTXO {}", id);
+                Ok(types::ExitCancelResult::canceled())
+            },
+            Err(ExitError::NotExiting { .. }) => {
+                info!("[EXIT] VTXO {} has no exit to cancel", id);
+                Ok(types::ExitCancelResult::refused(
+                    types::ExitCancelFailure::NotExiting,
+                ))
+            },
+            Err(ExitError::CannotCancelExit { state, .. }) => {
+                info!("[EXIT] Exit for VTXO {} is past cancellation ({:?})", id, state);
+                Ok(types::ExitCancelResult::refused(
+                    types::ExitCancelFailure::TooLate { state: state.into() },
+                ))
+            },
+            Err(ExitError::ExitTxAlreadyBroadcast { txid, .. }) => {
+                info!("[EXIT] Exit tx {} for VTXO {} already broadcast", txid, id);
+                Ok(types::ExitCancelResult::refused(
+                    types::ExitCancelFailure::AlreadyBroadcast {
+                        txid: txid.to_string(),
+                    },
+                ))
+            },
+            Err(e) => Err(Error::from(anyhow::Error::new(e))),
+        }
     }
 
     pub async fn list_claimable_exits(&self) -> Result<Vec<types::ExitVtxo>, Error> {
@@ -1551,6 +1811,43 @@ mod tests {
         assert!(parse_vtxo("deadbeef").is_err());
         // Valid base64, but not a VTXO.
         assert!(parse_vtxo("aGVsbG8gd29ybGQ=").is_err());
+    }
+
+    #[test]
+    fn parse_vtxo_ids_is_all_or_nothing() {
+        let good = parse_vtxo(BOARD_VTXO_HEX).unwrap().id().to_string();
+
+        assert_eq!(parse_vtxo_ids(&[]).unwrap().len(), 0);
+        assert_eq!(parse_vtxo_ids(&[good.clone()]).unwrap().len(), 1);
+
+        // One bad id fails the batch, so no partial lock/unlock can be issued.
+        let err = parse_vtxo_ids(&[good, "nonsense".to_owned()]).unwrap_err();
+        assert!(err.message().contains("nonsense"), "{}", err.message());
+    }
+
+    #[test]
+    fn describe_state_names_the_holder() {
+        use crate::types::{VtxoLockHolder, VtxoState};
+
+        assert_eq!(describe_state(&VtxoState::Spendable), "spendable");
+        assert_eq!(describe_state(&VtxoState::Spent), "spent");
+        assert_eq!(describe_state(&VtxoState::Exited), "exited");
+        assert_eq!(
+            describe_state(&VtxoState::Locked { holder: None }),
+            "locked by an unnamed holder",
+        );
+        assert_eq!(
+            describe_state(&VtxoState::Locked {
+                holder: Some(VtxoLockHolder::Action { id: "ln-pay:xyz".into() }),
+            }),
+            "locked by action ln-pay:xyz",
+        );
+        assert_eq!(
+            describe_state(&VtxoState::Locked {
+                holder: Some(VtxoLockHolder::Movement { id: 9 }),
+            }),
+            "locked by movement 9",
+        );
     }
 
     /// Same board VTXO, but in the previous encoding version (v1, no fee

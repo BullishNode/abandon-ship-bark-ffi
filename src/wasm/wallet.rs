@@ -16,10 +16,10 @@ use crate::core::onchain::OnchainWallet as CoreOnchainWallet;
 use crate::core::wallet::{seed_from_str, OpenArgs as CoreOpenArgs, Wallet as CoreWallet};
 use crate::error::Error;
 use crate::types::{
-    AddressWithIndex, ArkInfo, Balance, ExitClaimTransaction, ExitProgressStatus,
-    ExitTransactionStatus, ExitVtxo, FeeEstimate, LightningInvoice, LightningReceive,
-    LightningSend, LightningSendStatus, Movement, Network, OffboardResult, PendingBoard,
-    RecoveryReport, RoundState, Vtxo, WalletProperties,
+    AddressWithIndex, ArkInfo, Balance, ExitCancelResult, ExitClaimTransaction,
+    ExitProgressStatus, ExitTransactionStatus, ExitVtxo, FeeEstimate, LightningInvoice,
+    LightningReceive, LightningSend, LightningSendStatus, Movement, Network, OffboardResult,
+    PendingBoard, RecoveryReport, RoundState, Vtxo, VtxoLockHolder, WalletProperties,
 };
 use crate::wasm::db::indexed_db_client;
 use crate::wasm::notification::NotificationHolder;
@@ -133,6 +133,29 @@ pub struct GetExitStatusArgs {
     pub vtxoId: String,
     pub includeHistory: bool,
     pub includeTransactions: bool,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct LockVtxosArgs {
+    pub vtxoIds: Vec<String>,
+    /// Who the lock belongs to. Omit only when the reason is genuinely
+    /// unknown — an attributed lock is what lets `unlockVtxos` tell your
+    /// reservation apart from another subsystem's.
+    #[tsify(optional)]
+    pub holder: Option<VtxoLockHolder>,
+}
+
+#[derive(Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi, into_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct UnlockVtxosArgs {
+    pub vtxoIds: Vec<String>,
+    /// Only unlock VTXOs currently held by this holder. Omit to unlock
+    /// regardless of holder, which bypasses the guard.
+    #[tsify(optional)]
+    pub expectedHolder: Option<VtxoLockHolder>,
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
@@ -807,6 +830,18 @@ impl Wallet {
         Ok(self.core.pending_lightning_send_vtxos().await?)
     }
 
+    // -- VTXO locking ---------------------------------------------------------
+
+    #[wasm_bindgen(js_name = lockVtxos)]
+    pub async fn lock_vtxos(&self, args: LockVtxosArgs) -> Result<(), JsError> {
+        Ok(self.core.lock_vtxos(args.vtxoIds, args.holder).await?)
+    }
+
+    #[wasm_bindgen(js_name = unlockVtxos)]
+    pub async fn unlock_vtxos(&self, args: UnlockVtxosArgs) -> Result<(), JsError> {
+        Ok(self.core.unlock_vtxos(args.vtxoIds, args.expectedHolder).await?)
+    }
+
     // -- Exits ----------------------------------------------------------------
 
     #[wasm_bindgen(js_name = startExitForEntireWallet)]
@@ -830,6 +865,19 @@ impl Wallet {
     #[wasm_bindgen(js_name = startExitForVtxos)]
     pub async fn start_exit_for_vtxos(&self, vtxoIds: Vec<String>) -> Result<(), JsError> {
         Ok(self.core.start_exit_for_vtxos(vtxoIds).await?)
+    }
+
+    #[wasm_bindgen(js_name = startExitForVtxosIncludingNonStandard)]
+    pub async fn start_exit_for_vtxos_including_non_standard(
+        &self,
+        vtxoIds: Vec<String>,
+    ) -> Result<(), JsError> {
+        Ok(self.core.start_exit_for_vtxos_including_non_standard(vtxoIds).await?)
+    }
+
+    #[wasm_bindgen(js_name = cancelExit)]
+    pub async fn cancel_exit(&self, vtxoId: String) -> Result<ExitCancelResult, JsError> {
+        Ok(self.core.cancel_exit(vtxoId).await?)
     }
 
     #[wasm_bindgen(js_name = listClaimableExits)]
