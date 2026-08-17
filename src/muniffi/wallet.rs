@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use tokio_util::sync::CancellationToken;
 
 use crate::{types, Error};
 use crate::config::Config;
@@ -61,7 +60,7 @@ pub struct WalletOpenArgs {
 ///
 /// Wraps `core::Wallet` and adds:
 /// - `run_async` runtime offload on every entry point
-/// - mailbox processor task + cancellation on drop
+/// - daemon shutdown on drop
 /// - LNURL `pay_lightning_address`
 /// - Daemon control methods
 /// - Notification holder
@@ -72,19 +71,12 @@ pub struct Wallet {
     /// Direct handle to bark::Wallet so callback-onchain methods can bypass
     /// `core::Wallet` (which only knows BDK).
     inner: bark::Wallet,
-    #[allow(dead_code)]
-    mailbox_cancel: CancellationToken,
 }
 
 impl Wallet {
     fn wrap(core: CoreWallet) -> Arc<Self> {
         let inner = core.inner().clone();
-        let cancel = CancellationToken::new();
-        Arc::new(Self {
-            core,
-            inner,
-            mailbox_cancel: cancel,
-        })
+        Arc::new(Self { core, inner })
     }
 }
 
