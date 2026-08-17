@@ -1,13 +1,9 @@
 #![allow(non_snake_case)]
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use bark::onchain::OnchainWalletTrait;
-use bark::{Wallet as InnerWallet};
-use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use tokio_util::sync::CancellationToken;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
@@ -233,20 +229,11 @@ pub struct Wallet {
     /// recover a usable handle via [`Wallet::onchain_wallet`] after `open`
     /// consumed the one it was given.
     onchain: Option<Arc<CoreOnchainWallet>>,
-    #[allow(dead_code)]
-    mailbox_cancel: CancellationToken,
 }
 
 impl Wallet {
     fn wrap(core: CoreWallet, onchain: Option<Arc<CoreOnchainWallet>>) -> Self {
-        let inner = core.inner().clone();
-        let cancel = CancellationToken::new();
-        Self::start_mailbox_processor(inner, cancel.clone());
-        Self {
-            core,
-            onchain,
-            mailbox_cancel: cancel,
-        }
+        Self { core, onchain }
     }
 
     async fn open_impl(
@@ -276,53 +263,14 @@ impl Wallet {
         }).await?;
         Ok(Self::wrap(core, onchain))
     }
-
-    fn start_mailbox_processor(inner: InnerWallet, cancel: CancellationToken) {
-        wasm_bindgen_futures::spawn_local(async move {
-            let mut retry_delay: u64 = 1;
-
-            loop {
-                match inner
-                    .subscribe_process_mailbox_messages(None, cancel.clone())
-                    .await
-                {
-                    Ok(_) => {
-                        info!("[MAILBOX] stream ended, restarting...");
-                        retry_delay = 1;
-                    }
-                    Err(e) => {
-                        if cancel.is_cancelled() {
-                            info!("[MAILBOX] shutting down");
-                            return;
-                        }
-                        warn!("[MAILBOX] error: {:?}, retrying in {}s", e, retry_delay);
-                        tokio::select! {
-                            _ = cancel.cancelled() => {
-                                info!("[MAILBOX] shutting down");
-                                return;
-                            }
-                            _ = gloo_timers::future::sleep(Duration::from_secs(retry_delay)) => {}
-                        }
-                        retry_delay = (retry_delay * 2).min(30);
-                        continue;
-                    }
-                }
-
-                tokio::select! {
-                    _ = cancel.cancelled() => {
-                        info!("[MAILBOX] shutting down");
-                        return;
-                    }
-                    _ = gloo_timers::future::sleep(Duration::from_secs(1)) => {}
-                }
-            }
-        });
-    }
 }
 
 impl Drop for Wallet {
     fn drop(&mut self) {
-        self.mailbox_cancel.cancel();
+        // The daemon owns the mailbox/round/sync processes when `runDaemon` was
+        // set. Without this its tasks outlive the handle. `stop_daemon` is a
+        // no-op when no daemon is running.
+        self.core.inner().stop_daemon();
     }
 }
 
@@ -1061,5 +1009,30 @@ impl Wallet {
 
     pub fn notifications(&self) -> NotificationHolder {
         NotificationHolder::new(self.core.inner())
+    }
+
+    // -- Daemon ---------------------------------------------------------------
+
+    /// Start the background daemon, which drives mailbox messages, round
+    /// events, server-connection checks and periodic syncs.
+    ///
+    /// Only needed when the wallet was opened with `runDaemon: false`; opening
+    /// with the default already starts it. Calling this while the daemon is
+    /// already running is a no-op.
+    #[wasm_bindgen(js_name = runDaemon)]
+    pub fn run_daemon(&self) -> Result<(), JsError> {
+        self.core.inner().start_daemon().map_err(js_err)?;
+        Ok(())
+    }
+
+    /// Stop the background daemon. A no-op when it isn't running.
+    ///
+    /// Nothing drives the mailbox afterwards: call `sync` (or restart the
+    /// daemon) to pick up incoming payments.
+    ///
+    /// This also happens automatically on `free()`.
+    #[wasm_bindgen(js_name = stopDaemon)]
+    pub fn stop_daemon(&self) {
+        self.core.inner().stop_daemon();
     }
 }
