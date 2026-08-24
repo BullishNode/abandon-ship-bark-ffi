@@ -47,6 +47,21 @@ impl OnchainWallet {
         self.inner.sync().await.map(|v| v as f64).map_err(bark_err)
     }
 
+    /// Discover the wallet's pre-existing on-chain history. Run once after
+    /// restoring a wallet from a mnemonic: `sync` only covers addresses this
+    /// wallet instance has already revealed, so it never finds transactions
+    /// made by a previous incarnation. Gap-limited full scan on esplora
+    /// (`birthdayHeight` is ignored there), block scan from `birthdayHeight`
+    /// on bitcoind. Returns the total balance in sats afterwards.
+    #[wasm_bindgen(js_name = initialScan)]
+    pub async fn initial_scan(&self, birthdayHeight: Option<u32>) -> Result<f64, JsError> {
+        self.inner
+            .initial_scan(birthdayHeight)
+            .await
+            .map(|v| v as f64)
+            .map_err(bark_err)
+    }
+
     pub async fn balance(&self) -> Result<OnchainBalance, JsError> {
         self.inner.balance().await.map_err(bark_err)
     }

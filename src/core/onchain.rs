@@ -80,6 +80,23 @@ impl OnchainWallet {
         Ok(balance.total().to_sat())
     }
 
+    /// Discover the wallet's pre-existing on-chain history.
+    ///
+    /// `sync` only checks addresses this wallet instance has already revealed,
+    /// so a wallet restored from a mnemonic never finds transactions made by
+    /// its previous incarnation. This runs bark's initial scan instead: a
+    /// gap-limited full scan on esplora (`birthday_height` is ignored there),
+    /// or a block scan from `birthday_height` on bitcoind. Run it once after
+    /// restoring; returns the total balance in sats afterwards.
+    pub async fn initial_scan(&self, birthday_height: Option<u32>) -> Result<u64, Error> {
+        let mut w = self.wallet.write().await;
+        let balance = w
+            .initial_wallet_scan(&self.chain, birthday_height)
+            .await
+            .context("Initial wallet scan failed")?;
+        Ok(balance.to_sat())
+    }
+
     pub async fn balance(&self) -> Result<OnchainBalance, Error> {
         let w = self.wallet.write().await;
         Ok(w.balance().into())

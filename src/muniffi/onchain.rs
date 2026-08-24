@@ -72,6 +72,24 @@ impl OnchainWallet {
         }
     }
 
+    /// Discover the wallet's pre-existing on-chain history. Run once after
+    /// restoring a wallet from a mnemonic: `sync` only covers addresses this
+    /// wallet instance has already revealed, so it never finds transactions
+    /// made by a previous incarnation. Gap-limited full scan on esplora
+    /// (`birthday_height` is ignored there), block scan from `birthday_height`
+    /// on bitcoind. Returns the total balance in sats afterwards.
+    pub async fn initial_scan(&self, birthday_height: Option<u32>) -> Result<u64, Error> {
+        match &self.inner {
+            OnchainWalletInner::Bdk(core) => {
+                let core = core.clone();
+                run_async(async move { core.initial_scan(birthday_height).await }).await
+            }
+            OnchainWalletInner::Callback(_) => {
+                Err("initial_scan() not supported for callback wallets".into())
+            }
+        }
+    }
+
     pub async fn balance(&self) -> Result<OnchainBalance, Error> {
         match &self.inner {
             OnchainWalletInner::Bdk(core) => {
