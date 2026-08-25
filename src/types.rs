@@ -906,6 +906,13 @@ pub struct ArkInfo {
     pub round_interval_secs: u64,
     pub nb_round_nonces: u32,
     pub vtxo_exit_delta: u32,
+    /// The number of blocks a VTXO lives before it expires.
+    pub vtxo_lifetime: u32,
+    /// The number of blocks a VTXO lives before it expires.
+    ///
+    /// Deprecated: upstream renamed this to `vtxo_lifetime`. Both names are
+    /// exposed and carry the same value; migrate to `vtxo_lifetime`, this one
+    /// goes away once upstream drops it.
     pub vtxo_expiry_delta: u32,
     pub htlc_send_expiry_delta: u32,
     pub htlc_expiry_delta: u32,
@@ -937,7 +944,8 @@ impl From<&bark::ark::ArkInfo> for ArkInfo {
             round_interval_secs: info.round_interval.as_secs(),
             nb_round_nonces: info.nb_round_nonces as u32,
             vtxo_exit_delta: info.vtxo_exit_delta as u32,
-            vtxo_expiry_delta: info.vtxo_expiry_delta as u32,
+            vtxo_lifetime: info.vtxo_lifetime as u32,
+            vtxo_expiry_delta: info.vtxo_lifetime as u32,
             htlc_send_expiry_delta: info.htlc_send_expiry_delta as u32,
             htlc_expiry_delta: info.htlc_expiry_delta as u32,
             max_vtxo_amount_sats: info.max_vtxo_amount.map(|a| a.to_sat()),
