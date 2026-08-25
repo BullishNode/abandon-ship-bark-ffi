@@ -50,7 +50,10 @@ impl OnchainWallet {
                 Auth::None
             };
             info!("[ONCHAIN] Using Bitcoin Core RPC at {}", url);
-            ChainSourceSpec::Bitcoind { url: url.clone(), auth }
+            // ZMQ block notifications are configurable upstream via
+            // `Config::bitcoind_zmq_address`; the FFI config does not expose it
+            // yet, so the chain tip is polled instead.
+            ChainSourceSpec::Bitcoind { url: url.clone(), auth, zmq: None }
         } else if let Some(url) = config.esplora_address {
             info!("[ONCHAIN] Using Esplora at {}", url);
             ChainSourceSpec::Esplora { url }
