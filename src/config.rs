@@ -69,7 +69,8 @@ impl Config {
         ret.bitcoind_address = self.bitcoind_address;
         ret.bitcoind_cookiefile = self.bitcoind_cookiefile.map(std::path::PathBuf::from);
         ret.bitcoind_user = self.bitcoind_user;
-        ret.bitcoind_pass = self.bitcoind_pass;
+        // Upstream wraps the password so it can't leak into `Debug` output.
+        ret.bitcoind_pass = self.bitcoind_pass.map(bark::secret::Secret::new);
 
         if let Some(threshold) = self.vtxo_refresh_expiry_threshold {
             ret.vtxo_refresh_expiry_threshold = threshold;

@@ -1040,7 +1040,7 @@ impl Wallet {
             bitcoind_cookiefile: cfg.bitcoind_cookiefile.as_ref()
                 .map(|p| p.to_string_lossy().to_string()),
             bitcoind_user: cfg.bitcoind_user.clone(),
-            bitcoind_pass: cfg.bitcoind_pass.clone(),
+            bitcoind_pass: cfg.bitcoind_pass.as_ref().map(|p| p.leak_ref().clone()),
             vtxo_refresh_expiry_threshold: Some(cfg.vtxo_refresh_expiry_threshold),
             vtxo_exit_margin: Some(cfg.vtxo_exit_margin),
             htlc_recv_claim_delta: Some(cfg.htlc_recv_claim_delta),
