@@ -1118,6 +1118,74 @@ impl Wallet {
         Ok(pb.into())
     }
 
+    pub async fn board_funding_address(&self) -> Result<types::BoardFundingInfo, Error> {
+        let (keypair, keypair_index) = self
+            .inner
+            .derive_store_next_keypair()
+            .await
+            .context("Failed to derive board keypair")?;
+
+        let (address, expiry_height) = self
+            .inner
+            .board_funding_address(&keypair)
+            .await
+            .context("Failed to get board funding address")?;
+
+        info!(
+            "[BOARD] Board funding address: {} (keypair index: {}, expiry height: {})",
+            address, keypair_index, expiry_height
+        );
+
+        Ok(types::BoardFundingInfo {
+            address: address.to_string(),
+            expiry_height,
+            keypair_index,
+        })
+    }
+
+    pub async fn board_psbt(
+        &self,
+        psbt_base64: String,
+        keypair_index: u32,
+        expiry_height: u32,
+    ) -> Result<types::PendingBoard, Error> {
+        use bitcoin::base64::prelude::*;
+        use bitcoin::psbt::Psbt;
+
+        info!(
+            "[BOARD] Boarding from funding PSBT (keypair index: {}, expiry height: {})...",
+            keypair_index, expiry_height
+        );
+
+        let psbt_bytes = BASE64_STANDARD
+            .decode(&psbt_base64)
+            .context("Invalid base64")?;
+        let psbt = Psbt::deserialize(&psbt_bytes).context("Invalid PSBT")?;
+
+        let keypair = self
+            .inner
+            .peek_keypair(keypair_index)
+            .await
+            .context("Unknown board keypair index")?;
+
+        let pb = self
+            .inner
+            .board_psbt(psbt, keypair, expiry_height)
+            .await
+            .context("Board psbt failed")?;
+
+        let txid = pb.funding_tx.compute_txid();
+        let vtxo_id = pb.vtxos.first().map(|v| v.to_string()).unwrap_or_default();
+        info!(
+            "[BOARD] Board transaction created: {} (VTXO ID: {}, amount: {} sats)",
+            txid,
+            vtxo_id,
+            pb.amount.to_sat()
+        );
+
+        Ok(pb.into())
+    }
+
     pub async fn sync_pending_boards(&self) -> Result<(), Error> {
         info!("[BOARD] Syncing pending boards...");
         self.inner
