@@ -641,6 +641,22 @@ impl Wallet {
         run_async(async move { core.board_all().await }).await
     }
 
+    pub async fn board_funding_address(&self) -> Result<types::BoardFundingInfo, Error> {
+        let core = self.core.clone();
+        run_async(async move { core.board_funding_address().await }).await
+    }
+
+    pub async fn board_psbt(
+        &self,
+        psbt_base64: String,
+        keypair_index: u32,
+        expiry_height: u32,
+    ) -> Result<types::PendingBoard, Error> {
+        let core = self.core.clone();
+        run_async(async move { core.board_psbt(psbt_base64, keypair_index, expiry_height).await })
+            .await
+    }
+
     pub async fn sync_pending_boards(&self) -> Result<(), Error> {
         let core = self.core.clone();
         run_async(async move { core.sync_pending_boards().await }).await

@@ -12,7 +12,7 @@ use crate::core::onchain::OnchainWallet as CoreOnchainWallet;
 use crate::core::wallet::{seed_from_str, OpenArgs as CoreOpenArgs, Wallet as CoreWallet};
 use crate::error::Error;
 use crate::types::{
-    AddressWithIndex, ArkInfo, Balance, ExitCancelResult, ExitClaimTransaction,
+    AddressWithIndex, ArkInfo, Balance, BoardFundingInfo, ExitCancelResult, ExitClaimTransaction,
     ExitProgressStatus, ExitTransactionStatus, ExitVtxo, FeeEstimate, LightningInvoice,
     LightningReceive, LightningSend, LightningSendStatus, Movement, Network, OffboardResult,
     PendingBoard, RecoveryReport, RoundState, Vtxo, VtxoLockHolder, WalletProperties,
@@ -751,6 +751,24 @@ impl Wallet {
     #[wasm_bindgen(js_name = boardAll)]
     pub async fn board_all(&self) -> Result<PendingBoard, JsError> {
         Ok(self.core.board_all().await?)
+    }
+
+    #[wasm_bindgen(js_name = boardFundingAddress)]
+    pub async fn board_funding_address(&self) -> Result<BoardFundingInfo, JsError> {
+        Ok(self.core.board_funding_address().await?)
+    }
+
+    #[wasm_bindgen(js_name = boardPsbt)]
+    pub async fn board_psbt(
+        &self,
+        psbtBase64: String,
+        keypairIndex: u32,
+        expiryHeight: u32,
+    ) -> Result<PendingBoard, JsError> {
+        Ok(self
+            .core
+            .board_psbt(psbtBase64, keypairIndex, expiryHeight)
+            .await?)
     }
 
     #[wasm_bindgen(js_name = syncPendingBoards)]

@@ -735,6 +735,30 @@ impl From<BarkPendingBoard> for PendingBoard {
 }
 
 // ============================================================================
+// BoardFundingInfo
+// ============================================================================
+
+/// Destination for an externally funded board (e.g. a payjoin receive).
+///
+/// The funding script commits to the derived keypair and expiry height, so
+/// `keypair_index` and `expiry_height` must be passed back unchanged to
+/// `board_psbt` once the funding PSBT is available — including on retries
+/// after the sender changes the transaction.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi),
+    serde(rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct BoardFundingInfo {
+    pub address: String,
+    pub expiry_height: u32,
+    pub keypair_index: u32,
+}
+
+// ============================================================================
 // FeeSchedule
 // ============================================================================
 
