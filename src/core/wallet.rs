@@ -1806,6 +1806,72 @@ impl Wallet {
             .await?;
         Ok(estimate.into())
     }
+
+    /// Estimate the onchain cost of unilaterally (emergency) exiting VTXOs.
+    ///
+    /// Mirrors bark-rest `GET /exits/fee`. An empty `vtxo_ids` prices exiting
+    /// every spendable VTXO, i.e. the whole wallet. `fee_rate_sat_per_vb`
+    /// applies to both legs; when `None`, the broadcast leg uses the chain's
+    /// *fast* rate and the claim leg its *regular* rate. `destination` only
+    /// affects the claim transaction's weight; when `None` a placeholder P2TR
+    /// address on the wallet's network is used.
+    ///
+    /// The estimate reflects current chain state: exit transactions already
+    /// confirmed cost nothing. The onchain wallet is synced first so that
+    /// `fundable` sees the current confirmed balance.
+    ///
+    /// Requires an onchain wallet that can simulate the CPFP walk (the BDK
+    /// wallet does; uniffi callback wallets do not and return an error).
+    pub async fn estimate_emergency_exit_fee(
+        &self,
+        vtxo_ids: Vec<String>,
+        fee_rate_sat_per_vb: Option<u64>,
+        destination: Option<String>,
+    ) -> Result<types::EmergencyExitFeeEstimate, Error> {
+        let ids = if vtxo_ids.is_empty() {
+            self.inner
+                .spendable_vtxos()
+                .await
+                .context("Failed to list spendable VTXOs")?
+                .into_iter()
+                .map(|v| v.vtxo.id())
+                .collect()
+        } else {
+            parse_vtxo_ids(&vtxo_ids)?
+        };
+
+        let fee_rate = match fee_rate_sat_per_vb {
+            Some(v) => Some(bitcoin::FeeRate::from_sat_per_vb(v).context("Fee rate too large")?),
+            None => None,
+        };
+
+        let destination = match destination {
+            Some(s) => {
+                let network = self.inner.network().await?;
+                let addr = s
+                    .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+                    .context("Invalid destination address")?
+                    .require_network(network)
+                    .context("Destination address is not valid for the wallet's network")?;
+                Some(addr)
+            }
+            None => None,
+        };
+
+        // Sync the onchain wallet so the `fundable` check sees current
+        // confirmed funds, like bark-rest does.
+        self.inner
+            .sync_onchain()
+            .await
+            .context("Failed to sync onchain wallet")?;
+
+        let estimate = self
+            .inner
+            .estimate_emergency_exit_fee(&ids, fee_rate, destination)
+            .await
+            .context("Failed to estimate emergency exit fee")?;
+        Ok(estimate.into())
+    }
 }
 
 /// Parse a VTXO from its serialized form.

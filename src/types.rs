@@ -560,6 +560,62 @@ impl From<bark::FeeEstimate> for FeeEstimate {
 }
 
 // ============================================================================
+// EmergencyExitFeeEstimate
+// ============================================================================
+
+/// Estimated onchain cost of unilaterally (emergency) exiting a set of VTXOs.
+///
+/// Mirrors bark-rest's `GET /exits/fee` response. The two legs are paid from
+/// different pockets: `exit_broadcast_fee_sats` is spent now out of confirmed
+/// onchain funds to CPFP-bump every not-yet-confirmed exit transaction, while
+/// `claim_fee_sats` is deducted later from the recovered value when the
+/// matured outputs are drained.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi),
+    serde(rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct EmergencyExitFeeEstimate {
+    /// CPFP fees to broadcast every not-yet-confirmed exit transaction. Paid
+    /// now from confirmed onchain funds; this is the minimum onchain balance
+    /// an emergency exit needs.
+    pub exit_broadcast_fee_sats: u64,
+    /// Fee of the single batched transaction that later drains the matured
+    /// exit outputs. Subtracted from the exited amount.
+    pub claim_fee_sats: u64,
+    /// `exit_broadcast_fee_sats + claim_fee_sats`.
+    pub total_fee_sats: u64,
+    /// Fee rate the exit-broadcast leg was priced at (sat/vB, rounded up).
+    /// Unless an explicit rate was supplied, the claim leg is priced
+    /// separately at the chain's `regular` rate.
+    pub fee_rate_sat_per_vb: u64,
+    /// Number of exit transactions that still need to be broadcast and
+    /// CPFP-bumped. Already-confirmed tree transactions are not counted.
+    pub txs_to_broadcast: u64,
+    /// Whether the wallet's current confirmed onchain balance covers the full
+    /// serial broadcast walk. Each CPFP child can only spend confirmed coins,
+    /// so `false` means the exit would stall midway even if a single bump
+    /// looks affordable.
+    pub fundable: bool,
+}
+
+impl From<bark::exit::ExitFeeEstimate> for EmergencyExitFeeEstimate {
+    fn from(e: bark::exit::ExitFeeEstimate) -> Self {
+        Self {
+            total_fee_sats: e.total().to_sat(),
+            exit_broadcast_fee_sats: e.exit_broadcast_fee.to_sat(),
+            claim_fee_sats: e.claim_fee.to_sat(),
+            fee_rate_sat_per_vb: e.fee_rate.to_sat_per_vb_ceil(),
+            txs_to_broadcast: e.txs_to_broadcast as u64,
+            fundable: e.fundable,
+        }
+    }
+}
+
+// ============================================================================
 // OnchainBalance
 // ============================================================================
 
@@ -1824,6 +1880,37 @@ mod tests {
     // ------------------------------------------------------------------
     // FeeSchedule (item: fee schedule as raw JSON)
     // ------------------------------------------------------------------
+
+    /// Mirrors bark-json's `EmergencyExitFeeEstimateResponse`: total is the
+    /// sum of both legs and the rate is rounded up to whole sat/vB.
+    #[test]
+    fn emergency_exit_fee_estimate_conversion_and_serde_roundtrip() {
+        use bitcoin::{Amount, FeeRate};
+
+        let upstream = bark::exit::ExitFeeEstimate {
+            exit_broadcast_fee: Amount::from_sat(4576),
+            claim_fee: Amount::from_sat(645),
+            // 2.5 sat/vB → reported as 3 sat/vB, like bark-json.
+            fee_rate: FeeRate::from_sat_per_kwu(625),
+            txs_to_broadcast: 3,
+            fundable: false,
+        };
+
+        let local: EmergencyExitFeeEstimate = upstream.into();
+        assert_eq!(local.exit_broadcast_fee_sats, 4576);
+        assert_eq!(local.claim_fee_sats, 645);
+        assert_eq!(local.total_fee_sats, 4576 + 645);
+        assert_eq!(local.fee_rate_sat_per_vb, 3);
+        assert_eq!(local.txs_to_broadcast, 3);
+        assert!(!local.fundable);
+
+        let json = serde_json::to_string(&local).unwrap();
+        let back: EmergencyExitFeeEstimate = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.total_fee_sats, local.total_fee_sats);
+        assert_eq!(back.fee_rate_sat_per_vb, local.fee_rate_sat_per_vb);
+        assert_eq!(back.txs_to_broadcast, local.txs_to_broadcast);
+        assert_eq!(back.fundable, local.fundable);
+    }
 
     #[test]
     fn fee_schedule_conversion_and_serde_shape() {
