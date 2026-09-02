@@ -946,6 +946,31 @@ impl Wallet {
         run_async(async move { core.estimate_send_onchain_fee(address, amount_sats).await }).await
     }
 
+    /// Estimate the onchain cost of unilaterally (emergency) exiting VTXOs.
+    /// Mirrors bark-rest `GET /exits/fee`.
+    ///
+    /// Pass an empty `vtxo_ids` to price exiting the whole wallet (every
+    /// spendable VTXO). `fee_rate_sat_per_vb` applies to both legs; omit it to
+    /// use the chain's fast rate for the broadcast leg and regular rate for
+    /// the claim leg. `destination` only affects the claim transaction's weight.
+    ///
+    /// The onchain wallet is synced first so `fundable` reflects the current
+    /// confirmed balance. Requires a BDK onchain wallet: callback-backed
+    /// wallets (`CustomOnchainWalletCallbacks`) cannot simulate the CPFP walk
+    /// and return an error.
+    pub async fn estimate_emergency_exit_fee(
+        &self,
+        vtxo_ids: Vec<String>,
+        fee_rate_sat_per_vb: Option<u64>,
+        destination: Option<String>,
+    ) -> Result<types::EmergencyExitFeeEstimate, Error> {
+        let core = self.core.clone();
+        run_async(async move {
+            core.estimate_emergency_exit_fee(vtxo_ids, fee_rate_sat_per_vb, destination).await
+        })
+        .await
+    }
+
     // ------------------------------------------------------------------------
     // Notifications
     // ------------------------------------------------------------------------

@@ -12,8 +12,9 @@ use crate::core::onchain::OnchainWallet as CoreOnchainWallet;
 use crate::core::wallet::{seed_from_str, OpenArgs as CoreOpenArgs, Wallet as CoreWallet};
 use crate::error::Error;
 use crate::types::{
-    AddressWithIndex, ArkInfo, Balance, BoardFundingInfo, ExitCancelResult, ExitClaimTransaction,
-    ExitProgressStatus, ExitTransactionStatus, ExitVtxo, FeeEstimate, LightningInvoice,
+    AddressWithIndex, ArkInfo, Balance, BoardFundingInfo, EmergencyExitFeeEstimate,
+    ExitCancelResult, ExitClaimTransaction, ExitProgressStatus, ExitTransactionStatus, ExitVtxo,
+    FeeEstimate, LightningInvoice,
     LightningReceive, LightningSend, LightningSendStatus, Movement, Network, OffboardResult,
     PendingBoard, RecoveryReport, RoundState, Vtxo, VtxoLockHolder, WalletProperties,
 };
@@ -23,6 +24,18 @@ use crate::wasm::onchain::OnchainWallet;
 
 fn js_err(e: impl Into<Error>) -> JsError {
     JsError::new(&e.into().message())
+}
+
+/// Convert a JS fee rate (sat/vB) into `u64`, rejecting anything `as u64`
+/// would silently mangle: NaN and negatives saturate to 0 (a zero fee rate),
+/// infinities to `u64::MAX`, and fractions get truncated.
+fn fee_rate_sat_per_vb_from_js(v: f64) -> Result<u64, JsError> {
+    if !v.is_finite() || v < 0.0 || v.fract() != 0.0 || v > u64::MAX as f64 {
+        return Err(js_err(format!(
+            "Invalid fee rate: {v} (expected a non-negative whole number of sat/vB)"
+        )));
+    }
+    Ok(v as u64)
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
@@ -1021,6 +1034,30 @@ impl Wallet {
         amountSats: f64,
     ) -> Result<FeeEstimate, JsError> {
         Ok(self.core.estimate_send_onchain_fee(address, amountSats as u64).await?)
+    }
+
+    /// Estimate the onchain cost of unilaterally (emergency) exiting VTXOs.
+    /// Mirrors bark-rest `GET /exits/fee`.
+    ///
+    /// Pass an empty `vtxoIds` to price exiting the whole wallet (every
+    /// spendable VTXO). `feeRateSatPerVb` applies to both legs; omit it to use
+    /// the chain's fast rate for the broadcast leg and regular rate for the
+    /// claim leg. `destination` only affects the claim transaction's weight.
+    ///
+    /// The onchain wallet is synced first so `fundable` reflects the current
+    /// confirmed balance. Already-confirmed exit transactions cost nothing.
+    #[wasm_bindgen(js_name = estimateEmergencyExitFee)]
+    pub async fn estimate_emergency_exit_fee(
+        &self,
+        vtxoIds: Vec<String>,
+        feeRateSatPerVb: Option<f64>,
+        destination: Option<String>,
+    ) -> Result<EmergencyExitFeeEstimate, JsError> {
+        let fee_rate = feeRateSatPerVb.map(fee_rate_sat_per_vb_from_js).transpose()?;
+        Ok(self
+            .core
+            .estimate_emergency_exit_fee(vtxoIds, fee_rate, destination)
+            .await?)
     }
 
     // -- Notifications --------------------------------------------------------
