@@ -133,6 +133,18 @@ impl OnchainWallet {
         Ok(txid.to_string())
     }
 
+    /// Mark a wallet-known transaction as evicted from the mempool, so its
+    /// inputs return to coin selection immediately instead of waiting for the
+    /// sync eviction grace period. Only call this on a tx that has definitively
+    /// been superseded on-chain (e.g. an exit CPFP that was RBF-replaced);
+    /// evicting a still-in-flight tx invites a self-inflicted double-spend.
+    pub async fn evict_tx(&self, txid: String) -> Result<(), Error> {
+        let txid = txid.parse::<bitcoin::Txid>().context("invalid txid")?;
+        let mut w = self.wallet.write().await;
+        w.evict_tx(txid).await.context("Evict tx failed")?;
+        Ok(())
+    }
+
     /// Current chain tip height, from the wallet's chain source (cached
     /// upstream with a short TTL).
     pub async fn tip_height(&self) -> Result<u32, Error> {

@@ -24,9 +24,9 @@ use crate::{types, Network};
 #[derive(Clone)]
 pub struct Wallet {
     inner: bark::Wallet,
-    /// Result of the seed recovery scan `bark::Wallet::open` ran, if it ran.
-    /// See [`Wallet::recovery_report`].
-    recovery_report: Option<types::RecoveryReport>,
+    /// Outcome of the seed recovery scan `bark::Wallet::open` ran.
+    /// See [`Wallet::recovery_status`].
+    recovery_status: types::RecoveryStatus,
 }
 
 /// Optional arguments for [`Wallet::open`].
@@ -125,7 +125,7 @@ impl Wallet {
     /// wrappers that construct the inner wallet themselves (e.g. the uniffi
     /// callback-onchain path) can reuse it.
     pub(crate) fn from_inner(inner: bark::Wallet) -> Self {
-        Self { inner, recovery_report: None }
+        Self { inner, recovery_status: types::RecoveryStatus::NotRun }
     }
 
     pub(crate) fn inner(&self) -> &bark::Wallet {
@@ -179,25 +179,32 @@ impl Wallet {
         let mut args = args.into_bark();
 
         // The seed recovery scan runs inside `bark::Wallet::open` and reports
-        // through this callback, so stash its result and hand it to callers via
-        // [`Self::recovery_report`] once open returns. Keeps the report
+        // through this callback, so stash its outcome and hand it to callers via
+        // [`Self::recovery_status`] once open returns. Keeps the result
         // available without plumbing a foreign callback across the FFI.
+        // Upstream calls it exactly once per successful open.
         let slot = Arc::new(std::sync::Mutex::new(None));
         let sink = slot.clone();
-        args.on_recovery_finished = Some(Box::new(move |report| {
-            let report = types::recovery_report_from!(&report);
-            info!(
-                "[OPEN] Seed recovery finished: {} recovered ({} sats), {} skipped, \
-                 {} exited, {} foreign, {} failed, complete={}",
-                report.recovered.vtxo_ids.len(),
-                report.recovered.total_sats,
-                report.skipped.vtxo_ids.len(),
-                report.exited.vtxo_ids.len(),
-                report.foreign.vtxo_ids.len(),
-                report.failed.vtxo_ids.len(),
-                report.is_complete,
-            );
-            *sink.lock().unwrap() = Some(report);
+        args.on_recovery_finished = Some(Box::new(move |status| {
+            let status = types::RecoveryStatus::from(status);
+            match &status {
+                types::RecoveryStatus::NotRun => info!("[OPEN] Seed recovery not run"),
+                types::RecoveryStatus::Failed { message } => {
+                    warn!("[OPEN] Seed recovery FAILED, funds may be missing: {}", message)
+                },
+                types::RecoveryStatus::Completed { report } => info!(
+                    "[OPEN] Seed recovery finished: {} recovered ({} sats), {} skipped, \
+                     {} exited, {} foreign, {} failed, complete={}",
+                    report.recovered.vtxo_ids.len(),
+                    report.recovered.total_sats,
+                    report.skipped.vtxo_ids.len(),
+                    report.exited.vtxo_ids.len(),
+                    report.foreign.vtxo_ids.len(),
+                    report.failed.vtxo_ids.len(),
+                    report.is_complete,
+                ),
+            }
+            *sink.lock().unwrap() = Some(status);
         }));
 
         let inner = bark::Wallet::open(network, seed, cfg, args).await?;
@@ -210,21 +217,48 @@ impl Wallet {
             );
         }
 
-        let recovery_report = slot.lock().unwrap().take();
-        Ok(Self { inner, recovery_report })
+        // Upstream guarantees the callback fires on every successful open, so
+        // an empty slot would be an upstream bug; degrade to `NotRun` rather
+        // than fail the open over it.
+        let recovery_status = slot
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(types::RecoveryStatus::NotRun);
+        Ok(Self { inner, recovery_status })
     }
 
-    /// Result of the seed-recovery mailbox scan that ran during
-    /// [`Self::open`], or `None` if no report was produced.
+    /// Outcome of the seed-recovery mailbox scan that ran during
+    /// [`Self::open`].
     ///
     /// Recovery only runs on the open that creates the wallet locally, and not
-    /// at all when `OpenArgs::skip_recovery` is set, so this is `None` on every
-    /// subsequent open. It is also `None` when the scan itself failed outright
-    /// — upstream logs that and lets open succeed, so `None` does not prove no
-    /// funds are missing. A report with `is_complete == false` means funds may
-    /// still be missing; retry its `failed` ids with [`Self::recover_vtxos`].
+    /// at all when `OpenArgs::skip_recovery` is set, so this is `NotRun` on
+    /// every subsequent open. `Failed` means the scan errored before producing
+    /// a report — upstream logs that and lets open succeed — so funds may be
+    /// missing until a retry; `Completed` carries the report, and a report
+    /// with `is_complete == false` means funds may still be missing. Retry
+    /// `failed` ids with [`Self::recover_vtxos`].
+    pub fn recovery_status(&self) -> types::RecoveryStatus {
+        self.recovery_status.clone()
+    }
+
+    /// The report of the seed-recovery scan that ran during [`Self::open`],
+    /// or `None` if the scan did not complete. Use [`Self::recovery_status`]
+    /// to tell a scan that failed apart from one that never ran.
     pub fn recovery_report(&self) -> Option<types::RecoveryReport> {
-        self.recovery_report.clone()
+        self.recovery_status.report().cloned()
+    }
+
+    // ------------------------------------------------------------------------
+    // Daemon
+    // ------------------------------------------------------------------------
+
+    /// Stop the background daemon, if running, and wait until its tasks have
+    /// finished, so the caller knows nothing runs in the background anymore
+    /// (e.g. before wiping the wallet's datadir). No-op without a daemon.
+    pub async fn stop_daemon_wait(&self) -> Result<(), Error> {
+        self.inner.stop_daemon_wait().await.context("Stop daemon failed")?;
+        Ok(())
     }
 
     // ------------------------------------------------------------------------
@@ -426,18 +460,13 @@ impl Wallet {
     ///
     /// # Concurrency
     ///
-    /// The holder check and the release are two steps, so a lock taken by
-    /// another subsystem in between can still be released. bark 0.6.1 offers no
-    /// way to close that window: its only atomic guard,
-    /// `update_vtxo_states_checked`, matches on [`bark::vtxo::VtxoStateKind`],
-    /// which records *that* a VTXO is locked but not *by whom*. Narrowing the
-    /// allowed prior states to `Locked` (below) keeps a concurrent `Spent` or
-    /// `Exited` transition from being clobbered, which is the part that is
-    /// enforceable atomically; the holder itself is only advisory. Closing the
-    /// rest needs a holder-aware guard upstream.
-    ///
-    /// Treat this as a guard against subsystems releasing each other's locks by
-    /// mistake, not as mutual exclusion between racing writers.
+    /// The release itself is atomic per VTXO: upstream only rewrites the state
+    /// row when the stored lock holder equals `expected_holder`, so a lock that
+    /// another operation took between the holder check and the release is left
+    /// alone rather than stolen (upstream treats that as a no-op). The holder
+    /// check up front is what turns a mismatch into an error for the caller; a
+    /// VTXO that became `Spent` or `Exited` in that window is likewise left
+    /// untouched, without an error.
     pub async fn unlock_vtxos(
         &self,
         vtxo_ids: Vec<String>,
@@ -450,27 +479,30 @@ impl Wallet {
             return Ok(());
         }
 
-        match expected_holder.as_ref() {
+        match expected_holder {
             Some(expected) => {
-                self.ensure_locked_by(&ids, expected).await?;
+                self.ensure_locked_by(&ids, &expected).await?;
 
-                // Re-assert the guard at write time. This cannot check the
-                // holder, but it does reject a VTXO that became `Spent` or
-                // `Exited` since the read above, and the whole batch fails
-                // together rather than partially applying.
+                // Holder-checked, atomic per VTXO (see # Concurrency).
+                self.inner
+                    .unlock_vtxos(ids, Some(expected.into()))
+                    .await
+                    .context("Unlock VTXOs failed")?;
+            },
+            // No expected holder: release unconditionally, whoever holds the
+            // lock. Upstream's `unlock_vtxos(.., None)` would instead release
+            // only locks that carry *no* holder, so drive the state transition
+            // directly, as upstream's unlock did before 0.7. Allowing only
+            // `Locked` and `Spendable` as prior states keeps a concurrent
+            // `Spent`/`Exited` transition from being clobbered, and the batch
+            // fails together rather than partially applying.
+            None => {
                 self.inner
                     .set_vtxo_states(
                         ids,
                         &VtxoState::Spendable,
                         &[VtxoStateKind::Locked, VtxoStateKind::Spendable],
                     )
-                    .await
-                    .context("Unlock VTXOs failed")?;
-            },
-            // No expected holder: release unconditionally, matching upstream.
-            None => {
-                self.inner
-                    .unlock_vtxos(ids)
                     .await
                     .context("Unlock VTXOs failed")?;
             },
@@ -866,6 +898,11 @@ impl Wallet {
     // Arkoor
     // ------------------------------------------------------------------------
 
+    /// Send an out-of-round payment to an Ark address.
+    ///
+    /// An address this bark cannot deliver to (see
+    /// [`Self::validate_arkoor_address`]) is rejected up front, leaving the
+    /// selected VTXOs spendable, rather than cosigned and then retried forever.
     pub async fn send_arkoor_payment(
         &self,
         ark_address: String,
@@ -877,6 +914,14 @@ impl Wallet {
         Ok(())
     }
 
+    /// Whether this wallet can pay `address` out-of-round: same network and
+    /// server, a VTXO policy arkoor can pay to, and only delivery mechanisms
+    /// this bark supports. An address listing no delivery mechanism at all is
+    /// valid — that is the receiver's explicit choice, and a send to it
+    /// succeeds without attempting delivery.
+    ///
+    /// Errors only when `address` does not parse; a `false` means the parsed
+    /// address fails one of the checks above. Requires a server connection.
     pub async fn validate_arkoor_address(&self, address: String) -> Result<bool, Error> {
         let addr: ark::Address = address.parse().context("invalid ark address")?;
         Ok(self.inner.validate_arkoor_address(&addr).await.is_ok())
@@ -998,7 +1043,7 @@ impl Wallet {
     /// ones this wallet owns and that are still spendable, and import them.
     ///
     /// Takes known ids only — the full seed-derived mailbox rescan is internal
-    /// to bark and runs at wallet open (see [`Self::recovery_report`]). Use this
+    /// to bark and runs at wallet open (see [`Self::recovery_status`]). Use this
     /// to retry ids a previous scan reported as `failed`.
     pub async fn recover_vtxos(
         &self,
@@ -1010,7 +1055,7 @@ impl Wallet {
             .collect();
 
         let report = self.inner.recover_vtxos(ids?).await?;
-        Ok(types::recovery_report_from!(&report))
+        Ok((&report).into())
     }
 
     // ------------------------------------------------------------------------

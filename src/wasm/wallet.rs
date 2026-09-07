@@ -16,7 +16,8 @@ use crate::types::{
     ExitCancelResult, ExitClaimTransaction, ExitProgressStatus, ExitTransactionStatus, ExitVtxo,
     FeeEstimate, LightningInvoice,
     LightningReceive, LightningSend, LightningSendStatus, Movement, Network, OffboardResult,
-    PendingBoard, RecoveryReport, RoundState, Vtxo, VtxoLockHolder, WalletProperties,
+    PendingBoard, RecoveryReport, RecoveryStatus, RoundState, Vtxo, VtxoLockHolder,
+    WalletProperties,
 };
 use crate::wasm::db::indexed_db_client;
 use crate::wasm::notification::NotificationHolder;
@@ -224,7 +225,7 @@ pub struct OpenWalletArgs {
     /// Whether to skip the seed-recovery mailbox scan
     ///
     /// The scan runs on the open that creates the wallet locally and makes
-    /// network calls; its result is available from `recoveryReport()`. Set this
+    /// network calls; its outcome is available from `recoveryStatus()`. Set this
     /// to open without it.
     ///
     /// Default: false
@@ -644,6 +645,10 @@ impl Wallet {
         Ok(self.core.send_arkoor_payment(arkAddress, amountSats as u64).await?)
     }
 
+    /// Whether this wallet can pay `address` out-of-round: same network and
+    /// server, a supported VTXO policy, and only delivery mechanisms this bark
+    /// supports. An address listing no delivery mechanism is valid. Throws only
+    /// when the address does not parse.
     #[wasm_bindgen(js_name = validateArkoorAddress)]
     pub async fn validate_arkoor_address(&self, address: String) -> Result<bool, JsError> {
         Ok(self.core.validate_arkoor_address(address).await?)
@@ -712,15 +717,23 @@ impl Wallet {
         Ok(self.core.recover_vtxos(vtxoIds).await?)
     }
 
-    /// Result of the seed-recovery scan that ran during `open`, or `undefined`
-    /// if no report was produced.
+    /// Outcome of the seed-recovery scan that ran during `open`.
     ///
     /// Recovery only runs on the open that creates the wallet locally, and not
-    /// at all when `skipRecovery` is set, so this is `undefined` on every
-    /// subsequent open. It is also `undefined` when the scan itself failed
-    /// outright — bark logs that and lets open succeed, so `undefined` does not
-    /// prove no funds are missing. `isComplete === false` means funds may still
-    /// be missing; retry the report's `failed` ids with `recoverVtxos`.
+    /// at all when `skipRecovery` is set, so this is `not-run` on every
+    /// subsequent open. `failed` means the scan errored before producing a
+    /// report — bark logs that and lets open succeed — so funds may be missing
+    /// until a retry; `completed` carries the report, and `isComplete === false`
+    /// there means funds may still be missing. Retry the report's `failed` ids
+    /// with `recoverVtxos`.
+    #[wasm_bindgen(js_name = recoveryStatus)]
+    pub fn recovery_status(&self) -> RecoveryStatus {
+        self.core.recovery_status()
+    }
+
+    /// The report of the seed-recovery scan that ran during `open`, or
+    /// `undefined` if the scan did not complete. Use `recoveryStatus` to tell a
+    /// scan that failed apart from one that never ran.
     #[wasm_bindgen(js_name = recoveryReport)]
     pub fn recovery_report(&self) -> Option<RecoveryReport> {
         self.core.recovery_report()
@@ -1089,5 +1102,13 @@ impl Wallet {
     #[wasm_bindgen(js_name = stopDaemon)]
     pub fn stop_daemon(&self) {
         self.core.inner().stop_daemon();
+    }
+
+    /// Stop the background daemon and wait until its tasks have finished, so
+    /// nothing runs in the background afterwards (e.g. before deleting the
+    /// wallet's database). No-op when no daemon is running.
+    #[wasm_bindgen(js_name = stopDaemonWait)]
+    pub async fn stop_daemon_wait(&self) -> Result<(), JsError> {
+        Ok(self.core.stop_daemon_wait().await?)
     }
 }
