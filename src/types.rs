@@ -1442,6 +1442,50 @@ impl From<bark::exit::ExitTransactionStatus> for ExitTransactionStatus {
 // ============================================================================
 
 use bark::persist::models::{StoredRoundState, Unlocked};
+use bark::round::RoundFlowKind as BarkRoundFlowKind;
+
+/// Lifecycle phase of a round participation, mirroring
+/// `bark::round::RoundFlowKind`.
+///
+/// Serde/TS tags match upstream's `Display` form: `"delegated-pending"` |
+/// `"pending"` | `"ongoing"` | `"awaiting-confirmations"` | `"failed"` |
+/// `"canceled"`.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum RoundFlowKind {
+    /// Delegated participation waiting for its scheduled round. See
+    /// [`RoundState::scheduled_height`].
+    DelegatedPending,
+    /// Interactive participation waiting for its round.
+    Pending,
+    /// The interactive part is being played out with the server.
+    Ongoing,
+    /// The round finished; waiting for its funding tx to confirm.
+    AwaitingConfirmations,
+    /// The participation failed.
+    Failed,
+    /// The user canceled the participation.
+    Canceled,
+}
+
+impl From<BarkRoundFlowKind> for RoundFlowKind {
+    fn from(k: BarkRoundFlowKind) -> Self {
+        match k {
+            BarkRoundFlowKind::DelegatedPending => Self::DelegatedPending,
+            BarkRoundFlowKind::Pending => Self::Pending,
+            BarkRoundFlowKind::Ongoing => Self::Ongoing,
+            BarkRoundFlowKind::AwaitingConfirmations => Self::AwaitingConfirmations,
+            BarkRoundFlowKind::Failed => Self::Failed,
+            BarkRoundFlowKind::Canceled => Self::Canceled,
+        }
+    }
+}
 
 /// A pending round state
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1454,8 +1498,15 @@ use bark::persist::models::{StoredRoundState, Unlocked};
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct RoundState {
     pub id: u32,
-    /// Whether the round is ongoing
+    /// Whether the interactive part of the round is ongoing. Equivalent to
+    /// `state` being `Pending` or `Ongoing`; kept for compatibility.
     pub ongoing: bool,
+    /// Lifecycle phase of the participation.
+    pub state: RoundFlowKind,
+    /// Block height a delegated participation waits for, if it asked the
+    /// server to schedule one. Only set while `state` is `DelegatedPending`.
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
+    pub scheduled_height: Option<u32>,
 }
 
 impl From<StoredRoundState<Unlocked>> for RoundState {
@@ -1463,6 +1514,8 @@ impl From<StoredRoundState<Unlocked>> for RoundState {
         Self {
             id: rs.id().0,
             ongoing: rs.state().ongoing_participation(),
+            state: rs.state().flow_kind().into(),
+            scheduled_height: rs.state().scheduled_height(),
         }
     }
 }
@@ -1526,37 +1579,75 @@ pub struct RecoveryReport {
     pub is_complete: bool,
 }
 
-/// Convert bark's recovery report into the FFI [`RecoveryReport`].
-///
-/// A macro rather than a `From` impl because upstream's `bark::recovery` module
-/// is private: the report type is reachable through public signatures
-/// (`Wallet::recover_vtxos`, `OpenWalletArgs::on_recovery_finished`) but cannot
-/// be named, so no impl can be written for it.
-macro_rules! recovery_report_from {
-    ($report:expr) => {{
-        let r = $report;
-        $crate::types::RecoveryReport {
-            recovered: $crate::types::recovery_bucket_from!(r.recovered()),
-            skipped: $crate::types::recovery_bucket_from!(r.skipped()),
-            foreign: $crate::types::recovery_bucket_from!(r.foreign()),
-            failed: $crate::types::recovery_bucket_from!(r.failed()),
-            exited: $crate::types::recovery_bucket_from!(r.exited()),
-            is_complete: r.is_complete(),
-        }
-    }};
-}
-
-macro_rules! recovery_bucket_from {
-    ($entry:expr) => {{
-        let e = $entry;
+impl From<&bark::RecoveryReportEntry> for RecoveryBucket {
+    fn from(e: &bark::RecoveryReportEntry) -> Self {
         // Upstream keeps entries in a HashMap, so sort for a stable order.
         let mut vtxo_ids = e.ids().map(|id| id.to_string()).collect::<Vec<_>>();
         vtxo_ids.sort_unstable();
-        $crate::types::RecoveryBucket { vtxo_ids, total_sats: e.total_amount().to_sat() }
-    }};
+        Self { vtxo_ids, total_sats: e.total_amount().to_sat() }
+    }
 }
 
-pub(crate) use {recovery_bucket_from, recovery_report_from};
+impl From<&bark::RecoveryReport> for RecoveryReport {
+    fn from(r: &bark::RecoveryReport) -> Self {
+        Self {
+            recovered: r.recovered().into(),
+            skipped: r.skipped().into(),
+            foreign: r.foreign().into(),
+            failed: r.failed().into(),
+            exited: r.exited().into(),
+            is_complete: r.is_complete(),
+        }
+    }
+}
+
+/// Outcome of the seed-recovery scan `Wallet::open` runs, mirroring
+/// `bark::RecoveryStatus`.
+///
+/// The three variants are distinguishable on purpose: `NotRun` means nothing
+/// was attempted (wallet already existed locally, or `skip_recovery` was set),
+/// `Failed` means the scan errored before producing a report so funds may be
+/// missing until a retry succeeds, and `Completed` carries the report — whose
+/// `is_complete` can still be `false` for individual VTXOs.
+///
+/// Serde/TS tags: `"not-run"` | `"failed"` | `"completed"`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(into_wasm_abi)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum RecoveryStatus {
+    /// No scan was attempted.
+    NotRun,
+    /// The scan errored before it could produce a report.
+    Failed { message: String },
+    /// The scan ran to the end.
+    Completed { report: RecoveryReport },
+}
+
+impl RecoveryStatus {
+    /// The report, if the scan completed.
+    pub fn report(&self) -> Option<&RecoveryReport> {
+        match self {
+            Self::Completed { report } => Some(report),
+            _ => None,
+        }
+    }
+}
+
+impl From<bark::RecoveryStatus> for RecoveryStatus {
+    fn from(s: bark::RecoveryStatus) -> Self {
+        match s {
+            bark::RecoveryStatus::NotRun => Self::NotRun,
+            // Alternate form joins the anyhow cause chain on one line.
+            bark::RecoveryStatus::Failed(e) => Self::Failed { message: format!("{:#}", e) },
+            bark::RecoveryStatus::Completed(r) => Self::Completed { report: (&r).into() },
+        }
+    }
+}
 
 // ============================================================================
 // Callback Wallet Types
@@ -2033,5 +2124,67 @@ mod tests {
                 "confirmationHeight": null
             })
         );
+    }
+
+    // ------------------------------------------------------------------
+    // RoundFlowKind / RecoveryStatus (bark 0.7.0)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn round_flow_kind_maps_every_upstream_variant() {
+        use bark::round::RoundFlowKind as B;
+        let cases = [
+            (B::DelegatedPending, RoundFlowKind::DelegatedPending),
+            (B::Pending, RoundFlowKind::Pending),
+            (B::Ongoing, RoundFlowKind::Ongoing),
+            (B::AwaitingConfirmations, RoundFlowKind::AwaitingConfirmations),
+            (B::Failed, RoundFlowKind::Failed),
+            (B::Canceled, RoundFlowKind::Canceled),
+        ];
+        for (upstream, expected) in cases {
+            // Tag matches upstream's Display form, so a TS client can compare
+            // against `bark` CLI output.
+            assert_eq!(
+                serde_json::to_value(RoundFlowKind::from(upstream)).unwrap(),
+                serde_json::Value::String(upstream.to_string()),
+            );
+            assert_eq!(RoundFlowKind::from(upstream), expected);
+        }
+    }
+
+    #[test]
+    fn recovery_status_not_run_has_no_report() {
+        let status = RecoveryStatus::from(bark::RecoveryStatus::NotRun);
+        assert!(matches!(status, RecoveryStatus::NotRun));
+        assert!(status.report().is_none());
+        assert_eq!(
+            serde_json::to_value(&status).unwrap(),
+            serde_json::json!({ "type": "not-run" })
+        );
+    }
+
+    #[test]
+    fn recovery_status_failed_keeps_full_cause_chain() {
+        let err = anyhow::anyhow!("mailbox stream closed").context("recovery scan failed");
+        let status = RecoveryStatus::from(bark::RecoveryStatus::Failed(err));
+        let RecoveryStatus::Failed { message } = &status else {
+            panic!("expected Failed, got {status:?}");
+        };
+        assert!(message.contains("recovery scan failed"), "{message}");
+        assert!(message.contains("mailbox stream closed"), "{message}");
+        assert!(status.report().is_none());
+        assert_eq!(
+            serde_json::to_value(&status).unwrap()["type"],
+            serde_json::json!("failed")
+        );
+    }
+
+    #[test]
+    fn recovery_status_completed_exposes_report() {
+        let status = RecoveryStatus::Completed { report: RecoveryReport::default() };
+        assert!(status.report().is_some());
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["type"], serde_json::json!("completed"));
+        assert!(json["report"].is_object(), "{json}");
     }
 }

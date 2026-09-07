@@ -48,7 +48,7 @@ pub struct WalletOpenArgs {
     /// Whether to skip the seed-recovery mailbox scan
     ///
     /// The scan runs on the open that creates the wallet locally and makes
-    /// network calls; its result is available from `Wallet::recovery_report`.
+    /// network calls; its outcome is available from `Wallet::recovery_status`.
     /// Set this to open without it.
     ///
     /// Default: false
@@ -489,6 +489,10 @@ impl Wallet {
         run_async(async move { core.send_arkoor_payment(ark_address, amount_sats).await }).await
     }
 
+    /// Whether this wallet can pay `address` out-of-round: same network and
+    /// server, a supported VTXO policy, and only delivery mechanisms this bark
+    /// supports. An address listing no delivery mechanism is valid. Errors only
+    /// when the address does not parse.
     pub async fn validate_arkoor_address(&self, address: String) -> Result<bool, Error> {
         let core = self.core.clone();
         run_async(async move { core.validate_arkoor_address(address).await }).await
@@ -578,15 +582,22 @@ impl Wallet {
         run_async(async move { core.recover_vtxos(vtxo_ids).await }).await
     }
 
-    /// Result of the seed-recovery scan that ran during `Wallet::open`, or none
-    /// if no report was produced.
+    /// Outcome of the seed-recovery scan that ran during `Wallet::open`.
     ///
     /// Recovery only runs on the open that creates the wallet locally, and not
-    /// at all when `WalletOpenArgs.skip_recovery` is set, so this is empty on
-    /// every subsequent open. It is also empty when the scan itself failed
-    /// outright — bark logs that and lets open succeed, so an empty result does
-    /// not prove no funds are missing. `isComplete == false` means funds may
-    /// still be missing; retry the report's `failed` ids with `recoverVtxos`.
+    /// at all when `WalletOpenArgs.skip_recovery` is set, so this is `NotRun`
+    /// on every subsequent open. `Failed` means the scan errored before
+    /// producing a report — bark logs that and lets open succeed — so funds
+    /// may be missing until a retry; `Completed` carries the report, and
+    /// `isComplete == false` there means funds may still be missing. Retry the
+    /// report's `failed` ids with `recoverVtxos`.
+    pub fn recovery_status(&self) -> types::RecoveryStatus {
+        self.core.recovery_status()
+    }
+
+    /// The report of the seed-recovery scan that ran during `Wallet::open`, or
+    /// none if the scan did not complete. Use `recovery_status` to tell a scan
+    /// that failed apart from one that never ran.
     pub fn recovery_report(&self) -> Option<types::RecoveryReport> {
         self.core.recovery_report()
     }
@@ -994,6 +1005,14 @@ impl Wallet {
     pub async fn stop_daemon(&self) -> Result<(), Error> {
         self.inner.stop_daemon();
         Ok(())
+    }
+
+    /// Stop the background daemon and wait until its tasks have finished, so
+    /// nothing runs in the background afterwards (e.g. before deleting the
+    /// wallet's datadir). No-op when no daemon is running.
+    pub async fn stop_daemon_wait(&self) -> Result<(), Error> {
+        let core = self.core.clone();
+        run_async(async move { core.stop_daemon_wait().await }).await
     }
 }
 

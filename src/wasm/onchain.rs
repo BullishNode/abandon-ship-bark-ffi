@@ -83,6 +83,15 @@ impl OnchainWallet {
             .map_err(bark_err)
     }
 
+    /// Mark a wallet-known transaction as evicted from the mempool, so its
+    /// inputs return to coin selection immediately. Only for a tx that has
+    /// definitively been superseded on-chain (e.g. an RBF-replaced exit CPFP);
+    /// evicting a still-in-flight tx invites a self-inflicted double-spend.
+    #[wasm_bindgen(js_name = evictTx)]
+    pub async fn evict_tx(&self, txid: String) -> Result<(), JsError> {
+        self.inner.evict_tx(txid).await.map_err(bark_err)
+    }
+
     /// Current chain tip height from the wallet's chain source.
     #[wasm_bindgen(js_name = tipHeight)]
     pub async fn tip_height(&self) -> Result<u32, JsError> {

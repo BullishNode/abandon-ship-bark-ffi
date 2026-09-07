@@ -23,7 +23,7 @@ pub struct Config {
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub bitcoind_pass: Option<String>,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
-    pub vtxo_refresh_expiry_threshold: Option<u32>,
+    pub vtxo_refresh_expiry_threshold: Option<u16>,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub vtxo_exit_margin: Option<u16>,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]

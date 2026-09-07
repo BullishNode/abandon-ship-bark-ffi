@@ -74,6 +74,17 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// * `tx_hex` - Hex-encoded transaction
     fn register_tx(&self, tx_hex: String) -> Result<(), Error>;
 
+    /// Mark a wallet-known transaction as evicted from the mempool
+    ///
+    /// Bark calls this when a CPFP it broadcast was RBF-replaced by a competing
+    /// party, so the tx's inputs should return to coin selection immediately
+    /// instead of waiting for the sync eviction grace period. Only ever called
+    /// for a tx that has definitively been superseded on-chain.
+    ///
+    /// # Arguments
+    /// * `txid` - Hex-encoded transaction id
+    fn evict_tx(&self, txid: String) -> Result<(), Error>;
+
     /// Create a signed P2A CPFP transaction
     ///
     /// # Arguments
@@ -154,6 +165,13 @@ impl OnchainWalletTrait for CallbackWalletAdapter {
         self.callbacks
             .register_tx(tx_hex)
             .map_err(|e| anyhow::anyhow!("register_tx failed: {}", e.message()))?;
+        Ok(())
+    }
+
+    async fn evict_tx(&mut self, txid: bitcoin::Txid) -> anyhow::Result<()> {
+        self.callbacks
+            .evict_tx(txid.to_string())
+            .map_err(|e| anyhow::anyhow!("evict_tx failed: {}", e.message()))?;
         Ok(())
     }
 

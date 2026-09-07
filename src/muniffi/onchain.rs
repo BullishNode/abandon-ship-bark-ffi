@@ -142,6 +142,30 @@ impl OnchainWallet {
         }
     }
 
+    /// Mark a wallet-known transaction as evicted from the mempool, so its
+    /// inputs return to coin selection immediately. Only for a tx that has
+    /// definitively been superseded on-chain (e.g. an RBF-replaced exit CPFP);
+    /// evicting a still-in-flight tx invites a self-inflicted double-spend.
+    pub async fn evict_tx(&self, txid: String) -> Result<(), Error> {
+        match &self.inner {
+            OnchainWalletInner::Bdk(core) => {
+                let core = core.clone();
+                run_async(async move { core.evict_tx(txid).await }).await
+            }
+            OnchainWalletInner::Callback(adapter) => {
+                let adapter = adapter.clone();
+                run_async(async move {
+                    let txid = txid
+                        .parse::<bitcoin::Txid>()
+                        .map_err(|e| Error::from(format!("invalid txid: {}", e)))?;
+                    let mut a = adapter.write().await;
+                    a.evict_tx(txid).await.map_err(Error::from)
+                })
+                .await
+            }
+        }
+    }
+
     /// Current chain tip height from the wallet's chain source.
     pub async fn tip_height(&self) -> Result<u32, Error> {
         match &self.inner {
