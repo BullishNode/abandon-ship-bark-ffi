@@ -59,3 +59,19 @@ pub fn extract_tx_from_psbt(psbt_base64: String) -> Result<String, Error> {
 
     Ok(serialize_hex(&tx))
 }
+
+/// Default for `Config.vtxo_key_gap_limit`: the run of consecutive unused
+/// seed-derived VTXO key indices a scan crosses before concluding a VTXO
+/// isn't ours.
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn default_vtxo_key_gap_limit() -> u32 {
+    bark::DEFAULT_VTXO_KEY_GAP_LIMIT
+}
+
+/// Largest value `Config.vtxo_key_gap_limit` (or an import/recovery
+/// `gap_limit` override) accepts. A scan that matches nothing runs the limit
+/// to its end, so an unbounded limit is unbounded work.
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+pub fn max_vtxo_key_gap_limit() -> u32 {
+    bark::MAX_VTXO_KEY_GAP_LIMIT
+}

@@ -30,7 +30,6 @@ pub struct WalletOpenArgs {
     /// The onchain wallet to use, if any
     ///
     /// Default: none
-    #[uniffi(default = None)]
     pub onchain: Option<Arc<OnchainWallet>>,
 
     /// Whether to create a new wallet if no wallet exists
@@ -574,12 +573,18 @@ impl Wallet {
     /// Recover the given VTXO ids from the server, importing the ones this
     /// wallet owns that are still spendable. Use it to retry ids a previous
     /// scan reported as `failed`.
+    ///
+    /// `gap_limit` overrides `Config.vtxo_key_gap_limit` for the key scan that
+    /// decides which of `vtxo_ids` this wallet owns. Widen it to reach ids a
+    /// previous scan bucketed as `foreign`.
+    #[uniffi::method(default(gap_limit = None))]
     pub async fn recover_vtxos(
         &self,
         vtxo_ids: Vec<String>,
+        gap_limit: Option<u32>,
     ) -> Result<types::RecoveryReport, Error> {
         let core = self.core.clone();
-        run_async(async move { core.recover_vtxos(vtxo_ids).await }).await
+        run_async(async move { core.recover_vtxos(vtxo_ids, gap_limit).await }).await
     }
 
     /// Outcome of the seed-recovery scan that ran during `Wallet::open`.
@@ -871,12 +876,39 @@ impl Wallet {
 
     /// Import a VTXO from its serialized form (hex or base64).
     ///
-    /// The parameter keeps its historical `vtxo_base64` name for foreign
+    /// The VTXO is stored in the state the server reports for it, so one that
+    /// was already spent is recorded as spent rather than refused. Pass `args`
+    /// to widen the key-scan gap limit, skip the server status check, or allow
+    /// partial success; omit it for the defaults.
+    ///
+    /// The first parameter keeps its historical `vtxo_base64` name for foreign
     /// binding compatibility (uniffi exposes parameter names), but hex as
     /// returned by [`Wallet::vtxo_encoded`] is accepted too.
-    pub async fn import_vtxo(&self, vtxo_base64: String) -> Result<(), Error> {
+    #[uniffi::method(default(args = None))]
+    pub async fn import_vtxo(
+        &self,
+        vtxo_base64: String,
+        args: Option<types::ImportVtxoArgs>,
+    ) -> Result<(), Error> {
         let core = self.core.clone();
-        run_async(async move { core.import_vtxo(vtxo_base64).await }).await
+        run_async(async move { core.import_vtxo(vtxo_base64, args).await }).await
+    }
+
+    /// Import several VTXOs (hex or base64) under a single key scan and a
+    /// single write, which is why this is not just a loop over `import_vtxo`.
+    ///
+    /// Returns the ids now held — whether this call stored them or found them
+    /// already present — so a failed batch can be retried. One VTXO that cannot
+    /// be imported discards the whole batch unless `args.allow_partial` is set,
+    /// in which case the ones that did import are kept.
+    #[uniffi::method(default(args = None))]
+    pub async fn import_vtxos(
+        &self,
+        encoded_vtxos: Vec<String>,
+        args: Option<types::ImportVtxoArgs>,
+    ) -> Result<Vec<String>, Error> {
+        let core = self.core.clone();
+        run_async(async move { core.import_vtxos(encoded_vtxos, args).await }).await
     }
 
     /// Hex-encoded serialization of the full VTXO (genesis chain included),

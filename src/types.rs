@@ -1542,6 +1542,58 @@ pub struct RecoveryBucket {
     pub total_sats: u64,
 }
 
+/// Arguments for `Wallet::import_vtxo` / `Wallet::import_vtxos`, mirroring
+/// `bark::ImportVtxoArgs`.
+///
+/// Every field has a default, so callers only set what they need.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    tsify(from_wasm_abi, into_wasm_abi),
+    serde(rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ImportVtxoArgs {
+    /// Gap limit for the key scan that decides whether we own the VTXOs,
+    /// overriding `Config.vtxo_key_gap_limit` for this call.
+    ///
+    /// Default: none (use the wallet's configured limit)
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
+    #[cfg_attr(feature = "uniffi", uniffi(default = None))]
+    #[serde(default)]
+    pub gap_limit: Option<u32>,
+
+    /// Import as spendable without asking the server for each VTXO's state.
+    /// Skipping the check is faster but can leave the wallet holding spent
+    /// VTXOs marked spendable, which then fail when selected as inputs.
+    ///
+    /// Default: false
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
+    #[cfg_attr(feature = "uniffi", uniffi(default = false))]
+    #[serde(default)]
+    pub skip_status_check: bool,
+
+    /// Keep the VTXOs that import successfully even when another one in the
+    /// batch fails; the returned ids are the ones that were kept.
+    ///
+    /// Default: false, so a single failure discards the whole batch.
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
+    #[cfg_attr(feature = "uniffi", uniffi(default = false))]
+    #[serde(default)]
+    pub allow_partial: bool,
+}
+
+impl From<ImportVtxoArgs> for bark::ImportVtxoArgs {
+    fn from(a: ImportVtxoArgs) -> Self {
+        bark::ImportVtxoArgs {
+            gap_limit: a.gap_limit,
+            skip_status_check: a.skip_status_check,
+            allow_partial: a.allow_partial,
+        }
+    }
+}
+
 /// Outcome of a recovery scan: every VTXO id the scan looked at, bucketed by
 /// what was decided about it.
 ///
@@ -1564,11 +1616,12 @@ pub struct RecoveryReport {
     /// Deliberately left out: spent into a newer recovered VTXO, exited
     /// on-chain, or reported non-spendable by the server.
     pub skipped: RecoveryBucket,
-    /// No matching key could be derived within the gap limit (50 consecutive
-    /// unused indices). For a mailbox scan these are most likely this wallet's
+    /// No matching key could be derived within the gap limit (the configured
+    /// run of consecutive unused key indices, 250 by default). For a mailbox scan these are most likely this wallet's
     /// own VTXOs, keyed beyond the limit, so funds may be missing; retrying
-    /// won't help, only a wider gap limit. For `recover_vtxos` it just means
-    /// the caller passed an id this wallet doesn't own.
+    /// won't help, only a wider gap limit (see `Config.vtxo_key_gap_limit` and
+    /// the `gap_limit` override on `recover_vtxos`). For `recover_vtxos` it
+    /// just means the caller passed an id this wallet doesn't own.
     pub foreign: RecoveryBucket,
     /// Could not be decided due to an error. Not known to be spent, so funds
     /// may be missing. Retryable.
@@ -1763,6 +1816,26 @@ impl From<bark::WalletNotification> for WalletNotification {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn import_vtxo_args_default_to_upstream_defaults() {
+        let args: bark::ImportVtxoArgs = ImportVtxoArgs::default().into();
+        assert_eq!(args.gap_limit, None);
+        assert!(!args.skip_status_check);
+        assert!(!args.allow_partial);
+    }
+
+    #[test]
+    fn import_vtxo_args_are_forwarded() {
+        let args: bark::ImportVtxoArgs = ImportVtxoArgs {
+            gap_limit: Some(1_000),
+            skip_status_check: true,
+            allow_partial: true,
+        }.into();
+        assert_eq!(args.gap_limit, Some(1_000));
+        assert!(args.skip_status_check);
+        assert!(args.allow_partial);
+    }
     use std::str::FromStr;
 
     fn txid(byte: u8) -> bitcoin::Txid {
