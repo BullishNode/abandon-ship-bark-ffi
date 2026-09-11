@@ -28,3 +28,13 @@ pub fn validate_ark_address(address: String) -> Result<bool, JsError> {
 pub fn extract_tx_from_psbt(psbtBase64: String) -> Result<String, JsError> {
     core_fns::extract_tx_from_psbt(psbtBase64).map_err(bark_err)
 }
+
+#[wasm_bindgen(js_name = defaultVtxoKeyGapLimit)]
+pub fn default_vtxo_key_gap_limit() -> u32 {
+    core_fns::default_vtxo_key_gap_limit()
+}
+
+#[wasm_bindgen(js_name = maxVtxoKeyGapLimit)]
+pub fn max_vtxo_key_gap_limit() -> u32 {
+    core_fns::max_vtxo_key_gap_limit()
+}

@@ -42,6 +42,19 @@ pub struct Config {
     pub lightning_receive_claim_retries: Option<u8>,
     #[cfg_attr(feature = "wasm-web", tsify(optional))]
     pub user_agent: Option<String>,
+    /// How many consecutive unused seed-derived VTXO key indices a scan
+    /// crosses before concluding a VTXO isn't ours.
+    ///
+    /// Used by `Wallet::recover_vtxos` and `Wallet::import_vtxo(s)`, and by
+    /// the seed-recovery scan that runs at wallet creation. Every match
+    /// extends the window, so this bounds the run of unused indices, not the
+    /// total keys derived. Raise it for a wallet that handed out many
+    /// addresses without receiving into them.
+    ///
+    /// Default: 250. Capped at 100_000; a higher value is rejected when the
+    /// wallet is opened or created.
+    #[cfg_attr(feature = "wasm-web", tsify(optional))]
+    pub vtxo_key_gap_limit: Option<u32>,
 }
 
 /// Compile-time default user-agent. Each language wrapper sets
@@ -55,7 +68,10 @@ fn default_user_agent() -> Option<String> {
 }
 
 impl Config {
-    pub(crate) fn into_bark(self, network: bitcoin::Network) -> bark::Config {
+    pub(crate) fn into_bark(
+        self,
+        network: bitcoin::Network,
+    ) -> Result<bark::Config, crate::error::Error> {
         let mut ret = bark::Config::network_default(network);
         
         ret.server_address = self.server_address;
@@ -99,7 +115,73 @@ impl Config {
         if let Some(retries) = self.lightning_receive_claim_retries {
             ret.lightning_receive_claim_retries = retries;
         }
+        if let Some(limit) = self.vtxo_key_gap_limit {
+            // Refused up front rather than by the first key scan that reads it,
+            // which would only surface on a recovery or import much later.
+            if limit > bark::MAX_VTXO_KEY_GAP_LIMIT {
+                return Err(format!(
+                    "vtxo_key_gap_limit {} is above the maximum of {}",
+                    limit, bark::MAX_VTXO_KEY_GAP_LIMIT,
+                ).into());
+            }
+            ret.vtxo_key_gap_limit = limit;
+        }
 
-        ret
+        Ok(ret)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A config with nothing set, so each test only varies the field it cares
+    /// about and everything else falls back to bark's network default.
+    fn minimal() -> Config {
+        Config {
+            server_address: "http://127.0.0.1:3535".to_owned(),
+            server_access_token: None,
+            esplora_address: None,
+            bitcoind_address: None,
+            bitcoind_cookiefile: None,
+            bitcoind_user: None,
+            bitcoind_pass: None,
+            vtxo_refresh_expiry_threshold: None,
+            vtxo_exit_margin: None,
+            htlc_recv_claim_delta: None,
+            fallback_fee_rate: None,
+            round_tx_required_confirmations: None,
+            daemon_sync_interval_secs: None,
+            offboard_required_confirmations: None,
+            daemon_manual_sync: None,
+            lightning_receive_claim_retries: None,
+            user_agent: None,
+            vtxo_key_gap_limit: None,
+        }
+    }
+
+    #[test]
+    fn unset_gap_limit_keeps_the_upstream_default() {
+        let cfg = minimal().into_bark(bitcoin::Network::Regtest).unwrap();
+        assert_eq!(cfg.vtxo_key_gap_limit, bark::DEFAULT_VTXO_KEY_GAP_LIMIT);
+    }
+
+    #[test]
+    fn gap_limit_is_forwarded() {
+        let mut config = minimal();
+        config.vtxo_key_gap_limit = Some(1_000);
+        let cfg = config.into_bark(bitcoin::Network::Regtest).unwrap();
+        assert_eq!(cfg.vtxo_key_gap_limit, 1_000);
+    }
+
+    /// Rejected here rather than by the first key scan that reads it, which
+    /// would only surface on a recovery or import long after wallet open.
+    #[test]
+    fn gap_limit_above_the_maximum_is_refused() {
+        let mut config = minimal();
+        config.vtxo_key_gap_limit = Some(bark::MAX_VTXO_KEY_GAP_LIMIT + 1);
+        let err = config.into_bark(bitcoin::Network::Regtest)
+            .expect_err("a gap limit above the maximum should be refused");
+        assert!(err.message().contains("above the maximum"), "{}", err.message());
     }
 }

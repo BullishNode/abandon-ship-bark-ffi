@@ -14,7 +14,7 @@ use crate::error::Error;
 use crate::types::{
     AddressWithIndex, ArkInfo, Balance, BoardFundingInfo, EmergencyExitFeeEstimate,
     ExitCancelResult, ExitClaimTransaction, ExitProgressStatus, ExitTransactionStatus, ExitVtxo,
-    FeeEstimate, LightningInvoice,
+    FeeEstimate, ImportVtxoArgs, LightningInvoice,
     LightningReceive, LightningSend, LightningSendStatus, Movement, Network, OffboardResult,
     PendingBoard, RecoveryReport, RecoveryStatus, RoundState, Vtxo, VtxoLockHolder,
     WalletProperties,
@@ -712,9 +712,17 @@ impl Wallet {
     /// Recover the given VTXO ids from the server, importing the ones this
     /// wallet owns that are still spendable. Use it to retry ids a previous scan
     /// reported as `failed`.
+    ///
+    /// `gapLimit` overrides `vtxoKeyGapLimit` from the wallet config for the key
+    /// scan that decides which of `vtxoIds` this wallet owns. Widen it to reach
+    /// ids a previous scan bucketed as `foreign`.
     #[wasm_bindgen(js_name = recoverVtxos)]
-    pub async fn recover_vtxos(&self, vtxoIds: Vec<String>) -> Result<RecoveryReport, JsError> {
-        Ok(self.core.recover_vtxos(vtxoIds).await?)
+    pub async fn recover_vtxos(
+        &self,
+        vtxoIds: Vec<String>,
+        gapLimit: Option<u32>,
+    ) -> Result<RecoveryReport, JsError> {
+        Ok(self.core.recover_vtxos(vtxoIds, gapLimit).await?)
     }
 
     /// Outcome of the seed-recovery scan that ran during `open`.
@@ -978,9 +986,34 @@ impl Wallet {
     // -- VTXO Import / Export -------------------------------------------------
 
     /// Import a VTXO from its serialized form (hex or base64).
+    ///
+    /// The VTXO is stored in the state the server reports for it, so one that
+    /// was already spent is recorded as spent rather than refused. Pass `args`
+    /// to widen the key-scan gap limit, skip the server status check, or allow
+    /// partial success; omit it for the defaults.
     #[wasm_bindgen(js_name = importVtxo)]
-    pub async fn import_vtxo(&self, encodedVtxo: String) -> Result<(), JsError> {
-        Ok(self.core.import_vtxo(encodedVtxo).await?)
+    pub async fn import_vtxo(
+        &self,
+        encodedVtxo: String,
+        args: Option<ImportVtxoArgs>,
+    ) -> Result<(), JsError> {
+        Ok(self.core.import_vtxo(encodedVtxo, args).await?)
+    }
+
+    /// Import several VTXOs (hex or base64) under a single key scan and a
+    /// single write, which is why this is not just a loop over `importVtxo`.
+    ///
+    /// Returns the ids now held — whether this call stored them or found them
+    /// already present — so a failed batch can be retried. One VTXO that cannot
+    /// be imported discards the whole batch unless `args.allowPartial` is set,
+    /// in which case the ones that did import are kept.
+    #[wasm_bindgen(js_name = importVtxos)]
+    pub async fn import_vtxos(
+        &self,
+        encodedVtxos: Vec<String>,
+        args: Option<ImportVtxoArgs>,
+    ) -> Result<Vec<String>, JsError> {
+        Ok(self.core.import_vtxos(encodedVtxos, args).await?)
     }
 
     /// Hex-encoded serialization of the full VTXO (genesis chain included),

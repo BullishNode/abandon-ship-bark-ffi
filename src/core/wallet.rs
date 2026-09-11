@@ -150,7 +150,7 @@ impl Wallet {
         allow_unreachable_server: bool,
     ) -> Result<(), Error> {
         let network = network.into();
-        let cfg = config.into_bark(network);
+        let cfg = config.into_bark(network)?;
         let seed = seed_from_str(network, &mnemonic_or_seed)?;
 
         #[cfg(feature = "wasm-web")]
@@ -174,7 +174,7 @@ impl Wallet {
         args: OpenArgs,
     ) -> Result<Self, Error> {
         let network = network.into();
-        let cfg = config.into_bark(network);
+        let cfg = config.into_bark(network)?;
         let seed = seed_from_str(network, &mnemonic_or_seed)?;
         let mut args = args.into_bark();
 
@@ -1045,16 +1045,21 @@ impl Wallet {
     /// Takes known ids only — the full seed-derived mailbox rescan is internal
     /// to bark and runs at wallet open (see [`Self::recovery_status`]). Use this
     /// to retry ids a previous scan reported as `failed`.
+    ///
+    /// `gap_limit` overrides [`Config::vtxo_key_gap_limit`] for the key scan
+    /// that decides which of `vtxo_ids` this wallet owns. Widen it to reach ids
+    /// a previous scan bucketed as `foreign`.
     pub async fn recover_vtxos(
         &self,
         vtxo_ids: Vec<String>,
+        gap_limit: Option<u32>,
     ) -> Result<types::RecoveryReport, Error> {
         let ids: Result<Vec<_>, _> = vtxo_ids
             .iter()
             .map(|id| id.parse::<VtxoId>().context("invalid vtxo id"))
             .collect();
 
-        let report = self.inner.recover_vtxos(ids?).await?;
+        let report = self.inner.recover_vtxos(ids?, gap_limit).await?;
         Ok((&report).into())
     }
 
@@ -1096,6 +1101,7 @@ impl Wallet {
             daemon_manual_sync: Some(cfg.daemon_manual_sync),
             lightning_receive_claim_retries: Some(cfg.lightning_receive_claim_retries),
             user_agent: cfg.user_agent.clone(),
+            vtxo_key_gap_limit: Some(cfg.vtxo_key_gap_limit),
         }
     }
 
@@ -1675,16 +1681,52 @@ impl Wallet {
     /// Import a VTXO from its serialized form, as produced by
     /// [`Wallet::vtxo_encoded`] or bark-rest `GET /vtxos/{id}/encoded`.
     /// Accepts hex as well as base64.
-    pub async fn import_vtxo(&self, encoded_vtxo: String) -> Result<(), Error> {
+    ///
+    /// The VTXO is stored in the state the server reports for it, so one that
+    /// was already spent is recorded as spent rather than refused. See
+    /// [`types::ImportVtxoArgs`] for the knobs; pass `None` for the defaults.
+    pub async fn import_vtxo(
+        &self,
+        encoded_vtxo: String,
+        args: Option<types::ImportVtxoArgs>,
+    ) -> Result<(), Error> {
         let vtxo = parse_vtxo(&encoded_vtxo)?;
 
         self.inner
-            .import_vtxo(&vtxo)
+            .import_vtxo(&vtxo, args.unwrap_or_default().into())
             .await
             .context("Failed to import VTXO")?;
 
         info!("[IMPORT] VTXO imported successfully");
         Ok(())
+    }
+
+    /// Import several VTXOs under a single key scan and a single write, which
+    /// is why this is not just a loop over [`Self::import_vtxo`].
+    ///
+    /// Returns the ids now held — whether this call stored them or found them
+    /// already present — so a failed batch can be retried. One VTXO that cannot
+    /// be imported discards the whole batch unless
+    /// [`types::ImportVtxoArgs::allow_partial`] is set, in which case the ones
+    /// that did import are kept and the failures are logged.
+    pub async fn import_vtxos(
+        &self,
+        encoded_vtxos: Vec<String>,
+        args: Option<types::ImportVtxoArgs>,
+    ) -> Result<Vec<String>, Error> {
+        let vtxos = encoded_vtxos
+            .iter()
+            .map(|encoded| parse_vtxo(encoded))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let ids = self
+            .inner
+            .import_vtxos(&vtxos, args.unwrap_or_default().into())
+            .await
+            .context("Failed to import VTXOs")?;
+
+        info!("[IMPORT] {} VTXO(s) held after import", ids.len());
+        Ok(ids.iter().map(|id| id.to_string()).collect())
     }
 
     /// Hex-encoded serialization of the full VTXO (genesis chain included),
