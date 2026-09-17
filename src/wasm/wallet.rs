@@ -978,9 +978,13 @@ impl Wallet {
         Ok(self.core.mailbox_identifier()?)
     }
 
+    /// Create a hex-encoded authorization that lets whoever holds it read this
+    /// wallet's mailbox from the Ark server for `expirySecs` from now, so 86400
+    /// for 24 hours. An authorization cannot be revoked early, so keep the
+    /// window short.
     #[wasm_bindgen(js_name = mailboxAuthorization)]
-    pub fn mailbox_authorization(&self) -> Result<String, JsError> {
-        Ok(self.core.mailbox_authorization()?)
+    pub fn mailbox_authorization(&self, expirySecs: u32) -> Result<String, JsError> {
+        Ok(self.core.mailbox_authorization(expirySecs)?)
     }
 
     // -- VTXO Import / Export -------------------------------------------------

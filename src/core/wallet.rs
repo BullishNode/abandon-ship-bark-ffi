@@ -6,6 +6,7 @@ use base64::Engine;
 use log::{info, warn};
 use bip39::Mnemonic;
 use bitcoin::hex::FromHex;
+use chrono::{DateTime, Duration, Local};
 
 use ark::lightning::{Invoice, Offer, PaymentHash};
 use ark::{ProtocolEncoding, VtxoId};
@@ -1668,9 +1669,9 @@ impl Wallet {
         Ok(hex::encode(identifier.serialize()))
     }
 
-    pub fn mailbox_authorization(&self) -> Result<String, Error> {
-        let expiry = chrono::Local::now() + chrono::Duration::hours(24);
-        let auth = self.inner.mailbox_authorization(expiry);
+    /// Hex-encoded authorization to read this wallet's mailbox.
+    pub fn mailbox_authorization(&self, expiry_secs: u32) -> Result<String, Error> {
+        let auth = self.inner.mailbox_authorization(mailbox_auth_expiry(expiry_secs)?);
         Ok(hex::encode(auth.serialize()))
     }
 
@@ -1961,6 +1962,14 @@ impl Wallet {
     }
 }
 
+/// Absolute expiry `expiry_secs` from now.
+fn mailbox_auth_expiry(expiry_secs: u32) -> Result<DateTime<Local>, Error> {
+    Local::now()
+        .checked_add_signed(Duration::seconds(expiry_secs as i64))
+        .context("mailbox authorization expiry out of range")
+        .map_err(Error::from)
+}
+
 /// Parse a VTXO from its serialized form.
 ///
 /// Hex is the canonical encoding ([`Wallet::vtxo_encoded`] and bark-rest use
@@ -1986,6 +1995,25 @@ mod tests {
     /// `ark::test_util::VTXO_VECTORS` (`lib/src/test_util/vectors.rs`).
     /// Deserializing and re-serializing it is hex-identical.
     const BOARD_VTXO_HEX: &str = "02001027000000000000928a01000365a81233741893bbe2461b8d479dadc5880594fe6f7479180d5843820af72b62e0075111d0df3738fe77c8f05b0f71292ae6ae5eddf911f8d2bb4dbde598fcbe768f00000000010102030a752219f1b94bbdf8994a0a980cdda08c2ad094cb29dd834878db6dee1612ee0365a81233741893bbe2461b8d479dadc5880594fe6f7479180d5843820af72b629c9c63d9c0f739011368e00c2441d85816c01d637da8d57ac343c95982dd3604d8bf847bcf8a2aac44483d7ea01ec9a99f7720d0694cb3cdd3cbcca97504adaf01004a0100000000000000030a752219f1b94bbdf8994a0a980cdda08c2ad094cb29dd834878db6dee1612ee24e9a421d9018690eea79b11e4e4fe59d36aa8f46d110017e09abe350b5e315600000000";
+
+    #[test]
+    fn mailbox_auth_expiry_counts_from_now() {
+        let assert_offset = |secs: u32, want: Duration| {
+            let offset = mailbox_auth_expiry(secs).unwrap() - Local::now();
+            assert!(offset > want - Duration::seconds(5), "{offset}");
+            assert!(offset <= want, "{offset}");
+        };
+
+        assert_offset(60, Duration::seconds(60));
+        assert_offset(24 * 60 * 60, Duration::hours(24));
+    }
+
+    /// `u32::MAX` seconds is ~136 years, which has to resolve rather than
+    /// overflow.
+    #[test]
+    fn mailbox_auth_expiry_accepts_the_longest_expiry() {
+        assert!(mailbox_auth_expiry(u32::MAX).unwrap() > Local::now());
+    }
 
     #[test]
     fn parse_vtxo_accepts_hex_and_roundtrips() {

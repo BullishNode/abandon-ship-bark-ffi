@@ -866,8 +866,12 @@ impl Wallet {
         self.core.mailbox_identifier()
     }
 
-    pub fn mailbox_authorization(&self) -> Result<String, Error> {
-        self.core.mailbox_authorization()
+    /// Create a hex-encoded authorization that lets whoever holds it read this
+    /// wallet's mailbox from the Ark server for `expiry_secs` from now, so 86400
+    /// for 24 hours. An authorization cannot be revoked early, so keep the
+    /// window short.
+    pub fn mailbox_authorization(&self, expiry_secs: u32) -> Result<String, Error> {
+        self.core.mailbox_authorization(expiry_secs)
     }
 
     // ------------------------------------------------------------------------
