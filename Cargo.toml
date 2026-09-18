@@ -4,7 +4,7 @@ version = "0.28.0+bark-0.7.1.uniffi-0.31.1"
 edition = "2021"
 license = "MIT"
 authors = ["Team Second <hello@second.tech>"]
-repository = "https://gitlab.com/ark-bitcoin/bark"
+repository = "https://gitlab.com/ark-bitcoin/bark-ffi"
 description = "Language-agnostic Rust FFI implementation for Bark SDK bindings using UniFFI and WASM."
 
 [lib]

@@ -8,7 +8,7 @@
 <p align="center">
   <br />
   <a href="https://docs.second.tech">Docs</a> ·
-  <a href="https://gitlab.com/ark-bitcoin/bark-ffi/issues">Issues</a> ·
+  <a href="https://community.second.tech">Community</a> ·
   <a href="https://second.tech">Website</a> ·
   <a href="https://blog.second.tech">Blog</a> ·
   <a href="https://www.youtube.com/@2ndbtc">YouTube</a>
