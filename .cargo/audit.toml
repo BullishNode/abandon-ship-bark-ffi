@@ -1,0 +1,5 @@
+# Read by the blocking cargo-audit CI job. To accept an advisory that has no
+# fix, or does not apply here, add its id below with a reason. Keep it short.
+
+[advisories]
+ignore = []

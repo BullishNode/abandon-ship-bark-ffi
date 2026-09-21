@@ -2067,7 +2067,7 @@ mod tests {
         let good = parse_vtxo(BOARD_VTXO_HEX).unwrap().id().to_string();
 
         assert_eq!(parse_vtxo_ids(&[]).unwrap().len(), 0);
-        assert_eq!(parse_vtxo_ids(&[good.clone()]).unwrap().len(), 1);
+        assert_eq!(parse_vtxo_ids(std::slice::from_ref(&good)).unwrap().len(), 1);
 
         // One bad id fails the batch, so no partial lock/unlock can be issued.
         let err = parse_vtxo_ids(&[good, "nonsense".to_owned()]).unwrap_err();
