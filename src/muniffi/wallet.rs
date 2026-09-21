@@ -233,6 +233,12 @@ impl Wallet {
     // VTXO locking
     // ------------------------------------------------------------------------
 
+    /// Reserve VTXOs so wallet-driven flows leave them alone: a locked VTXO is
+    /// excluded from coin selection.
+    ///
+    /// `holder` is what `unlockVtxos` matches on to stop one subsystem
+    /// releasing another's lock. Atomic, and re-locking with the same holder
+    /// is a no-op.
     pub async fn lock_vtxos(
         &self,
         vtxo_ids: Vec<String>,
@@ -242,6 +248,12 @@ impl Wallet {
         run_async(async move { core.lock_vtxos(vtxo_ids, holder).await }).await
     }
 
+    /// Release VTXOs locked by `lockVtxos`.
+    ///
+    /// Every VTXO must currently be held by `expected_holder` or nothing is
+    /// unlocked; that is what stops cleanup freeing a VTXO a payment or
+    /// in-flight round has since claimed. Leaving it unset bypasses the guard
+    /// entirely, so reserve that for recovery.
     pub async fn unlock_vtxos(
         &self,
         vtxo_ids: Vec<String>,
@@ -341,6 +353,8 @@ impl Wallet {
         run_async(async move { core.check_lightning_payment(payment_hash, wait).await }).await
     }
 
+    /// Read-only triage, for polling after a send started with `wait = false`.
+    /// Unlike `checkLightningPayment`, never advances the action.
     pub async fn lightning_send_state(
         &self,
         payment_hash: String,
@@ -349,6 +363,8 @@ impl Wallet {
         run_async(async move { core.lightning_send_state(payment_hash).await }).await
     }
 
+    /// Cheap "has this invoice ever been paid?", answered from the local fact
+    /// table without consulting the server.
     pub async fn is_invoice_paid(&self, payment_hash: String) -> Result<bool, Error> {
         let core = self.core.clone();
         run_async(async move { core.is_invoice_paid(payment_hash).await }).await
@@ -359,6 +375,7 @@ impl Wallet {
         run_async(async move { core.pending_lightning_sends().await }).await
     }
 
+    /// Failed lightning sends whose HTLC revocation also failed.
     pub async fn stuck_failed_lightning_sends(
         &self,
     ) -> Result<Vec<types::LightningSend>, Error> {
@@ -366,6 +383,7 @@ impl Wallet {
         run_async(async move { core.stuck_failed_lightning_sends().await }).await
     }
 
+    /// Opt one stuck send into auto-exiting its HTLCs as they near expiry.
     pub async fn allow_lightning_send_to_exit(
         &self,
         payment_hash: String,
@@ -467,6 +485,7 @@ impl Wallet {
         run_async(async move { core.cancel_lightning_receive(payment_hash).await }).await
     }
 
+    /// Force-exit an unfinished lightning receive.
     pub async fn attempt_lightning_receive_exit(
         &self,
         payment_hash: String,
@@ -479,6 +498,10 @@ impl Wallet {
     // Arkoor
     // ------------------------------------------------------------------------
 
+    /// Send an out-of-round payment to an Ark address.
+    ///
+    /// An address this bark cannot deliver to (see `validateArkoorAddress`) is
+    /// rejected up front, leaving the VTXOs spendable rather than cosigned.
     pub async fn send_arkoor_payment(
         &self,
         ark_address: String,
@@ -725,6 +748,10 @@ impl Wallet {
         run_async(async move { core.start_exit_for_vtxos(vtxo_ids).await }).await
     }
 
+    /// Like `startExitForVtxos`, but skips dust and standardness checks.
+    ///
+    /// Only for VTXOs already onchain, or a node that accepts non-standard
+    /// transactions; otherwise the exit transactions may be unrelayable.
     pub async fn start_exit_for_vtxos_including_non_standard(
         &self,
         vtxo_ids: Vec<String>,
@@ -736,6 +763,11 @@ impl Wallet {
         .await
     }
 
+    /// Cancel a unilateral exit still in its abortable window.
+    ///
+    /// The VTXO stays spendable either way, and a lock you took yourself is
+    /// yours to release. Expected refusals come back in the result rather than
+    /// as an error, and cancelling twice succeeds.
     pub async fn cancel_exit(
         &self,
         vtxo_id: String,
@@ -783,6 +815,11 @@ impl Wallet {
         .await
     }
 
+    /// Build a PSBT claiming exited VTXOs to `address`.
+    ///
+    /// An empty `vtxo_ids` drains every claimable exit, so a list filtered down
+    /// to nothing drains the lot. Ids are parsed all-or-nothing; well-formed
+    /// ids that are not claimable are skipped.
     pub async fn drain_exits(
         &self,
         vtxo_ids: Vec<String>,
