@@ -1910,7 +1910,7 @@ mod tests {
 
     #[test]
     fn exit_cancel_result_serde_shape() {
-        let ok = serde_json::to_value(&ExitCancelResult::canceled()).unwrap();
+        let ok = serde_json::to_value(ExitCancelResult::canceled()).unwrap();
         assert_eq!(ok["canceled"], serde_json::json!(true));
         assert!(ok["reason"].is_null());
 
