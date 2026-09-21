@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(from_wasm_abi, into_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]

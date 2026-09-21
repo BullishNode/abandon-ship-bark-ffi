@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(from_wasm_abi, into_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Network {
@@ -54,7 +53,6 @@ impl From<BtcNetwork> for Network {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -80,7 +78,6 @@ impl From<BarkWalletProperties> for WalletProperties {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -127,7 +124,6 @@ impl From<BarkBalance> for Balance {
     derive(tsify::Tsify),
     // Both directions: read back off `Vtxo.state`, and passed in when
     // locking or unlocking.
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum VtxoLockHolder {
@@ -167,7 +163,6 @@ impl From<VtxoLockHolder> for bark::vtxo::VtxoLockHolder {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum VtxoState {
@@ -201,7 +196,6 @@ impl From<&bark::vtxo::VtxoState> for VtxoState {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -247,7 +241,6 @@ impl From<BarkWalletVtxo> for Vtxo {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -265,7 +258,6 @@ pub struct LightningInvoice {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -281,7 +273,6 @@ pub struct OffboardResult {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -298,7 +289,6 @@ pub struct AddressWithIndex {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -379,7 +369,6 @@ impl From<bark::actions::lightning::receive::LightningReceiveState> for Lightnin
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -421,7 +410,6 @@ impl From<bark::actions::lightning::pay::LightningSend> for LightningSend {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi),
     serde(tag = "type", rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
@@ -459,7 +447,6 @@ impl From<bark::actions::lightning::pay::LightningSendState> for LightningSendSt
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -538,7 +525,6 @@ impl From<bark::movement::Movement> for Movement {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -575,7 +561,6 @@ impl From<bark::FeeEstimate> for FeeEstimate {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -624,7 +609,6 @@ impl From<bark::exit::ExitFeeEstimate> for EmergencyExitFeeEstimate {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -657,7 +641,6 @@ impl From<bark::onchain::bdk_wallet::Balance> for OnchainBalance {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct FeeRates {
@@ -682,7 +665,6 @@ impl From<bark::chain::FeeRates> for FeeRates {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -723,7 +705,6 @@ impl From<&bark::onchain::WalletTxInfo> for WalletTransaction {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum OnchainUtxo {
@@ -771,7 +752,6 @@ impl From<&bark::onchain::Utxo> for OnchainUtxo {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -805,7 +785,6 @@ impl From<BarkPendingBoard> for PendingBoard {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -829,7 +808,6 @@ pub struct BoardFundingInfo {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PpmExpiryFeeEntry {
@@ -844,7 +822,6 @@ pub struct PpmExpiryFeeEntry {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BoardFees {
@@ -860,7 +837,6 @@ pub struct BoardFees {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct OffboardFees {
@@ -876,7 +852,6 @@ pub struct OffboardFees {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct RefreshFees {
@@ -890,7 +865,6 @@ pub struct RefreshFees {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LightningReceiveFees {
@@ -905,7 +879,6 @@ pub struct LightningReceiveFees {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LightningSendFees {
@@ -920,7 +893,6 @@ pub struct LightningSendFees {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct FeeSchedule {
@@ -977,7 +949,6 @@ impl From<&ark::fees::FeeSchedule> for FeeSchedule {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1053,7 +1024,6 @@ use bark::exit::ExitVtxo as BarkExitVtxo;
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ExitTxOrigin {
@@ -1087,7 +1057,6 @@ impl From<&bark::exit::ExitTxOrigin> for ExitTxOrigin {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ExitTxStatus {
@@ -1141,7 +1110,6 @@ impl From<&bark::exit::ExitTxStatus> for ExitTxStatus {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ExitTx {
@@ -1168,7 +1136,6 @@ impl From<&bark::exit::ExitTx> for ExitTx {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ExitState {
@@ -1257,7 +1224,6 @@ impl From<&bark::exit::ExitState> for ExitState {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ExitStateKind {
@@ -1298,7 +1264,6 @@ impl From<bark::exit::ExitStateKind> for ExitStateKind {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ExitCancelFailure {
@@ -1321,7 +1286,6 @@ pub enum ExitCancelFailure {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1348,7 +1312,6 @@ impl ExitCancelResult {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1375,7 +1338,6 @@ impl From<&BarkExitVtxo> for ExitVtxo {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1400,7 +1362,6 @@ impl From<BarkExitProgressStatus> for ExitProgressStatus {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1414,7 +1375,6 @@ pub struct ExitClaimTransaction {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1456,7 +1416,6 @@ use bark::round::RoundFlowKind as BarkRoundFlowKind;
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum RoundFlowKind {
@@ -1493,7 +1452,6 @@ impl From<BarkRoundFlowKind> for RoundFlowKind {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1534,7 +1492,6 @@ impl From<StoredRoundState<Unlocked>> for RoundState {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1551,7 +1508,6 @@ pub struct RecoveryBucket {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(from_wasm_abi, into_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1607,7 +1563,6 @@ impl From<ImportVtxoArgs> for bark::ImportVtxoArgs {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1670,7 +1625,6 @@ impl From<&bark::RecoveryReport> for RecoveryReport {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi)
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum RecoveryStatus {
@@ -1712,7 +1666,6 @@ impl From<bark::RecoveryStatus> for RecoveryStatus {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1726,7 +1679,6 @@ pub struct Destination {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1740,7 +1692,6 @@ pub struct OutPoint {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1763,7 +1714,6 @@ impl From<&bark_bitcoin_ext::BlockRef> for BlockRef {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi, from_wasm_abi),
     serde(rename_all = "camelCase")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1783,7 +1733,6 @@ pub struct CpfpParams {
 #[cfg_attr(
     feature = "wasm-web",
     derive(tsify::Tsify),
-    tsify(into_wasm_abi),
     serde(tag = "type")
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]

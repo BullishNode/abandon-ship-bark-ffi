@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
+use tsify::Ts;
 use wasm_bindgen::prelude::*;
 
 use crate::config::Config;
@@ -18,7 +19,6 @@ fn bark_err(e: Error) -> JsError {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct OnchainWalletDefaultArgs {
     pub network: Network,
@@ -35,7 +35,8 @@ pub struct OnchainWallet {
 #[wasm_bindgen]
 impl OnchainWallet {
     /// Open (or create) the onchain wallet against an IndexedDB-backed persister.
-    pub async fn default(args: OnchainWalletDefaultArgs) -> Result<OnchainWallet, JsError> {
+    pub async fn default(args: Ts<OnchainWalletDefaultArgs>) -> Result<OnchainWallet, JsError> {
+        let args = args.to_rust()?;
         let db = indexed_db_client(&args.db_name).await.map_err(bark_err)?;
         let core = CoreOnchainWallet::default(args.network, args.mnemonic, args.config, db)
             .await
@@ -62,8 +63,8 @@ impl OnchainWallet {
             .map_err(bark_err)
     }
 
-    pub async fn balance(&self) -> Result<OnchainBalance, JsError> {
-        self.inner.balance().await.map_err(bark_err)
+    pub async fn balance(&self) -> Result<Ts<OnchainBalance>, JsError> {
+        Ok(self.inner.balance().await.map_err(bark_err)?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = newAddress)]
@@ -100,18 +101,20 @@ impl OnchainWallet {
 
     /// Cached network fee-rate estimates from the wallet's chain source.
     #[wasm_bindgen(js_name = feeRates)]
-    pub async fn fee_rates(&self) -> Result<crate::types::FeeRates, JsError> {
-        self.inner.fee_rates().await.map_err(bark_err)
+    pub async fn fee_rates(&self) -> Result<Ts<crate::types::FeeRates>, JsError> {
+        Ok(self.inner.fee_rates().await.map_err(bark_err)?.into_ts()?)
     }
 
     /// Every wallet transaction with fee, balance change, confirmation and
     /// CPFP flag. Requires a prior `sync` to be meaningful.
-    pub async fn transactions(&self) -> Result<Vec<crate::types::WalletTransaction>, JsError> {
-        self.inner.transactions().await.map_err(bark_err)
+    pub async fn transactions(&self) -> Result<Vec<Ts<crate::types::WalletTransaction>>, JsError> {
+        Ok(self.inner.transactions().await.map_err(bark_err)?
+            .into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     /// The wallet's unspent outputs. Requires a prior `sync` to be meaningful.
-    pub async fn utxos(&self) -> Result<Vec<crate::types::OnchainUtxo>, JsError> {
-        self.inner.utxos().await.map_err(bark_err)
+    pub async fn utxos(&self) -> Result<Vec<Ts<crate::types::OnchainUtxo>>, JsError> {
+        Ok(self.inner.utxos().await.map_err(bark_err)?
+            .into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 }
