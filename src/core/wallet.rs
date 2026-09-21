@@ -15,6 +15,7 @@ use bark::onchain::OnchainWalletTrait;
 use bark::persist::BarkPersister;
 
 use crate::config::Config;
+use crate::core::parse_address;
 use crate::error::Error;
 use crate::{types, Network};
 
@@ -86,7 +87,6 @@ pub(crate) fn seed_from_str(
             .context("invalid mnemonic")?;
         Ok(WalletSeed::new_from_mnemonic(network, &mnemonic))
     } else {
-        // seed
         let bytes = <[u8; 64]>::from_hex(seed_or_phrase)
             .context("invalid hex seed, needs to be 64 bytes")?;
         Ok(WalletSeed::new_from_seed(network, &bytes))
@@ -557,10 +557,7 @@ impl Wallet {
         &self,
         bitcoin_address: String,
     ) -> Result<types::OffboardResult, Error> {
-        let addr = bitcoin_address
-            .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-            .context("invalid address")?
-            .assume_checked();
+        let addr = parse_address(&bitcoin_address, self.inner.network().await?)?;
 
         let txid = self.inner.offboard_all(addr).await?;
         Ok(types::OffboardResult {
@@ -573,10 +570,7 @@ impl Wallet {
         vtxo_ids: Vec<String>,
         bitcoin_address: String,
     ) -> Result<types::OffboardResult, Error> {
-        let addr = bitcoin_address
-            .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-            .context("invalid address")?
-            .assume_checked();
+        let addr = parse_address(&bitcoin_address, self.inner.network().await?)?;
 
         let ids: Result<Vec<_>, _> = vtxo_ids
             .iter()
@@ -936,10 +930,7 @@ impl Wallet {
         address: String,
         amount_sats: u64,
     ) -> Result<String, Error> {
-        let addr = address
-            .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-            .context("invalid address")?
-            .assume_checked();
+        let addr = parse_address(&address, self.inner.network().await?)?;
         let amount = bitcoin::Amount::from_sat(amount_sats);
         let txid = self.inner.send_onchain(addr, amount).await?;
         Ok(txid.to_string())
@@ -1506,6 +1497,11 @@ impl Wallet {
         Ok(status.map(Into::into))
     }
 
+    /// Build a PSBT claiming exited VTXOs to `address`.
+    ///
+    /// An empty `vtxo_ids` drains every claimable exit, so a list filtered down
+    /// to nothing drains the lot. Ids are parsed all-or-nothing; well-formed
+    /// ids that are not claimable are skipped.
     pub async fn drain_exits(
         &self,
         vtxo_ids: Vec<String>,
@@ -1514,10 +1510,7 @@ impl Wallet {
     ) -> Result<types::ExitClaimTransaction, Error> {
         info!("[EXIT] Draining {} exits to {}...", vtxo_ids.len(), address);
 
-        let addr = address
-            .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-            .context("invalid address")?
-            .assume_checked();
+        let addr = parse_address(&address, self.inner.network().await?)?;
 
         let fee_rate = fee_rate_sat_per_vb.and_then(bitcoin::FeeRate::from_sat_per_vb);
 
@@ -1527,10 +1520,9 @@ impl Wallet {
         let to_drain: Vec<_> = if vtxo_ids.is_empty() {
             claimable
         } else {
-            let requested_ids: std::collections::HashSet<_> = vtxo_ids
-                .iter()
-                .filter_map(|id| id.parse::<VtxoId>().ok())
-                .collect();
+            // All-or-nothing: a malformed id used to be dropped silently.
+            let requested_ids: std::collections::HashSet<_> =
+                parse_vtxo_ids(&vtxo_ids)?.into_iter().collect();
             claimable
                 .into_iter()
                 .filter(|ev| requested_ids.contains(&ev.id()))
@@ -1765,10 +1757,7 @@ impl Wallet {
         address: String,
         vtxo_ids: Vec<String>,
     ) -> Result<types::FeeEstimate, Error> {
-        let btc_addr = address
-            .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-            .context("Failed to parse address")?
-            .assume_checked();
+        let btc_addr = parse_address(&address, self.inner.network().await?)?;
 
         let ids: Result<Vec<_>, _> = vtxo_ids
             .iter()
@@ -1864,10 +1853,7 @@ impl Wallet {
         &self,
         address: String,
     ) -> Result<types::FeeEstimate, Error> {
-        let btc_addr = address
-            .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-            .context("Failed to parse address")?
-            .assume_checked();
+        let btc_addr = parse_address(&address, self.inner.network().await?)?;
 
         let estimate = self
             .inner
@@ -1881,10 +1867,7 @@ impl Wallet {
         address: String,
         amount_sats: u64,
     ) -> Result<types::FeeEstimate, Error> {
-        let btc_addr = address
-            .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-            .context("Failed to parse address")?
-            .assume_checked();
+        let btc_addr = parse_address(&address, self.inner.network().await?)?;
 
         let amount = bitcoin::Amount::from_sat(amount_sats);
         let estimate = self
@@ -1933,15 +1916,7 @@ impl Wallet {
         };
 
         let destination = match destination {
-            Some(s) => {
-                let network = self.inner.network().await?;
-                let addr = s
-                    .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-                    .context("Invalid destination address")?
-                    .require_network(network)
-                    .context("Destination address is not valid for the wallet's network")?;
-                Some(addr)
-            }
+            Some(s) => Some(parse_address(&s, self.inner.network().await?)?),
             None => None,
         };
 
