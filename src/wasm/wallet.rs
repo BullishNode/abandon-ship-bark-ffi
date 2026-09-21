@@ -122,6 +122,10 @@ pub struct ProgressExitsArgs {
 #[serde(rename_all = "camelCase")]
 pub struct DrainExitsArgs {
     pub vtxoIds: Vec<String>,
+    /// Claim every exit. Mutually exclusive with `vtxoIds`, so a list filtered
+    /// down to nothing is an error rather than a sweep.
+    #[tsify(optional)]
+    pub drainAll: Option<bool>,
     pub address: String,
     #[tsify(optional)]
     pub feeRateSatPerVb: Option<u64>,
@@ -902,7 +906,15 @@ impl Wallet {
 
     #[wasm_bindgen(js_name = drainExits)]
     pub async fn drain_exits(&self, args: DrainExitsArgs) -> Result<ExitClaimTransaction, JsError> {
-        Ok(self.core.drain_exits(args.vtxoIds, args.address, args.feeRateSatPerVb).await?)
+        Ok(self
+            .core
+            .drain_exits(
+                args.vtxoIds,
+                args.drainAll.unwrap_or(false),
+                args.address,
+                args.feeRateSatPerVb,
+            )
+            .await?)
     }
 
     #[wasm_bindgen(js_name = allExitsClaimableAtHeight)]

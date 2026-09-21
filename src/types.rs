@@ -305,7 +305,9 @@ pub struct AddressWithIndex {
 pub struct LightningReceive {
     pub payment_hash: String,
     pub invoice: String,
-    pub amount_sats: u64,
+    /// `None` for an amountless invoice that has not settled yet. It used to
+    /// report 0, which a UI cannot tell from a genuine zero.
+    pub amount_sats: Option<u64>,
     /// Receive progress: "awaiting-payment" | "htlcs-ready" |
     /// "preimage-revealed" | "delivering" | "settled"
     pub state: String,
@@ -335,8 +337,7 @@ impl From<bark::actions::lightning::receive::LightningReceive> for LightningRece
             amount_sats: r
                 .invoice
                 .amount_milli_satoshis()
-                .map(|a| bitcoin::Amount::from_msat_floor(a).to_sat())
-                .unwrap_or(0),
+                .map(|a| bitcoin::Amount::from_msat_floor(a).to_sat()),
             state: state.to_string(),
             payment_preimage: Some(r.payment_preimage.to_string()),
             settled_at: None,
@@ -350,7 +351,7 @@ impl From<bark::persist::models::SettledLightningReceive> for LightningReceive {
         Self {
             payment_hash: r.payment_hash.to_string(),
             invoice: r.invoice.to_string(),
-            amount_sats: r.amount.to_sat(),
+            amount_sats: Some(r.amount.to_sat()),
             state: "settled".to_string(),
             payment_preimage: Some(r.preimage.to_string()),
             settled_at: Some(r.settled_at.timestamp()),

@@ -1075,14 +1075,17 @@ impl Wallet {
         let cfg = self.inner.config();
         Config {
             server_address: cfg.server_address.clone(),
+            // Credentials are write-only across the FFI: upstream keeps the
+            // password in a Secret so it stays out of Debug, and handing it
+            // back here put it straight into a printable record.
             #[allow(deprecated)]
-            server_access_token: cfg.server_access_token.clone(),
+            server_access_token: None,
             esplora_address: cfg.esplora_address.clone(),
             bitcoind_address: cfg.bitcoind_address.clone(),
             bitcoind_cookiefile: cfg.bitcoind_cookiefile.as_ref()
                 .map(|p| p.to_string_lossy().to_string()),
             bitcoind_user: cfg.bitcoind_user.clone(),
-            bitcoind_pass: cfg.bitcoind_pass.as_ref().map(|p| p.leak_ref().clone()),
+            bitcoind_pass: None,
             vtxo_refresh_expiry_threshold: Some(cfg.vtxo_refresh_expiry_threshold),
             vtxo_exit_margin: Some(cfg.vtxo_exit_margin),
             htlc_recv_claim_delta: Some(cfg.htlc_recv_claim_delta),
@@ -1500,12 +1503,14 @@ impl Wallet {
 
     /// Build a PSBT claiming exited VTXOs to `address`.
     ///
-    /// An empty `vtxo_ids` drains every claimable exit, so a list filtered down
-    /// to nothing drains the lot. Ids are parsed all-or-nothing; well-formed
-    /// ids that are not claimable are skipped.
+    /// Draining everything must be asked for with `drain_all`, so an id list a
+    /// caller filtered down to nothing is an error rather than a sweep. Ids are
+    /// parsed all-or-nothing; well-formed ids that are not claimable are
+    /// skipped.
     pub async fn drain_exits(
         &self,
         vtxo_ids: Vec<String>,
+        drain_all: bool,
         address: String,
         fee_rate_sat_per_vb: Option<u64>,
     ) -> Result<types::ExitClaimTransaction, Error> {
@@ -1518,16 +1523,23 @@ impl Wallet {
         let exit_guard = self.inner.exit_mgr();
         let claimable = exit_guard.list_claimable().await;
 
-        let to_drain: Vec<_> = if vtxo_ids.is_empty() {
-            claimable
-        } else {
-            // All-or-nothing: a malformed id used to be dropped silently.
-            let requested_ids: std::collections::HashSet<_> =
-                parse_vtxo_ids(&vtxo_ids)?.into_iter().collect();
-            claimable
-                .into_iter()
-                .filter(|ev| requested_ids.contains(&ev.id()))
-                .collect()
+        let to_drain: Vec<_> = match (drain_all, vtxo_ids.is_empty()) {
+            (true, true) => claimable,
+            (true, false) => return Err(
+                "pass either drain_all or a list of vtxo ids, not both".into()
+            ),
+            (false, true) => return Err(
+                "no vtxo ids given; pass drain_all to claim every exit".into()
+            ),
+            (false, false) => {
+                // All-or-nothing: a malformed id used to be dropped silently.
+                let requested_ids: std::collections::HashSet<_> =
+                    parse_vtxo_ids(&vtxo_ids)?.into_iter().collect();
+                claimable
+                    .into_iter()
+                    .filter(|ev| requested_ids.contains(&ev.id()))
+                    .collect()
+            },
         };
 
         if to_drain.is_empty() {
@@ -1966,6 +1978,30 @@ fn parse_vtxo(encoded: &str) -> Result<ark::Vtxo, Error> {
 mod tests {
     use super::*;
 
+    /// A config with only the required field set.
+    fn minimal_config() -> crate::config::Config {
+        crate::config::Config {
+            server_address: "http://127.0.0.1:3535".to_owned(),
+            server_access_token: None,
+            esplora_address: None,
+            bitcoind_address: None,
+            bitcoind_cookiefile: None,
+            bitcoind_user: None,
+            bitcoind_pass: None,
+            vtxo_refresh_expiry_threshold: None,
+            vtxo_exit_margin: None,
+            htlc_recv_claim_delta: None,
+            fallback_fee_rate: None,
+            round_tx_required_confirmations: None,
+            daemon_sync_interval_secs: None,
+            offboard_required_confirmations: None,
+            daemon_manual_sync: None,
+            lightning_receive_claim_retries: None,
+            user_agent: None,
+            vtxo_key_gap_limit: None,
+        }
+    }
+
     /// Current-version board VTXO test vector, copied from bark's
     /// `ark::test_util::VTXO_VECTORS` (`lib/src/test_util/vectors.rs`).
     /// Deserializing and re-serializing it is hex-identical.
@@ -2059,6 +2095,28 @@ mod tests {
         let hex = "00".repeat(64);
         seed_from_str(bitcoin::Network::Regtest, &hex).unwrap();
         seed_from_str(bitcoin::Network::Regtest, &format!("  {}\n", hex)).unwrap();
+    }
+
+    /// The redaction in `config()` needs a live wallet to exercise, so this
+    /// guards the other half: credentials must still reach bark on the way in.
+    #[test]
+    fn credentials_still_reach_bark_on_the_way_in() {
+        let mut config = minimal_config();
+        config.bitcoind_pass = Some("hunter2".to_owned());
+        let cfg = config.into_bark(bitcoin::Network::Regtest).unwrap();
+        assert_eq!(cfg.bitcoind_pass.map(|p| p.leak_ref().clone()).as_deref(), Some("hunter2"));
+    }
+
+    /// bark wraps the password in a Secret so it stays out of logs; the FFI
+    /// Config derives Debug, so it must not be carrying one back.
+    #[test]
+    fn a_config_without_credentials_prints_none_of_them() {
+        let mut config = minimal_config();
+        config.bitcoind_pass = None;
+        config.server_access_token = None;
+        let rendered = format!("{:?}", config);
+        assert!(rendered.contains("bitcoind_pass: None"), "{rendered}");
+        assert!(rendered.contains("server_access_token: None"), "{rendered}");
     }
 
     #[test]
