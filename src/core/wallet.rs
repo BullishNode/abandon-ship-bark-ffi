@@ -77,13 +77,13 @@ pub(crate) fn seed_from_str(
     network: bitcoin::Network,
     mnemonic_or_seed: &str,
 ) -> Result<WalletSeed, Error> {
-    // remove leading or trailing whitespace
     let seed_or_phrase = mnemonic_or_seed.trim();
 
-    // all mnemonics have spaces, no seeds have spaces
-    if seed_or_phrase.contains(' ') {
-        // mnemonic
-        let mnemonic = Mnemonic::parse(seed_or_phrase)
+    // Any whitespace, not just ' ': a phrase pasted with newlines used to fall
+    // through to the hex branch and fail as "invalid hex seed".
+    if seed_or_phrase.split_whitespace().nth(1).is_some() {
+        let phrase = seed_or_phrase.split_whitespace().collect::<Vec<_>>().join(" ");
+        let mnemonic = Mnemonic::parse(&phrase)
             .context("invalid mnemonic")?;
         Ok(WalletSeed::new_from_mnemonic(network, &mnemonic))
     } else {
@@ -2007,6 +2007,30 @@ mod tests {
         assert!(parse_vtxo("deadbeef").is_err());
         // Valid base64, but not a VTXO.
         assert!(parse_vtxo("aGVsbG8gd29ybGQ=").is_err());
+    }
+
+    /// Same 12 words, four ways a caller might paste them.
+    #[test]
+    fn a_mnemonic_parses_whatever_whitespace_separates_the_words() {
+        const WORDS: [&str; 12] = [
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "about",
+        ];
+        let canonical = seed_from_str(bitcoin::Network::Regtest, &WORDS.join(" ")).unwrap();
+
+        for sep in ["\n", "\t", "  ", " \n "] {
+            let seed = seed_from_str(bitcoin::Network::Regtest, &WORDS.join(sep))
+                .unwrap_or_else(|e| panic!("{:?}-separated phrase rejected: {}", sep, e.message()));
+            assert_eq!(seed.fingerprint(), canonical.fingerprint(), "separator {:?}", sep);
+        }
+    }
+
+    /// A hex seed has no whitespace, so it must still take the seed branch.
+    #[test]
+    fn a_hex_seed_is_still_read_as_a_seed() {
+        let hex = "00".repeat(64);
+        seed_from_str(bitcoin::Network::Regtest, &hex).unwrap();
+        seed_from_str(bitcoin::Network::Regtest, &format!("  {}\n", hex)).unwrap();
     }
 
     #[test]
