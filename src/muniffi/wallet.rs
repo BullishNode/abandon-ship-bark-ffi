@@ -817,18 +817,20 @@ impl Wallet {
 
     /// Build a PSBT claiming exited VTXOs to `address`.
     ///
-    /// An empty `vtxo_ids` drains every claimable exit, so a list filtered down
-    /// to nothing drains the lot. Ids are parsed all-or-nothing; well-formed
-    /// ids that are not claimable are skipped.
+    /// Draining everything must be asked for with `drain_all`, so an id list
+    /// filtered down to nothing is an error rather than a sweep. Ids are parsed
+    /// all-or-nothing; well-formed ids that are not claimable are skipped.
+    #[uniffi::method(default(drain_all = false))]
     pub async fn drain_exits(
         &self,
         vtxo_ids: Vec<String>,
+        drain_all: bool,
         address: String,
         fee_rate_sat_per_vb: Option<u64>,
     ) -> Result<types::ExitClaimTransaction, Error> {
         let core = self.core.clone();
         run_async(async move {
-            core.drain_exits(vtxo_ids, address, fee_rate_sat_per_vb)
+            core.drain_exits(vtxo_ids, drain_all, address, fee_rate_sat_per_vb)
                 .await
         })
         .await

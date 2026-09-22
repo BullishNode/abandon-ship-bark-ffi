@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
 use crate::core::notification::NotificationHolder as CoreHolder;
@@ -37,8 +38,15 @@ impl NotificationHolder {
     /// - `cancelNextNotificationWait()` was called while pending, or
     /// - the wallet's notification source was shut down.
     #[wasm_bindgen(js_name = nextNotification)]
-    pub async fn next_notification(&self) -> Result<Option<WalletNotification>, JsError> {
-        self.inner.clone().next_notification().await.map_err(bark_err)
+    pub async fn next_notification(&self) -> Result<Option<Ts<WalletNotification>>, JsError> {
+        Ok(self
+            .inner
+            .clone()
+            .next_notification()
+            .await
+            .map_err(bark_err)?
+            .map(|v| v.into_ts())
+            .transpose()?)
     }
 
     /// Cancel the currently pending `nextNotification()` wait.

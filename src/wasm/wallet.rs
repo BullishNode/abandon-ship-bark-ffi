@@ -5,6 +5,7 @@ use std::sync::Arc;
 use bark::onchain::OnchainWalletTrait;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
+use tsify::Ts;
 use wasm_bindgen::prelude::*;
 
 use crate::config::Config;
@@ -40,7 +41,6 @@ fn fee_rate_sat_per_vb_from_js(v: f64) -> Result<u64, JsError> {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct PayLightningInvoiceArgs {
     pub invoice: String,
@@ -51,7 +51,6 @@ pub struct PayLightningInvoiceArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct PayLightningOfferArgs {
     pub offer: String,
@@ -62,7 +61,6 @@ pub struct PayLightningOfferArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct PayLightningAddressArgs {
     pub lightningAddress: String,
@@ -74,7 +72,6 @@ pub struct PayLightningAddressArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct PayLnurlArgs {
     pub lnurl: String,
@@ -86,7 +83,6 @@ pub struct PayLnurlArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct Bolt11InvoiceArgs {
     pub amountSats: u64,
@@ -97,7 +93,6 @@ pub struct Bolt11InvoiceArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct Bolt11InvoiceForAddressArgs {
     pub amountSats: u64,
@@ -110,7 +105,6 @@ pub struct Bolt11InvoiceForAddressArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct ProgressExitsArgs {
     #[tsify(optional)]
@@ -118,17 +112,19 @@ pub struct ProgressExitsArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct DrainExitsArgs {
     pub vtxoIds: Vec<String>,
+    /// Claim every exit. Mutually exclusive with `vtxoIds`, so a list filtered
+    /// down to nothing is an error rather than a sweep.
+    #[tsify(optional)]
+    pub drainAll: Option<bool>,
     pub address: String,
     #[tsify(optional)]
     pub feeRateSatPerVb: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckLightningPaymentArgs {
     pub paymentHash: String,
@@ -137,7 +133,6 @@ pub struct CheckLightningPaymentArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct GetExitStatusArgs {
     pub vtxoId: String,
@@ -146,7 +141,6 @@ pub struct GetExitStatusArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct LockVtxosArgs {
     pub vtxoIds: Vec<String>,
@@ -158,7 +152,6 @@ pub struct LockVtxosArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct UnlockVtxosArgs {
     pub vtxoIds: Vec<String>,
@@ -169,7 +162,6 @@ pub struct UnlockVtxosArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct TryClaimLightningReceiveArgs {
     pub paymentHash: String,
@@ -178,7 +170,6 @@ pub struct TryClaimLightningReceiveArgs {
 }
 
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct TryClaimAllLightningReceivesArgs {
     #[tsify(optional)]
@@ -189,7 +180,6 @@ pub struct TryClaimAllLightningReceivesArgs {
 ///
 /// Every field has a default, so callers only set what they need.
 #[derive(Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi, into_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenWalletArgs {
     /// Whether to run the background daemon
@@ -305,12 +295,15 @@ impl Wallet {
     /// the handle and leaves it usable, or recover a fresh handle with
     /// `onchainWallet()` after opening.
     pub async fn open(
-        network: Network,
+        network: Ts<Network>,
         mnemonic_or_seed: String,
-        config: Config,
+        config: Ts<Config>,
         onchain: Option<OnchainWallet>,
-        args: OpenWalletArgs,
+        args: Ts<OpenWalletArgs>,
     ) -> Result<Wallet, JsError> {
+        let network = network.to_rust()?;
+        let config = config.to_rust()?;
+        let args = args.to_rust()?;
         Self::open_impl(network, mnemonic_or_seed, config, onchain.map(|w| w.inner), args).await
     }
 
@@ -323,12 +316,15 @@ impl Wallet {
     /// releases its own reference.
     #[wasm_bindgen(js_name = openWithOnchain)]
     pub async fn open_with_onchain(
-        network: Network,
+        network: Ts<Network>,
         mnemonic_or_seed: String,
-        config: Config,
+        config: Ts<Config>,
         onchain: &OnchainWallet,
-        args: OpenWalletArgs,
+        args: Ts<OpenWalletArgs>,
     ) -> Result<Wallet, JsError> {
+        let network = network.to_rust()?;
+        let config = config.to_rust()?;
+        let args = args.to_rust()?;
         Self::open_impl(network, mnemonic_or_seed, config, Some(onchain.inner.clone()), args).await
     }
 
@@ -345,12 +341,14 @@ impl Wallet {
     ///
     /// You probably want to use [`Wallet::open`] instead.
     pub async fn create(
-        network: Network,
+        network: Ts<Network>,
         mnemonic_or_seed: String,
-        config: Config,
+        config: Ts<Config>,
         indexedDbName: Option<String>,
         createWithoutServer: bool,
     ) -> Result<(), JsError> {
+        let network = network.to_rust()?;
+        let config = config.to_rust()?;
         let btc_network = network.into();
         let seed = seed_from_str(btc_network, &mnemonic_or_seed)?;
         let db = if let Some(db) = indexedDbName {
@@ -396,8 +394,8 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = newAddressWithIndex)]
-    pub async fn new_address_with_index(&self) -> Result<AddressWithIndex, JsError> {
-        Ok(self.core.new_address_with_index().await?)
+    pub async fn new_address_with_index(&self) -> Result<Ts<AddressWithIndex>, JsError> {
+        Ok(self.core.new_address_with_index().await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = peekAddress)]
@@ -407,44 +405,44 @@ impl Wallet {
 
     // -- Balance & VTXOs ------------------------------------------------------
 
-    pub async fn balance(&self) -> Result<Balance, JsError> {
-        Ok(self.core.balance().await?)
+    pub async fn balance(&self) -> Result<Ts<Balance>, JsError> {
+        Ok(self.core.balance().await?.into_ts()?)
     }
 
-    pub async fn vtxos(&self) -> Result<Vec<Vtxo>, JsError> {
-        Ok(self.core.vtxos().await?)
+    pub async fn vtxos(&self) -> Result<Vec<Ts<Vtxo>>, JsError> {
+        Ok(self.core.vtxos().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = getVtxoById)]
-    pub async fn get_vtxo_by_id(&self, vtxoId: String) -> Result<Vtxo, JsError> {
-        Ok(self.core.get_vtxo_by_id(vtxoId).await?)
+    pub async fn get_vtxo_by_id(&self, vtxoId: String) -> Result<Ts<Vtxo>, JsError> {
+        Ok(self.core.get_vtxo_by_id(vtxoId).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = spendableVtxos)]
-    pub async fn spendable_vtxos(&self) -> Result<Vec<Vtxo>, JsError> {
-        Ok(self.core.spendable_vtxos().await?)
+    pub async fn spendable_vtxos(&self) -> Result<Vec<Ts<Vtxo>>, JsError> {
+        Ok(self.core.spendable_vtxos().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = allVtxos)]
-    pub async fn all_vtxos(&self) -> Result<Vec<Vtxo>, JsError> {
-        Ok(self.core.all_vtxos().await?)
+    pub async fn all_vtxos(&self) -> Result<Vec<Ts<Vtxo>>, JsError> {
+        Ok(self.core.all_vtxos().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = getExpiringVtxos)]
-    pub async fn get_expiring_vtxos(&self, thresholdBlocks: u32) -> Result<Vec<Vtxo>, JsError> {
-        Ok(self.core.get_expiring_vtxos(thresholdBlocks).await?)
+    pub async fn get_expiring_vtxos(&self, thresholdBlocks: u32) -> Result<Vec<Ts<Vtxo>>, JsError> {
+        Ok(self.core.get_expiring_vtxos(thresholdBlocks).await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = getVtxosToRefresh)]
-    pub async fn get_vtxos_to_refresh(&self) -> Result<Vec<Vtxo>, JsError> {
-        Ok(self.core.get_vtxos_to_refresh().await?)
+    pub async fn get_vtxos_to_refresh(&self) -> Result<Vec<Ts<Vtxo>>, JsError> {
+        Ok(self.core.get_vtxos_to_refresh().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     // -- Offboarding ----------------------------------------------------------
 
     #[wasm_bindgen(js_name = offboardAll)]
-    pub async fn offboard_all(&self, bitcoinAddress: String) -> Result<OffboardResult, JsError> {
-        Ok(self.core.offboard_all(bitcoinAddress).await?)
+    pub async fn offboard_all(&self, bitcoinAddress: String) -> Result<Ts<OffboardResult>, JsError> {
+        Ok(self.core.offboard_all(bitcoinAddress).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = offboardVtxos)]
@@ -452,8 +450,8 @@ impl Wallet {
         &self,
         vtxoIds: Vec<String>,
         bitcoinAddress: String,
-    ) -> Result<OffboardResult, JsError> {
-        Ok(self.core.offboard_vtxos(vtxoIds, bitcoinAddress).await?)
+    ) -> Result<Ts<OffboardResult>, JsError> {
+        Ok(self.core.offboard_vtxos(vtxoIds, bitcoinAddress).await?.into_ts()?)
     }
 
     // -- Lightning send -------------------------------------------------------
@@ -461,17 +459,19 @@ impl Wallet {
     #[wasm_bindgen(js_name = payLightningInvoice)]
     pub async fn pay_lightning_invoice(
         &self,
-        args: PayLightningInvoiceArgs,
-    ) -> Result<LightningSendStatus, JsError> {
-        Ok(self.core.pay_lightning_invoice(args.invoice, args.amountSats, args.wait.unwrap_or(false)).await?)
+        args: Ts<PayLightningInvoiceArgs>,
+    ) -> Result<Ts<LightningSendStatus>, JsError> {
+        let args = args.to_rust()?;
+        Ok(self.core.pay_lightning_invoice(args.invoice, args.amountSats, args.wait.unwrap_or(false)).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = payLightningOffer)]
     pub async fn pay_lightning_offer(
         &self,
-        args: PayLightningOfferArgs,
-    ) -> Result<LightningSendStatus, JsError> {
-        Ok(self.core.pay_lightning_offer(args.offer, args.amountSats, args.wait.unwrap_or(false)).await?)
+        args: Ts<PayLightningOfferArgs>,
+    ) -> Result<Ts<LightningSendStatus>, JsError> {
+        let args = args.to_rust()?;
+        Ok(self.core.pay_lightning_offer(args.offer, args.amountSats, args.wait.unwrap_or(false)).await?.into_ts()?)
     }
 
     /// Pay to a Lightning Address (`user@domain`), resolved via LNURL-pay.
@@ -482,8 +482,9 @@ impl Wallet {
     #[wasm_bindgen(js_name = payLightningAddress)]
     pub async fn pay_lightning_address(
         &self,
-        args: PayLightningAddressArgs,
-    ) -> Result<LightningSendStatus, JsError> {
+        args: Ts<PayLightningAddressArgs>,
+    ) -> Result<Ts<LightningSendStatus>, JsError> {
+        let args = args.to_rust()?;
         Ok(self
             .core
             .pay_lightning_address(
@@ -492,7 +493,7 @@ impl Wallet {
                 args.comment,
                 args.wait.unwrap_or(false),
             )
-            .await?)
+            .await?.into_ts()?)
     }
 
     /// Pay a raw LNURL-pay link (`lnurl1…`). Errors if the link decodes to a
@@ -500,7 +501,8 @@ impl Wallet {
     ///
     /// Same cross-origin caveat as `payLightningAddress`.
     #[wasm_bindgen(js_name = payLnurl)]
-    pub async fn pay_lnurl(&self, args: PayLnurlArgs) -> Result<LightningSendStatus, JsError> {
+    pub async fn pay_lnurl(&self, args: Ts<PayLnurlArgs>) -> Result<Ts<LightningSendStatus>, JsError> {
+        let args = args.to_rust()?;
         Ok(self
             .core
             .pay_lnurl(
@@ -509,23 +511,24 @@ impl Wallet {
                 args.comment,
                 args.wait.unwrap_or(false),
             )
-            .await?)
+            .await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = checkLightningPayment)]
     pub async fn check_lightning_payment(
         &self,
-        args: CheckLightningPaymentArgs,
-    ) -> Result<LightningSendStatus, JsError> {
-        Ok(self.core.check_lightning_payment(args.paymentHash, args.wait.unwrap_or(false)).await?)
+        args: Ts<CheckLightningPaymentArgs>,
+    ) -> Result<Ts<LightningSendStatus>, JsError> {
+        let args = args.to_rust()?;
+        Ok(self.core.check_lightning_payment(args.paymentHash, args.wait.unwrap_or(false)).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = lightningSendState)]
     pub async fn lightning_send_state(
         &self,
         paymentHash: String,
-    ) -> Result<LightningSendStatus, JsError> {
-        Ok(self.core.lightning_send_state(paymentHash).await?)
+    ) -> Result<Ts<LightningSendStatus>, JsError> {
+        Ok(self.core.lightning_send_state(paymentHash).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = isInvoicePaid)]
@@ -534,13 +537,13 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = pendingLightningSends)]
-    pub async fn pending_lightning_sends(&self) -> Result<Vec<LightningSend>, JsError> {
-        Ok(self.core.pending_lightning_sends().await?)
+    pub async fn pending_lightning_sends(&self) -> Result<Vec<Ts<LightningSend>>, JsError> {
+        Ok(self.core.pending_lightning_sends().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = stuckFailedLightningSends)]
-    pub async fn stuck_failed_lightning_sends(&self) -> Result<Vec<LightningSend>, JsError> {
-        Ok(self.core.stuck_failed_lightning_sends().await?)
+    pub async fn stuck_failed_lightning_sends(&self) -> Result<Vec<Ts<LightningSend>>, JsError> {
+        Ok(self.core.stuck_failed_lightning_sends().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = allowLightningSendToExit)]
@@ -556,9 +559,10 @@ impl Wallet {
     #[wasm_bindgen(js_name = bolt11Invoice)]
     pub async fn bolt11_invoice(
         &self,
-        args: Bolt11InvoiceArgs,
-    ) -> Result<LightningInvoice, JsError> {
-        Ok(self.core.bolt11_invoice(args.amountSats, args.description, args.token).await?)
+        args: Ts<Bolt11InvoiceArgs>,
+    ) -> Result<Ts<LightningInvoice>, JsError> {
+        let args = args.to_rust()?;
+        Ok(self.core.bolt11_invoice(args.amountSats, args.description, args.token).await?.into_ts()?)
     }
 
     /// Create an invoice whose claimed VTXO is delivered to `claimDestination`
@@ -578,24 +582,26 @@ impl Wallet {
     #[wasm_bindgen(js_name = bolt11InvoiceForAddress)]
     pub async fn bolt11_invoice_for_address(
         &self,
-        args: Bolt11InvoiceForAddressArgs,
-    ) -> Result<LightningInvoice, JsError> {
+        args: Ts<Bolt11InvoiceForAddressArgs>,
+    ) -> Result<Ts<LightningInvoice>, JsError> {
+        let args = args.to_rust()?;
         Ok(self.core.bolt11_invoice_for_address(
             args.amountSats, args.claimDestination, args.description, args.token,
-        ).await?)
+        ).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = tryClaimAllLightningReceives)]
     pub async fn try_claim_all_lightning_receives(
         &self,
-        args: TryClaimAllLightningReceivesArgs,
-    ) -> Result<Vec<LightningReceive>, JsError> {
-        Ok(self.core.try_claim_all_lightning_receives(args.wait.unwrap_or(false)).await?)
+        args: Ts<TryClaimAllLightningReceivesArgs>,
+    ) -> Result<Vec<Ts<LightningReceive>>, JsError> {
+        let args = args.to_rust()?;
+        Ok(self.core.try_claim_all_lightning_receives(args.wait.unwrap_or(false)).await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = pendingLightningReceives)]
-    pub async fn pending_lightning_receives(&self) -> Result<Vec<LightningReceive>, JsError> {
-        Ok(self.core.pending_lightning_receives().await?)
+    pub async fn pending_lightning_receives(&self) -> Result<Vec<Ts<LightningReceive>>, JsError> {
+        Ok(self.core.pending_lightning_receives().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = claimableLightningReceiveBalanceSats)]
@@ -609,16 +615,17 @@ impl Wallet {
     pub async fn lightning_receive_state(
         &self,
         paymentHash: String,
-    ) -> Result<LightningReceive, JsError> {
-        Ok(self.core.lightning_receive_state(paymentHash).await?)
+    ) -> Result<Ts<LightningReceive>, JsError> {
+        Ok(self.core.lightning_receive_state(paymentHash).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = tryClaimLightningReceive)]
     pub async fn try_claim_lightning_receive(
         &self,
-        args: TryClaimLightningReceiveArgs,
-    ) -> Result<LightningReceive, JsError> {
-        Ok(self.core.try_claim_lightning_receive(args.paymentHash, args.wait.unwrap_or(false)).await?)
+        args: Ts<TryClaimLightningReceiveArgs>,
+    ) -> Result<Ts<LightningReceive>, JsError> {
+        let args = args.to_rust()?;
+        Ok(self.core.try_claim_lightning_receive(args.paymentHash, args.wait.unwrap_or(false)).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = cancelLightningReceive)]
@@ -661,8 +668,8 @@ impl Wallet {
 
     // -- History --------------------------------------------------------------
 
-    pub async fn history(&self) -> Result<Vec<Movement>, JsError> {
-        Ok(self.core.history().await?)
+    pub async fn history(&self) -> Result<Vec<Ts<Movement>>, JsError> {
+        Ok(self.core.history().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = historyByPaymentMethod)]
@@ -670,8 +677,8 @@ impl Wallet {
         &self,
         paymentMethodType: String,
         paymentMethodValue: String,
-    ) -> Result<Vec<Movement>, JsError> {
-        Ok(self.core.history_by_payment_method(paymentMethodType, paymentMethodValue).await?)
+    ) -> Result<Vec<Ts<Movement>>, JsError> {
+        Ok(self.core.history_by_payment_method(paymentMethodType, paymentMethodValue).await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     // -- Refresh --------------------------------------------------------------
@@ -690,8 +697,8 @@ impl Wallet {
     pub async fn refresh_vtxos_delegated(
         &self,
         vtxoIds: Vec<String>,
-    ) -> Result<Option<RoundState>, JsError> {
-        Ok(self.core.refresh_vtxos_delegated(vtxoIds).await?)
+    ) -> Result<Option<Ts<RoundState>>, JsError> {
+        Ok(self.core.refresh_vtxos_delegated(vtxoIds).await?.map(|v| v.into_ts()).transpose()?)
     }
 
     /// Schedule a delegated refresh for `scheduledHeight` instead of the next
@@ -703,8 +710,8 @@ impl Wallet {
         &self,
         vtxoIds: Vec<String>,
         scheduledHeight: u32,
-    ) -> Result<Option<RoundState>, JsError> {
-        Ok(self.core.refresh_vtxos_scheduled(vtxoIds, scheduledHeight).await?)
+    ) -> Result<Option<Ts<RoundState>>, JsError> {
+        Ok(self.core.refresh_vtxos_scheduled(vtxoIds, scheduledHeight).await?.map(|v| v.into_ts()).transpose()?)
     }
 
     // -- Recovery -------------------------------------------------------------
@@ -721,8 +728,8 @@ impl Wallet {
         &self,
         vtxoIds: Vec<String>,
         gapLimit: Option<u32>,
-    ) -> Result<RecoveryReport, JsError> {
-        Ok(self.core.recover_vtxos(vtxoIds, gapLimit).await?)
+    ) -> Result<Ts<RecoveryReport>, JsError> {
+        Ok(self.core.recover_vtxos(vtxoIds, gapLimit).await?.into_ts()?)
     }
 
     /// Outcome of the seed-recovery scan that ran during `open`.
@@ -735,39 +742,39 @@ impl Wallet {
     /// there means funds may still be missing. Retry the report's `failed` ids
     /// with `recoverVtxos`.
     #[wasm_bindgen(js_name = recoveryStatus)]
-    pub fn recovery_status(&self) -> RecoveryStatus {
-        self.core.recovery_status()
+    pub fn recovery_status(&self) -> Result<Ts<RecoveryStatus>, JsError> {
+        Ok(self.core.recovery_status().into_ts()?)
     }
 
     /// The report of the seed-recovery scan that ran during `open`, or
     /// `undefined` if the scan did not complete. Use `recoveryStatus` to tell a
     /// scan that failed apart from one that never ran.
     #[wasm_bindgen(js_name = recoveryReport)]
-    pub fn recovery_report(&self) -> Option<RecoveryReport> {
-        self.core.recovery_report()
+    pub fn recovery_report(&self) -> Result<Option<Ts<RecoveryReport>>, JsError> {
+        Ok(self.core.recovery_report().map(|v| v.into_ts()).transpose()?)
     }
 
     // -- Info -----------------------------------------------------------------
 
-    pub async fn properties(&self) -> Result<WalletProperties, JsError> {
-        Ok(self.core.properties().await?)
+    pub async fn properties(&self) -> Result<Ts<WalletProperties>, JsError> {
+        Ok(self.core.properties().await?.into_ts()?)
     }
 
     pub fn fingerprint(&self) -> String {
         self.core.fingerprint()
     }
 
-    pub async fn network(&self) -> Result<Network, JsError> {
-        Ok(self.core.network().await?)
+    pub async fn network(&self) -> Result<Ts<Network>, JsError> {
+        Ok(self.core.network().await?.into_ts()?)
     }
 
-    pub fn config(&self) -> Config {
-        self.core.config()
+    pub fn config(&self) -> Result<Ts<Config>, JsError> {
+        Ok(self.core.config().into_ts()?)
     }
 
     #[wasm_bindgen(js_name = arkInfo)]
-    pub async fn ark_info(&self) -> Option<ArkInfo> {
-        self.core.ark_info().await
+    pub async fn ark_info(&self) -> Result<Option<Ts<ArkInfo>>, JsError> {
+        Ok(self.core.ark_info().await.map(|v| v.into_ts()).transpose()?)
     }
 
     #[wasm_bindgen(js_name = nextRoundStartTime)]
@@ -778,18 +785,18 @@ impl Wallet {
     // -- Boarding -------------------------------------------------------------
 
     #[wasm_bindgen(js_name = boardAmount)]
-    pub async fn board_amount(&self, amountSats: f64) -> Result<PendingBoard, JsError> {
-        Ok(self.core.board_amount(amountSats as u64).await?)
+    pub async fn board_amount(&self, amountSats: f64) -> Result<Ts<PendingBoard>, JsError> {
+        Ok(self.core.board_amount(amountSats as u64).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = boardAll)]
-    pub async fn board_all(&self) -> Result<PendingBoard, JsError> {
-        Ok(self.core.board_all().await?)
+    pub async fn board_all(&self) -> Result<Ts<PendingBoard>, JsError> {
+        Ok(self.core.board_all().await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = boardFundingAddress)]
-    pub async fn board_funding_address(&self) -> Result<BoardFundingInfo, JsError> {
-        Ok(self.core.board_funding_address().await?)
+    pub async fn board_funding_address(&self) -> Result<Ts<BoardFundingInfo>, JsError> {
+        Ok(self.core.board_funding_address().await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = boardPsbt)]
@@ -798,11 +805,11 @@ impl Wallet {
         psbtBase64: String,
         keypairIndex: u32,
         expiryHeight: u32,
-    ) -> Result<PendingBoard, JsError> {
+    ) -> Result<Ts<PendingBoard>, JsError> {
         Ok(self
             .core
             .board_psbt(psbtBase64, keypairIndex, expiryHeight)
-            .await?)
+            .await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = syncPendingBoards)]
@@ -811,34 +818,36 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = pendingBoards)]
-    pub async fn pending_boards(&self) -> Result<Vec<PendingBoard>, JsError> {
-        Ok(self.core.pending_boards().await?)
+    pub async fn pending_boards(&self) -> Result<Vec<Ts<PendingBoard>>, JsError> {
+        Ok(self.core.pending_boards().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = pendingBoardVtxos)]
-    pub async fn pending_board_vtxos(&self) -> Result<Vec<Vtxo>, JsError> {
-        Ok(self.core.pending_board_vtxos().await?)
+    pub async fn pending_board_vtxos(&self) -> Result<Vec<Ts<Vtxo>>, JsError> {
+        Ok(self.core.pending_board_vtxos().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = pendingRoundInputVtxos)]
-    pub async fn pending_round_input_vtxos(&self) -> Result<Vec<Vtxo>, JsError> {
-        Ok(self.core.pending_round_input_vtxos().await?)
+    pub async fn pending_round_input_vtxos(&self) -> Result<Vec<Ts<Vtxo>>, JsError> {
+        Ok(self.core.pending_round_input_vtxos().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = pendingLightningSendVtxos)]
-    pub async fn pending_lightning_send_vtxos(&self) -> Result<Vec<Vtxo>, JsError> {
-        Ok(self.core.pending_lightning_send_vtxos().await?)
+    pub async fn pending_lightning_send_vtxos(&self) -> Result<Vec<Ts<Vtxo>>, JsError> {
+        Ok(self.core.pending_lightning_send_vtxos().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     // -- VTXO locking ---------------------------------------------------------
 
     #[wasm_bindgen(js_name = lockVtxos)]
-    pub async fn lock_vtxos(&self, args: LockVtxosArgs) -> Result<(), JsError> {
+    pub async fn lock_vtxos(&self, args: Ts<LockVtxosArgs>) -> Result<(), JsError> {
+        let args = args.to_rust()?;
         Ok(self.core.lock_vtxos(args.vtxoIds, args.holder).await?)
     }
 
     #[wasm_bindgen(js_name = unlockVtxos)]
-    pub async fn unlock_vtxos(&self, args: UnlockVtxosArgs) -> Result<(), JsError> {
+    pub async fn unlock_vtxos(&self, args: Ts<UnlockVtxosArgs>) -> Result<(), JsError> {
+        let args = args.to_rust()?;
         Ok(self.core.unlock_vtxos(args.vtxoIds, args.expectedHolder).await?)
     }
 
@@ -857,9 +866,10 @@ impl Wallet {
     #[wasm_bindgen(js_name = progressExits)]
     pub async fn progress_exits(
         &self,
-        args: ProgressExitsArgs,
-    ) -> Result<Vec<ExitProgressStatus>, JsError> {
-        Ok(self.core.progress_exits(args.feeRateSatPerVb).await?)
+        args: Ts<ProgressExitsArgs>,
+    ) -> Result<Vec<Ts<ExitProgressStatus>>, JsError> {
+        let args = args.to_rust()?;
+        Ok(self.core.progress_exits(args.feeRateSatPerVb).await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = startExitForVtxos)]
@@ -876,18 +886,18 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = cancelExit)]
-    pub async fn cancel_exit(&self, vtxoId: String) -> Result<ExitCancelResult, JsError> {
-        Ok(self.core.cancel_exit(vtxoId).await?)
+    pub async fn cancel_exit(&self, vtxoId: String) -> Result<Ts<ExitCancelResult>, JsError> {
+        Ok(self.core.cancel_exit(vtxoId).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = listClaimableExits)]
-    pub async fn list_claimable_exits(&self) -> Result<Vec<ExitVtxo>, JsError> {
-        Ok(self.core.list_claimable_exits().await?)
+    pub async fn list_claimable_exits(&self) -> Result<Vec<Ts<ExitVtxo>>, JsError> {
+        Ok(self.core.list_claimable_exits().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = getExitVtxos)]
-    pub async fn get_exit_vtxos(&self) -> Result<Vec<ExitVtxo>, JsError> {
-        Ok(self.core.get_exit_vtxos().await?)
+    pub async fn get_exit_vtxos(&self) -> Result<Vec<Ts<ExitVtxo>>, JsError> {
+        Ok(self.core.get_exit_vtxos().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = hasPendingExits)]
@@ -901,8 +911,17 @@ impl Wallet {
     }
 
     #[wasm_bindgen(js_name = drainExits)]
-    pub async fn drain_exits(&self, args: DrainExitsArgs) -> Result<ExitClaimTransaction, JsError> {
-        Ok(self.core.drain_exits(args.vtxoIds, args.address, args.feeRateSatPerVb).await?)
+    pub async fn drain_exits(&self, args: Ts<DrainExitsArgs>) -> Result<Ts<ExitClaimTransaction>, JsError> {
+        let args = args.to_rust()?;
+        Ok(self
+            .core
+            .drain_exits(
+                args.vtxoIds,
+                args.drainAll.unwrap_or(false),
+                args.address,
+                args.feeRateSatPerVb,
+            )
+            .await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = allExitsClaimableAtHeight)]
@@ -913,9 +932,10 @@ impl Wallet {
     #[wasm_bindgen(js_name = getExitStatus)]
     pub async fn get_exit_status(
         &self,
-        args: GetExitStatusArgs,
-    ) -> Result<Option<ExitTransactionStatus>, JsError> {
-        Ok(self.core.get_exit_status(args.vtxoId, args.includeHistory, args.includeTransactions).await?)
+        args: Ts<GetExitStatusArgs>,
+    ) -> Result<Option<Ts<ExitTransactionStatus>>, JsError> {
+        let args = args.to_rust()?;
+        Ok(self.core.get_exit_status(args.vtxoId, args.includeHistory, args.includeTransactions).await?.map(|v| v.into_ts()).transpose()?)
     }
 
     #[wasm_bindgen(js_name = signExitClaimInputs)]
@@ -926,8 +946,8 @@ impl Wallet {
     // -- Rounds ---------------------------------------------------------------
 
     #[wasm_bindgen(js_name = pendingRoundStates)]
-    pub async fn pending_round_states(&self) -> Result<Vec<RoundState>, JsError> {
-        Ok(self.core.pending_round_states().await?)
+    pub async fn pending_round_states(&self) -> Result<Vec<Ts<RoundState>>, JsError> {
+        Ok(self.core.pending_round_states().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     #[wasm_bindgen(js_name = cancelPendingRound)]
@@ -999,8 +1019,9 @@ impl Wallet {
     pub async fn import_vtxo(
         &self,
         encodedVtxo: String,
-        args: Option<ImportVtxoArgs>,
+        args: Option<Ts<ImportVtxoArgs>>,
     ) -> Result<(), JsError> {
+        let args = args.map(|v| v.to_rust()).transpose()?;
         Ok(self.core.import_vtxo(encodedVtxo, args).await?)
     }
 
@@ -1015,8 +1036,9 @@ impl Wallet {
     pub async fn import_vtxos(
         &self,
         encodedVtxos: Vec<String>,
-        args: Option<ImportVtxoArgs>,
+        args: Option<Ts<ImportVtxoArgs>>,
     ) -> Result<Vec<String>, JsError> {
+        let args = args.map(|v| v.to_rust()).transpose()?;
         Ok(self.core.import_vtxos(encodedVtxos, args).await?)
     }
 
@@ -1030,8 +1052,8 @@ impl Wallet {
     // -- Fee Estimation -------------------------------------------------------
 
     #[wasm_bindgen(js_name = estimateBoardFee)]
-    pub async fn estimate_board_fee(&self, amountSats: f64) -> Result<FeeEstimate, JsError> {
-        Ok(self.core.estimate_board_fee(amountSats as u64).await?)
+    pub async fn estimate_board_fee(&self, amountSats: f64) -> Result<Ts<FeeEstimate>, JsError> {
+        Ok(self.core.estimate_board_fee(amountSats as u64).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = estimateOffboardFee)]
@@ -1039,42 +1061,42 @@ impl Wallet {
         &self,
         address: String,
         vtxoIds: Vec<String>,
-    ) -> Result<FeeEstimate, JsError> {
-        Ok(self.core.estimate_offboard_fee(address, vtxoIds).await?)
+    ) -> Result<Ts<FeeEstimate>, JsError> {
+        Ok(self.core.estimate_offboard_fee(address, vtxoIds).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = estimateRefreshFee)]
-    pub async fn estimate_refresh_fee(&self, vtxoIds: Vec<String>) -> Result<FeeEstimate, JsError> {
-        Ok(self.core.estimate_refresh_fee(vtxoIds).await?)
+    pub async fn estimate_refresh_fee(&self, vtxoIds: Vec<String>) -> Result<Ts<FeeEstimate>, JsError> {
+        Ok(self.core.estimate_refresh_fee(vtxoIds).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = estimateLightningSendFee)]
     pub async fn estimate_lightning_send_fee(
         &self,
         amountSats: f64,
-    ) -> Result<FeeEstimate, JsError> {
-        Ok(self.core.estimate_lightning_send_fee(amountSats as u64).await?)
+    ) -> Result<Ts<FeeEstimate>, JsError> {
+        Ok(self.core.estimate_lightning_send_fee(amountSats as u64).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = estimateLightningReceiveFee)]
     pub async fn estimate_lightning_receive_fee(
         &self,
         amountSats: f64,
-    ) -> Result<FeeEstimate, JsError> {
-        Ok(self.core.estimate_lightning_receive_fee(amountSats as u64).await?)
+    ) -> Result<Ts<FeeEstimate>, JsError> {
+        Ok(self.core.estimate_lightning_receive_fee(amountSats as u64).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = estimateArkoorPaymentFee)]
     pub async fn estimate_arkoor_payment_fee(
         &self,
         amountSats: f64,
-    ) -> Result<FeeEstimate, JsError> {
-        Ok(self.core.estimate_arkoor_payment_fee(amountSats as u64).await?)
+    ) -> Result<Ts<FeeEstimate>, JsError> {
+        Ok(self.core.estimate_arkoor_payment_fee(amountSats as u64).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = estimateOffboardAllFee)]
-    pub async fn estimate_offboard_all_fee(&self, address: String) -> Result<FeeEstimate, JsError> {
-        Ok(self.core.estimate_offboard_all_fee(address).await?)
+    pub async fn estimate_offboard_all_fee(&self, address: String) -> Result<Ts<FeeEstimate>, JsError> {
+        Ok(self.core.estimate_offboard_all_fee(address).await?.into_ts()?)
     }
 
     #[wasm_bindgen(js_name = estimateSendOnchainFee)]
@@ -1082,8 +1104,8 @@ impl Wallet {
         &self,
         address: String,
         amountSats: f64,
-    ) -> Result<FeeEstimate, JsError> {
-        Ok(self.core.estimate_send_onchain_fee(address, amountSats as u64).await?)
+    ) -> Result<Ts<FeeEstimate>, JsError> {
+        Ok(self.core.estimate_send_onchain_fee(address, amountSats as u64).await?.into_ts()?)
     }
 
     /// Estimate the onchain cost of unilaterally (emergency) exiting VTXOs.
@@ -1102,12 +1124,12 @@ impl Wallet {
         vtxoIds: Vec<String>,
         feeRateSatPerVb: Option<f64>,
         destination: Option<String>,
-    ) -> Result<EmergencyExitFeeEstimate, JsError> {
+    ) -> Result<Ts<EmergencyExitFeeEstimate>, JsError> {
         let fee_rate = feeRateSatPerVb.map(fee_rate_sat_per_vb_from_js).transpose()?;
         Ok(self
             .core
             .estimate_emergency_exit_fee(vtxoIds, fee_rate, destination)
-            .await?)
+            .await?.into_ts()?)
     }
 
     // -- Notifications --------------------------------------------------------

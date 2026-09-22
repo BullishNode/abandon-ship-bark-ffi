@@ -59,15 +59,12 @@ clippy-uniffi:
   script:
     - cargo clippy --locked --no-default-features --features uniffi --all-targets -- -D warnings
 
-# `-A deprecated` covers tsify's into_wasm_abi/from_wasm_abi, deprecated for
-# leaking memory (madonoharu/tsify#65) and still used throughout this crate.
-# Migrating to tsify::Ts changes the generated TypeScript, so it is its own MR.
 clippy-wasm:
   stage: check
   needs: []
   script:
     - rustup target add wasm32-unknown-unknown
-    - cargo clippy --locked --no-default-features --features wasm-web --target wasm32-unknown-unknown -- -D warnings -A deprecated
+    - cargo clippy --locked --no-default-features --features wasm-web --target wasm32-unknown-unknown -- -D warnings
 
 # Clippy does not codegen; this links the cdylib/staticlib the bindings use.
 build-uniffi:
