@@ -4,12 +4,12 @@
 //! onchain wallet implementations via UniFFI callbacks. The adapter implements the
 //! Bark onchain wallet trait by forwarding calls to the callback interface.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use async_trait::async_trait;
-use log::error;
-use bitcoin::{Address, Amount, FeeRate, Psbt, Script, Transaction};
+use log::{error, warn};
+use bitcoin::{Address, Amount, FeeRate, Psbt, Script, ScriptBuf, Transaction};
 
 use bark::chain::ChainSource;
 use bark::onchain::{CpfpError, CpfpWalkEstimate, MakeCpfpFees, OnchainWalletTrait};
@@ -23,6 +23,8 @@ use crate::types::{CpfpParams, Destination};
 #[uniffi::export(with_foreign)]
 pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// Get the wallet balance in satoshis
+    ///
+    /// An error falls back to the last value this returned, or 0 if none yet.
     fn get_balance(&self) -> Result<u64, Error>;
 
     /// Prepare a transaction to send to given destinations
@@ -32,7 +34,8 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// * `fee_rate_sat_per_vb` - Fee rate in sats per vbyte
     ///
     /// # Returns
-    /// Base64-encoded PSBT
+    /// Base64-encoded PSBT. Rejected unless it pays every destination the
+    /// exact amount asked for; extra outputs (change) are fine.
     fn prepare_tx(
         &self,
         destinations: Vec<Destination>,
@@ -46,7 +49,7 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// * `fee_rate_sat_per_vb` - Fee rate in sats per vbyte
     ///
     /// # Returns
-    /// Base64-encoded PSBT
+    /// Base64-encoded PSBT. Rejected unless every output pays `address`.
     fn prepare_drain_tx(
         &self,
         address: String,
@@ -59,7 +62,8 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// * `psbt_base64` - Base64-encoded PSBT
     ///
     /// # Returns
-    /// Base64-encoded fully signed PSBT (all witnesses filled in)
+    /// Base64-encoded fully signed PSBT (all witnesses filled in). Rejected
+    /// unless the unsigned transaction is unchanged.
     fn finish_psbt(&self, psbt_base64: String) -> Result<String, Error>;
 
     /// Whether a script pubkey belongs to the wallet's keychains
@@ -91,7 +95,8 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     /// * `params` - CPFP transaction parameters
     ///
     /// # Returns
-    /// Hex-encoded signed CPFP transaction
+    /// Hex-encoded signed CPFP transaction. Rejected unless it spends the
+    /// parent it was given.
     fn make_signed_p2a_cpfp(&self, params: CpfpParams) -> Result<String, Error>;
 
     /// Store a signed P2A CPFP transaction in the wallet
@@ -109,33 +114,71 @@ pub trait CustomOnchainWalletCallbacks: Send + Sync {
     fn sync(&self) -> Result<(), Error>;
 }
 
-/// Rust adapter that implements Bark's onchain wallet trait using the callback interface
+/// Rust adapter that implements Bark's onchain wallet trait using the callback
+/// interface. What the foreign callbacks return is checked before it is used.
 pub struct CallbackWalletAdapter {
     callbacks: Arc<dyn CustomOnchainWalletCallbacks>,
+    /// `balance()` is infallible upstream, so on error it returns this rather
+    /// than a zero that reads as "no funds".
+    last_balance: Mutex<Option<Amount>>,
 }
 
 impl CallbackWalletAdapter {
     pub fn new(callbacks: Arc<dyn CustomOnchainWalletCallbacks>) -> Self {
-        Self { callbacks }
+        Self { callbacks, last_balance: Mutex::new(None) }
     }
+}
+
+/// Check that `tx` pays every `(script, amount)` in `required`, counted as a
+/// multiset. Extra outputs are allowed: change is legitimate.
+fn check_pays(tx: &Transaction, required: &[(ScriptBuf, Amount)]) -> anyhow::Result<()> {
+    let mut available: Vec<_> = tx.output.iter().collect();
+
+    for (script, amount) in required {
+        match available
+            .iter()
+            .position(|o| &o.script_pubkey == script && o.value == *amount)
+        {
+            Some(i) => {
+                available.swap_remove(i);
+            },
+            None => bail!(
+                "wallet returned a transaction that does not pay {} sats to {}",
+                amount.to_sat(),
+                script.to_hex_string(),
+            ),
+        }
+    }
+
+    Ok(())
 }
 
 #[async_trait]
 impl OnchainWalletTrait for CallbackWalletAdapter {
     async fn balance(&self) -> Amount {
         match self.callbacks.get_balance() {
-            Ok(sats) => Amount::from_sat(sats),
+            Ok(sats) => {
+                let balance = Amount::from_sat(sats);
+                *self.last_balance.lock().unwrap() = Some(balance);
+                balance
+            },
             Err(e) => {
                 error!(
                     "CustomOnchainWalletCallbacks::get_balance failed: {}",
                     e.message()
                 );
-                error!("Returning 0 balance - this may cause unexpected behavior!");
-                error!(
-                    "Please fix the wallet implementation to ensure get_balance never fails"
-                );
-                Amount::ZERO
-            }
+                match *self.last_balance.lock().unwrap() {
+                    Some(stale) => {
+                        warn!("Reusing the last known balance of {} sats", stale.to_sat());
+                        stale
+                    },
+                    None => {
+                        error!("No balance has ever been read; reporting 0, which will \
+                                look like an empty wallet and may block boarding or exits");
+                        Amount::ZERO
+                    },
+                }
+            },
         }
     }
 
@@ -203,6 +246,13 @@ impl OnchainWalletTrait for CallbackWalletAdapter {
         let psbt_bytes = base64::engine::general_purpose::STANDARD.decode(&psbt_base64)?;
         let psbt = Psbt::deserialize(&psbt_bytes)?;
 
+        let required: Vec<_> = destinations
+            .iter()
+            .map(|(addr, amt)| (addr.script_pubkey(), *amt))
+            .collect();
+        check_pays(&psbt.unsigned_tx, &required)
+            .context("prepare_tx returned a transaction paying the wrong outputs")?;
+
         Ok(psbt)
     }
 
@@ -222,6 +272,14 @@ impl OnchainWalletTrait for CallbackWalletAdapter {
         let psbt_bytes = base64::engine::general_purpose::STANDARD.decode(&psbt_base64)?;
         let psbt = Psbt::deserialize(&psbt_bytes)?;
 
+        // The amount is the wallet's to decide, the recipient is not.
+        let spk = destination.script_pubkey();
+        if psbt.unsigned_tx.output.is_empty()
+            || psbt.unsigned_tx.output.iter().any(|o| o.script_pubkey != spk)
+        {
+            bail!("prepare_drain_tx returned a transaction paying somewhere other than {destination}");
+        }
+
         Ok(psbt)
     }
 
@@ -240,6 +298,11 @@ impl OnchainWalletTrait for CallbackWalletAdapter {
         // Decode the fully signed PSBT returned by the callback
         let signed_bytes = base64::engine::general_purpose::STANDARD.decode(&signed_base64)?;
         let signed_psbt = Psbt::deserialize(&signed_bytes)?;
+
+        // Signing fills in witnesses; it must not touch inputs or outputs.
+        if signed_psbt.unsigned_tx != psbt.unsigned_tx {
+            bail!("finish_psbt returned a different transaction than it was given");
+        }
 
         Ok(signed_psbt)
     }
@@ -283,6 +346,15 @@ impl OnchainWalletTrait for CallbackWalletAdapter {
         let cpfp_tx: Transaction = bitcoin::consensus::deserialize(&cpfp_tx_bytes)
             .map_err(|e| CpfpError::InternalError(format!("Invalid transaction: {}", e)))?;
 
+        // A CPFP child that does not spend its parent bumps nothing.
+        let parent = tx.compute_txid();
+        if !cpfp_tx.input.iter().any(|i| i.previous_output.txid == parent) {
+            return Err(CpfpError::CreateError(format!(
+                "returned CPFP transaction does not spend its parent {}",
+                parent,
+            )));
+        }
+
         Ok(cpfp_tx)
     }
 
@@ -310,5 +382,63 @@ impl OnchainWalletTrait for CallbackWalletAdapter {
             .map_err(|e| CpfpError::StoreError(e.message()))?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitcoin::{absolute::LockTime, transaction::Version, TxOut};
+
+    fn spk(byte: u8) -> ScriptBuf {
+        ScriptBuf::from_bytes(vec![byte; 22])
+    }
+
+    fn tx_paying(outs: &[(ScriptBuf, u64)]) -> Transaction {
+        Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![],
+            output: outs
+                .iter()
+                .map(|(s, v)| TxOut { value: Amount::from_sat(*v), script_pubkey: s.clone() })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn accepts_the_requested_destinations() {
+        let tx = tx_paying(&[(spk(1), 1000), (spk(2), 500)]);
+        check_pays(&tx, &[(spk(1), Amount::from_sat(1000))]).unwrap();
+    }
+
+    #[test]
+    fn a_change_output_is_allowed() {
+        let tx = tx_paying(&[(spk(1), 1000), (spk(9), 4242)]);
+        check_pays(&tx, &[(spk(1), Amount::from_sat(1000))]).unwrap();
+    }
+
+    /// The case this guards: a wallet that pays someone else instead.
+    #[test]
+    fn refuses_a_substituted_destination() {
+        let tx = tx_paying(&[(spk(7), 1000)]);
+        check_pays(&tx, &[(spk(1), Amount::from_sat(1000))]).unwrap_err();
+    }
+
+    #[test]
+    fn refuses_a_short_payment() {
+        let tx = tx_paying(&[(spk(1), 999)]);
+        check_pays(&tx, &[(spk(1), Amount::from_sat(1000))]).unwrap_err();
+    }
+
+    /// Two equal destinations need two outputs, not one counted twice.
+    #[test]
+    fn duplicate_destinations_need_one_output_each() {
+        let one = tx_paying(&[(spk(1), 1000)]);
+        let required = [(spk(1), Amount::from_sat(1000)), (spk(1), Amount::from_sat(1000))];
+        check_pays(&one, &required).unwrap_err();
+
+        let two = tx_paying(&[(spk(1), 1000), (spk(1), 1000)]);
+        check_pays(&two, &required).unwrap();
     }
 }

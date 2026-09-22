@@ -10,6 +10,7 @@ use anyhow::Context;
 use log::info;
 
 use crate::config::Config;
+use crate::core::parse_address;
 use crate::error::Error;
 use crate::types::{self, OnchainBalance};
 use crate::Network;
@@ -22,6 +23,8 @@ use crate::Network;
 pub struct OnchainWallet {
     wallet: Arc<RwLock<BarkOnchainWallet>>,
     chain: Arc<ChainSource>,
+    /// For [`Self::send`]; neither the bdk wallet nor the trait exposes one.
+    network: bitcoin::Network,
 }
 
 impl OnchainWallet {
@@ -73,6 +76,7 @@ impl OnchainWallet {
         Ok(Self {
             wallet: Arc::new(RwLock::new(onchain)),
             chain,
+            network,
         })
     }
 
@@ -117,10 +121,7 @@ impl OnchainWallet {
         amount_sats: u64,
         fee_rate_sat_per_vb: u64,
     ) -> Result<String, Error> {
-        let addr = address
-            .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
-            .context("invalid address")?
-            .assume_checked();
+        let addr = parse_address(&address, self.network)?;
 
         let amount = bitcoin::Amount::from_sat(amount_sats);
 
