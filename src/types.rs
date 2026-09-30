@@ -46,6 +46,66 @@ impl From<BtcNetwork> for Network {
 }
 
 // ============================================================================
+// Logging
+// ============================================================================
+
+// Serde/TS names are lowercase (`"error"` | `"warn"` | `"info"` | `"debug"` |
+// `"trace"`), matching `as_str`. Kept out of the doc comment, which uniffi
+// copies into the native bindings, where the level is a native enum.
+/// Severity of a log record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    /// The level's serde/TS name, e.g. `"warn"`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LogLevel::Error => "error",
+            LogLevel::Warn => "warn",
+            LogLevel::Info => "info",
+            LogLevel::Debug => "debug",
+            LogLevel::Trace => "trace",
+        }
+    }
+}
+
+impl From<log::Level> for LogLevel {
+    fn from(l: log::Level) -> Self {
+        match l {
+            log::Level::Error => Self::Error,
+            log::Level::Warn => Self::Warn,
+            log::Level::Info => Self::Info,
+            log::Level::Debug => Self::Debug,
+            log::Level::Trace => Self::Trace,
+        }
+    }
+}
+
+impl From<LogLevel> for log::LevelFilter {
+    fn from(l: LogLevel) -> Self {
+        match l {
+            LogLevel::Error => Self::Error,
+            LogLevel::Warn => Self::Warn,
+            LogLevel::Info => Self::Info,
+            LogLevel::Debug => Self::Debug,
+            LogLevel::Trace => Self::Trace,
+        }
+    }
+}
+
+// ============================================================================
 // WalletProperties
 // ============================================================================
 
@@ -2209,5 +2269,19 @@ mod tests {
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(json["type"], serde_json::json!("completed"));
         assert!(json["report"].is_object(), "{json}");
+    }
+
+    #[test]
+    fn log_level_name_matches_serde() {
+        for level in log::Level::iter().map(LogLevel::from) {
+            assert_eq!(serde_json::to_value(level).unwrap(), level.as_str());
+        }
+    }
+
+    #[test]
+    fn log_level_maps_to_the_same_log_filter() {
+        for level in log::Level::iter() {
+            assert_eq!(log::LevelFilter::from(LogLevel::from(level)), level.to_level_filter());
+        }
     }
 }
