@@ -13,40 +13,7 @@ use log::LevelFilter;
 use once_cell::sync::OnceCell;
 
 use crate::error::Error;
-
-/// Severity of a log record.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum LogLevel {
-    Error,
-    Warn,
-    Info,
-    Debug,
-    Trace,
-}
-
-impl From<log::Level> for LogLevel {
-    fn from(l: log::Level) -> Self {
-        match l {
-            log::Level::Error => Self::Error,
-            log::Level::Warn => Self::Warn,
-            log::Level::Info => Self::Info,
-            log::Level::Debug => Self::Debug,
-            log::Level::Trace => Self::Trace,
-        }
-    }
-}
-
-impl From<LogLevel> for log::LevelFilter {
-    fn from(l: LogLevel) -> Self {
-        match l {
-            LogLevel::Error => Self::Error,
-            LogLevel::Warn => Self::Warn,
-            LogLevel::Info => Self::Info,
-            LogLevel::Debug => Self::Debug,
-            LogLevel::Trace => Self::Trace,
-        }
-    }
-}
+use crate::types::LogLevel;
 
 /// Foreign-implemented sink for log records.
 ///
