@@ -560,6 +560,25 @@ impl Wallet {
         run_async(async move { core.refresh_vtxos(vtxo_ids).await }).await
     }
 
+    pub async fn adopt_server_vtxo_status(
+        &self, vtxo_ids: Vec<String>,
+    ) -> Result<Vec<types::AdoptedVtxoStatus>, Error> {
+        let core = self.core.clone();
+        run_async(async move { core.adopt_server_vtxo_status(vtxo_ids).await }).await
+    }
+
+    pub async fn find_expiry_payouts(&self) -> Result<Vec<types::ExpiryPayout>, Error> {
+        let core = self.core.clone();
+        run_async(async move { core.find_expiry_payouts().await }).await
+    }
+
+    pub async fn sweep_expiry_payouts(
+        &self, fee_rate_sat_per_vb: Option<u64>,
+    ) -> Result<types::ExpiryPayoutSweep, Error> {
+        let core = self.core.clone();
+        run_async(async move { core.sweep_expiry_payouts(fee_rate_sat_per_vb).await }).await
+    }
+
     pub async fn maintenance_refresh(&self) -> Result<Option<String>, Error> {
         let core = self.core.clone();
         run_async(async move { core.maintenance_refresh().await }).await
