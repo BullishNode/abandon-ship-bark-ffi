@@ -14,7 +14,7 @@ use crate::core::wallet::{seed_from_str, OpenArgs as CoreOpenArgs, Wallet as Cor
 use crate::error::Error;
 use crate::types::{
     AddressWithIndex, ArkInfo, Balance, BoardFundingInfo, EmergencyExitFeeEstimate,
-    ExitCancelResult, ExitClaimTransaction, ExitProgressStatus, ExitTransactionStatus, ExitVtxo,
+    AdoptedVtxoStatus, ExitCancelResult, ExitClaimTransaction, ExpiryPayout, ExpiryPayoutSweep, ExitProgressStatus, ExitTransactionStatus, ExitVtxo,
     FeeEstimate, ImportVtxoArgs, LightningInvoice,
     LightningReceive, LightningSend, LightningSendStatus, Movement, Network, OffboardResult,
     PendingBoard, RecoveryReport, RecoveryStatus, RoundState, Vtxo, VtxoLockHolder,
@@ -712,6 +712,42 @@ impl Wallet {
         scheduledHeight: u32,
     ) -> Result<Option<Ts<RoundState>>, JsError> {
         Ok(self.core.refresh_vtxos_scheduled(vtxoIds, scheduledHeight).await?.map(|v| v.into_ts()).transpose()?)
+    }
+
+    // -- Expiry payouts -------------------------------------------------------
+
+    /// Ask the server for the state of `vtxoIds` (default: every unspent expired
+    /// VTXO) and adopt it. A VTXO the server reports spent, for example because
+    /// it paid the VTXO out on-chain after expiry, is marked spent and leaves the
+    /// balance. Only use with a server you trust.
+    #[wasm_bindgen(js_name = adoptServerVtxoStatus)]
+    pub async fn adopt_server_vtxo_status(
+        &self,
+        vtxoIds: Option<Vec<String>>,
+    ) -> Result<Vec<Ts<AdoptedVtxoStatus>>, JsError> {
+        Ok(self.core.adopt_server_vtxo_status(vtxoIds).await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Find the on-chain outputs paying the BIP86 address `tr(user_pubkey)` of
+    /// `vtxoIds` (default: every expired VTXO the wallet has as spent).
+    #[wasm_bindgen(js_name = findExpiryPayouts)]
+    pub async fn find_expiry_payouts(
+        &self,
+        vtxoIds: Option<Vec<String>>,
+    ) -> Result<Vec<Ts<ExpiryPayout>>, JsError> {
+        Ok(self.core.find_expiry_payouts(vtxoIds).await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Sweep the expiry payouts to a fresh address of the on-chain wallet and
+    /// record an `expiry-payout` movement. `feeRate` is in sat/vB and defaults
+    /// to the chain source's regular rate.
+    #[wasm_bindgen(js_name = sweepExpiryPayouts)]
+    pub async fn sweep_expiry_payouts(
+        &self,
+        feeRate: Option<f64>,
+    ) -> Result<Ts<ExpiryPayoutSweep>, JsError> {
+        let fee_rate = feeRate.map(fee_rate_sat_per_vb_from_js).transpose()?;
+        Ok(self.core.sweep_expiry_payouts(fee_rate).await?.into_ts()?)
     }
 
     // -- Recovery -------------------------------------------------------------

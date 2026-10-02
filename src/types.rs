@@ -326,6 +326,78 @@ pub struct OffboardResult {
 }
 
 // ============================================================================
+// Expiry payouts
+// ============================================================================
+
+/// A VTXO's state after adopting the server's view of it: `spent`,
+/// `spendable`, `unregistered` or `other`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    serde(rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct AdoptedVtxoStatus {
+    pub vtxo_id: String,
+    pub state: String,
+}
+
+impl From<bark::expiry_payout::AdoptedVtxoStatus> for AdoptedVtxoStatus {
+    fn from(v: bark::expiry_payout::AdoptedVtxoStatus) -> Self {
+        let state = match v.state {
+            bark::expiry_payout::AdoptedVtxoState::Spent => "spent",
+            bark::expiry_payout::AdoptedVtxoState::Spendable => "spendable",
+            bark::expiry_payout::AdoptedVtxoState::Unregistered => "unregistered",
+            bark::expiry_payout::AdoptedVtxoState::Other => "other",
+        };
+        AdoptedVtxoStatus { vtxo_id: v.vtxo_id.to_string(), state: state.to_owned() }
+    }
+}
+
+/// An on-chain output paying the expiry payout address `tr(user_pubkey)` of a VTXO.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    serde(rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ExpiryPayout {
+    pub vtxo_id: String,
+    pub txid: String,
+    pub vout: u32,
+    pub amount_sat: u64,
+    /// 0 while the output is in the mempool
+    pub confirmations: u32,
+}
+
+impl From<bark::expiry_payout::ExpiryPayout> for ExpiryPayout {
+    fn from(v: bark::expiry_payout::ExpiryPayout) -> Self {
+        ExpiryPayout {
+            vtxo_id: v.vtxo_id.to_string(),
+            txid: v.outpoint.txid.to_string(),
+            vout: v.outpoint.vout,
+            amount_sat: v.amount.to_sat(),
+            confirmations: v.confirmations,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "wasm-web",
+    derive(tsify::Tsify),
+    serde(rename_all = "camelCase")
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ExpiryPayoutSweep {
+    pub txid: String,
+    /// The amount paid to the on-chain wallet, after the sweep's fee
+    pub swept_sat: u64,
+}
+
+// ============================================================================
 // AddressWithIndex
 // ============================================================================
 
