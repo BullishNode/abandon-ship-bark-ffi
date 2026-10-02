@@ -716,26 +716,22 @@ impl Wallet {
 
     // -- Expiry payouts -------------------------------------------------------
 
-    /// Ask the server for the state of `vtxoIds` (default: every unspent expired
-    /// VTXO) and adopt it. A VTXO the server reports spent, for example because
+    /// Ask the server for the state of `vtxoIds` and adopt it. A VTXO the server reports spent, for example because
     /// it paid the VTXO out on-chain after expiry, is marked spent and leaves the
     /// balance. Only use with a server you trust.
     #[wasm_bindgen(js_name = adoptServerVtxoStatus)]
     pub async fn adopt_server_vtxo_status(
         &self,
-        vtxoIds: Option<Vec<String>>,
+        vtxoIds: Vec<String>,
     ) -> Result<Vec<Ts<AdoptedVtxoStatus>>, JsError> {
         Ok(self.core.adopt_server_vtxo_status(vtxoIds).await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     /// Find the on-chain outputs paying the BIP86 address `tr(user_pubkey)` of
-    /// `vtxoIds` (default: every expired VTXO the wallet has as spent).
+    /// every expired VTXO the wallet has as spent.
     #[wasm_bindgen(js_name = findExpiryPayouts)]
-    pub async fn find_expiry_payouts(
-        &self,
-        vtxoIds: Option<Vec<String>>,
-    ) -> Result<Vec<Ts<ExpiryPayout>>, JsError> {
-        Ok(self.core.find_expiry_payouts(vtxoIds).await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
+    pub async fn find_expiry_payouts(&self) -> Result<Vec<Ts<ExpiryPayout>>, JsError> {
+        Ok(self.core.find_expiry_payouts().await?.into_iter().map(|v| v.into_ts()).collect::<Result<Vec<_>, _>>()?)
     }
 
     /// Sweep the expiry payouts to a fresh address of the on-chain wallet and

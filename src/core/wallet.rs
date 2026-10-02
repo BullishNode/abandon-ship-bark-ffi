@@ -990,25 +990,21 @@ impl Wallet {
     // Expiry payouts
     // ------------------------------------------------------------------------
 
-    /// Adopt the server's state for `vtxo_ids` (default: every unspent expired
-    /// VTXO). A VTXO the server reports spent is marked spent.
+    /// Adopt the server's state for `vtxo_ids`. A VTXO the server reports
+    /// spent is marked spent.
     pub async fn adopt_server_vtxo_status(
         &self,
-        vtxo_ids: Option<Vec<String>>,
+        vtxo_ids: Vec<String>,
     ) -> Result<Vec<types::AdoptedVtxoStatus>, Error> {
-        let ids = vtxo_ids.map(|ids| parse_vtxo_ids(&ids)).transpose()?;
+        let ids = parse_vtxo_ids(&vtxo_ids)?;
         let statuses = bark::expiry_payout::adopt_server_vtxo_status(&self.inner, ids).await?;
         Ok(statuses.into_iter().map(Into::into).collect())
     }
 
-    /// Find the on-chain outputs paying `tr(user_pubkey)` of `vtxo_ids`
-    /// (default: every expired VTXO the wallet has as spent).
-    pub async fn find_expiry_payouts(
-        &self,
-        vtxo_ids: Option<Vec<String>>,
-    ) -> Result<Vec<types::ExpiryPayout>, Error> {
-        let ids = vtxo_ids.map(|ids| parse_vtxo_ids(&ids)).transpose()?;
-        let payouts = bark::expiry_payout::find_expiry_payouts(&self.inner, ids).await?;
+    /// Find the on-chain outputs paying `tr(user_pubkey)` of every expired VTXO
+    /// the wallet has as spent.
+    pub async fn find_expiry_payouts(&self) -> Result<Vec<types::ExpiryPayout>, Error> {
+        let payouts = bark::expiry_payout::find_expiry_payouts(&self.inner).await?;
         Ok(payouts.into_iter().map(Into::into).collect())
     }
 
