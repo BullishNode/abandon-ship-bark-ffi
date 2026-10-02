@@ -12,7 +12,7 @@ use log::{error, warn};
 use bitcoin::{Address, Amount, FeeRate, Psbt, Script, ScriptBuf, Transaction};
 
 use bark::chain::ChainSource;
-use bark::onchain::{CpfpError, CpfpWalkEstimate, MakeCpfpFees, OnchainWalletTrait};
+use bark::onchain::{CpfpError, MakeCpfpFees, OnchainWalletTrait};
 
 use crate::error::Error;
 use crate::types::{CpfpParams, Destination};
@@ -356,22 +356,6 @@ impl OnchainWalletTrait for CallbackWalletAdapter {
         }
 
         Ok(cpfp_tx)
-    }
-
-    /// Not supported for callback wallets.
-    ///
-    /// Estimating the exit cost means replaying the whole CPFP broadcast walk
-    /// without mutating the wallet, which the callback interface cannot express:
-    /// [CustomOnchainWalletCallbacks::make_signed_p2a_cpfp] is free to consume
-    /// addresses and coins. Only `Wallet::estimate_emergency_exit_fee` needs
-    /// this, so the rest of the wallet is unaffected.
-    fn estimate_p2a_cpfp_walk(
-        &self,
-        _parents: &[(Transaction, MakeCpfpFees)],
-    ) -> Result<CpfpWalkEstimate, CpfpError> {
-        Err(CpfpError::InternalError(
-            "estimate_p2a_cpfp_walk() not supported for callback wallets".into(),
-        ))
     }
 
     async fn store_signed_p2a_cpfp(&mut self, tx: &Transaction) -> anyhow::Result<(), CpfpError> {

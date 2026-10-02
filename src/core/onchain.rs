@@ -98,7 +98,7 @@ impl OnchainWallet {
     pub async fn initial_scan(&self, birthday_height: Option<u32>) -> Result<u64, Error> {
         let mut w = self.wallet.write().await;
         let balance = w
-            .initial_wallet_scan(&self.chain, birthday_height)
+            .initial_wallet_scan(&self.chain, birthday_height.map(Into::into))
             .await
             .context("Initial wallet scan failed")?;
         Ok(balance.to_sat())
@@ -150,7 +150,7 @@ impl OnchainWallet {
     /// upstream with a short TTL).
     pub async fn tip_height(&self) -> Result<u32, Error> {
         let height = self.chain.tip().await.context("Failed to fetch tip")?;
-        Ok(height)
+        Ok(height.to_u32())
     }
 
     /// Cached network fee-rate estimates from the wallet's chain source.

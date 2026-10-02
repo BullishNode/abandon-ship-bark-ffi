@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -88,25 +89,27 @@ impl Config {
         ret.bitcoind_pass = self.bitcoind_pass.map(bark::secret::Secret::new);
 
         if let Some(threshold) = self.vtxo_refresh_expiry_threshold {
-            ret.vtxo_refresh_expiry_threshold = threshold;
+            ret.vtxo_refresh_expiry_threshold = threshold.into();
         }
         if let Some(margin) = self.vtxo_exit_margin {
-            ret.vtxo_exit_margin = margin;
+            ret.vtxo_exit_margin = margin.into();
         }
         if let Some(delta) = self.htlc_recv_claim_delta {
-            ret.htlc_recv_claim_delta = delta;
+            ret.htlc_recv_claim_delta = delta.into();
         }
         if let Some(rate) = self.fallback_fee_rate {
             ret.fallback_fee_rate = Some(bitcoin::FeeRate::from_sat_per_kwu(rate));
         }
         if let Some(confs) = self.round_tx_required_confirmations {
-            ret.round_tx_required_confirmations = confs;
+            ret.round_tx_required_confirmations = confs.try_into()
+                .context("round_tx_required_confirmations too large")?;
         }
         if let Some(secs) = self.daemon_sync_interval_secs {
             ret.daemon_sync_interval_secs = secs;
         }
         if let Some(confs) = self.offboard_required_confirmations {
-            ret.offboard_required_confirmations = confs;
+            ret.offboard_required_confirmations = confs.try_into()
+                .context("offboard_required_confirmations too large")?;
         }
         if let Some(manual) = self.daemon_manual_sync {
             ret.daemon_manual_sync = manual;
