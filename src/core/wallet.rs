@@ -997,7 +997,7 @@ impl Wallet {
         vtxo_ids: Option<Vec<String>>,
     ) -> Result<Vec<types::AdoptedVtxoStatus>, Error> {
         let ids = vtxo_ids.map(|ids| parse_vtxo_ids(&ids)).transpose()?;
-        let statuses = self.inner.adopt_server_vtxo_status(ids).await?;
+        let statuses = bark::expiry_payout::adopt_server_vtxo_status(&self.inner, ids).await?;
         Ok(statuses.into_iter().map(Into::into).collect())
     }
 
@@ -1008,7 +1008,7 @@ impl Wallet {
         vtxo_ids: Option<Vec<String>>,
     ) -> Result<Vec<types::ExpiryPayout>, Error> {
         let ids = vtxo_ids.map(|ids| parse_vtxo_ids(&ids)).transpose()?;
-        let payouts = self.inner.find_expiry_payouts(ids).await?;
+        let payouts = bark::expiry_payout::find_expiry_payouts(&self.inner, ids).await?;
         Ok(payouts.into_iter().map(Into::into).collect())
     }
 
@@ -1021,10 +1021,10 @@ impl Wallet {
         let fee_rate = fee_rate_sat_per_vb
             .map(|r| bitcoin::FeeRate::from_sat_per_vb(r).context("fee rate overflows"))
             .transpose()?;
-        let sweep = self.inner.sweep_expiry_payouts(fee_rate).await?;
+        let sweep = bark::expiry_payout::sweep_expiry_payouts(&self.inner, fee_rate).await?;
         Ok(types::ExpiryPayoutSweep {
             txid: sweep.txid.to_string(),
-            swept_sat: sweep.swept.to_sat(),
+            swept_sats: sweep.swept.to_sat(),
         })
     }
 

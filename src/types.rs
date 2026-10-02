@@ -367,7 +367,7 @@ pub struct ExpiryPayout {
     pub vtxo_id: String,
     pub txid: String,
     pub vout: u32,
-    pub amount_sat: u64,
+    pub amount_sats: u64,
     /// 0 while the output is in the mempool
     pub confirmations: u32,
 }
@@ -378,7 +378,7 @@ impl From<bark::expiry_payout::ExpiryPayout> for ExpiryPayout {
             vtxo_id: v.vtxo_id.to_string(),
             txid: v.outpoint.txid.to_string(),
             vout: v.outpoint.vout,
-            amount_sat: v.amount.to_sat(),
+            amount_sats: v.amount.to_sat(),
             confirmations: v.confirmations,
         }
     }
@@ -394,7 +394,7 @@ impl From<bark::expiry_payout::ExpiryPayout> for ExpiryPayout {
 pub struct ExpiryPayoutSweep {
     pub txid: String,
     /// The amount paid to the on-chain wallet, after the sweep's fee
-    pub swept_sat: u64,
+    pub swept_sats: u64,
 }
 
 // ============================================================================
