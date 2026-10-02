@@ -714,8 +714,7 @@ pub struct EmergencyExitFeeEstimate {
     /// CPFP-bumped. Already-confirmed tree transactions are not counted.
     pub txs_to_broadcast: u64,
     /// Whether the wallet's onchain balance covers `exit_broadcast_fee_sats`.
-    /// Newer bark no longer simulates the serial CPFP walk, so this is only a
-    /// balance check: an exit can still stall if confirmed coins run short.
+    /// An exit can still stall if confirmed coins run short.
     pub fundable: bool,
 }
 
