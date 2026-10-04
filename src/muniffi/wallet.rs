@@ -839,7 +839,6 @@ impl Wallet {
     /// Draining everything must be asked for with `drain_all`, so an id list
     /// filtered down to nothing is an error rather than a sweep. Ids are parsed
     /// all-or-nothing; well-formed ids that are not claimable are skipped.
-    #[uniffi::method(default(drain_all = false))]
     pub async fn drain_exits(
         &self,
         vtxo_ids: Vec<String>,
