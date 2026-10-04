@@ -41,17 +41,20 @@ wasm-web = [
 
 [dependencies.ark]
 package = "ark-lib"
-path = "../abandon-ship-bark/lib"
+git = "https://github.com/BullishNode/abandon-ship-bark"
+rev = "3ab4298662ff8e9ec2c2622fcf886e8cd59c9818"
 default-features = false
 
 [dependencies.bark]
 package = "bark-wallet"
-path = "../abandon-ship-bark/bark"
+git = "https://github.com/BullishNode/abandon-ship-bark"
+rev = "3ab4298662ff8e9ec2c2622fcf886e8cd59c9818"
 default-features = false
 
 [dependencies.bark-bitcoin-ext]
 package = "bark-bitcoin-ext"
-path = "../abandon-ship-bark/bitcoin-ext"
+git = "https://github.com/BullishNode/abandon-ship-bark"
+rev = "3ab4298662ff8e9ec2c2622fcf886e8cd59c9818"
 default-features = false
 
 [dependencies]
