@@ -1,0 +1,29 @@
+2026-10-04 generated native consumer verification
+Source: 4a0f1af and fd7fca1; Bark pin 3ab429866.
+Platform: Linux x86_64, Python 3.12, UniFFI 0.31.1, Bitcoin Core regtest.
+
+Before: generated Python import FAIL (non-default argument followed drain_all's
+false default). Removing that default preserves argument order; callers now
+supply drain_all explicitly. Regenerated module compilation/import PASS.
+Before: native wallet open with bitcoind config FAIL: bitcoind-rpc not compiled.
+After enabling Bark's existing bitcoind-rpc feature for uniffi: wallet open PASS.
+Cargo.lock adds 20 required backend packages; no existing package is upgraded.
+
+cargo test --offline: 52 PASS / 0 FAIL, exit 0; zero doc tests.
+cargo build --locked --lib: PASS.
+Generated Python wallet journey: PASS, exit 0.
+- Fresh native wallet restored the seed and two historical VTXOs.
+- Direct-funded 10000 sat to the earlier genuine sidecar payout script.
+- Native find_expiry_payouts found the unconfirmed output once.
+- Native sweep_expiry_payouts signed and spent that exact input.
+- Subsequent lookup returned empty; Core confirmed the sweep.
+- Native on-chain sync recovered the output into the wallet's balance.
+- Native adopt_server_vtxo_status kept the settled coin spent: PASS.
+The direct-funded output tests interop/discovery, not another sidecar settlement.
+
+Payout: cbdedf9752e4581bc396d68d2d12bfb33f423c09dcce0189907c769c21a95c76:1
+Sweep: 4a2120c31e2c9b67d8598e102fc8d312a3b5d9ffd8007826cc1e600fbbb53fd4
+Sweep output: 9445 sat; fee: 555 sat; confirmation: at least one block.
+Library SHA-256: 45af0f4bcb2844924e77ab1ea2cb0255442f3256b9fe82db876bc1f3501cf7e8
+Raw logs, generator driver and consumer scripts are retained locally under
+session2-continuation/native-ffi/. No seed or private wallet data is committed.
