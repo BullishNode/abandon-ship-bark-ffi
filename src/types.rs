@@ -364,7 +364,7 @@ impl From<bark::expiry_payout::AdoptedVtxoStatus> for AdoptedVtxoStatus {
 )]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ExpiryPayout {
-    pub vtxo_id: String,
+    pub vtxo_id: Option<String>,
     pub txid: String,
     pub vout: u32,
     pub amount_sats: u64,
@@ -375,7 +375,7 @@ pub struct ExpiryPayout {
 impl From<bark::expiry_payout::ExpiryPayout> for ExpiryPayout {
     fn from(v: bark::expiry_payout::ExpiryPayout) -> Self {
         ExpiryPayout {
-            vtxo_id: v.vtxo_id.to_string(),
+            vtxo_id: v.vtxo_id.map(|id| id.to_string()),
             txid: v.outpoint.txid.to_string(),
             vout: v.outpoint.vout,
             amount_sats: v.amount.to_sat(),
