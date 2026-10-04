@@ -21,6 +21,7 @@ uniffi = [
     "bark/sqlite",
     "bark/tls-webpki-roots",
     "bark/native",
+    "bark/bitcoind-rpc",
     "bark/onchain-bdk",
     "tokio/rt-multi-thread",
     "tokio/signal",
