@@ -368,6 +368,8 @@ pub struct ExpiryPayout {
     pub txid: String,
     pub vout: u32,
     pub amount_sats: u64,
+    /// Exact payout deduction, absent when its receipt is unavailable.
+    pub fee_sats: Option<u64>,
     /// 0 while the output is in the mempool
     pub confirmations: u32,
 }
@@ -379,6 +381,7 @@ impl From<bark::expiry_payout::ExpiryPayout> for ExpiryPayout {
             txid: v.outpoint.txid.to_string(),
             vout: v.outpoint.vout,
             amount_sats: v.amount.to_sat(),
+            fee_sats: v.fee.map(|fee| fee.to_sat()),
             confirmations: v.confirmations,
         }
     }
@@ -1901,6 +1904,24 @@ impl From<bark::WalletNotification> for WalletNotification {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn expiry_payout_preserves_output_fee_and_unknown_receipts() {
+        use bitcoin::hashes::Hash;
+        let mut payout = bark::expiry_payout::ExpiryPayout {
+            vtxo_id: None,
+            outpoint: bitcoin::OutPoint::new(bitcoin::Txid::from_byte_array([7; 32]), 2),
+            amount: bitcoin::Amount::from_sat(49_850),
+            fee: Some(bitcoin::Amount::from_sat(150)),
+            confirmations: 1,
+        };
+        let native = super::ExpiryPayout::from(payout.clone());
+        assert_eq!(native.vout, 2);
+        assert_eq!(native.amount_sats, 49_850);
+        assert_eq!(native.fee_sats, Some(150));
+        payout.fee = None;
+        assert_eq!(super::ExpiryPayout::from(payout).fee_sats, None);
+    }
+
     use super::*;
 
     #[test]

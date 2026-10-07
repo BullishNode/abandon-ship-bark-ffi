@@ -1,0 +1,28 @@
+Native expiry payout fee mapping, 2026-10-07
+
+Bark pin: 3a8f9694ad41c08be4d2ca634d380b99dbb1d427, published on
+BullishNode/abandon-ship-bark variant-b. No local-path dependency remains.
+Cargo test: 53 PASS / 0 FAIL, exit 0. Locked offline library build: PASS.
+Regenerated Python/UniFFI import: PASS. Generated Python is byte-identical
+to the bindings used in the real journey below. Optional fee_sats preserves
+unknown accounting as None and the full output's deduction for shared keys.
+
+Actual generated-binding journey: PASS, exit 0, on abandon-session2.
+Fresh seed restore found a real sidecar payout of 58743 sat, fee 777 sat.
+Removing its static receipt preserved the amount and returned fee_sats=None.
+Restoring the receipt and sweeping at 5 sat/vB spent that exact output once;
+Core confirmed the sweep. This was not a directly funded payout-script fixture.
+Payout: 12ad68229af8bd0be6c88623957b2f80152a6b9db1613eb37c9cb0d14771a9f5:0
+Sweep: de9014c7a28aea68e67dae3f17ace894c474b12727739fdfda203d62dd85189c
+Proceeds: 58188 sat; separate wallet-transfer fee: 555 sat.
+
+The journey library used local paths to the same Bark Rust source before
+publication. Final tests/build/binding validation use the published Git pin.
+Initial binding generation used an incorrect libbark.so filename and exited 1;
+using the actual libbark_ffi.so succeeded. No code change was needed for that.
+
+Local logs/scripts: ~/bark-integration-2026-10-01/session2-continuation/
+2026-10-07/ffi-receipts-published-build.txt and fee-receipts-live/
+{native-journey.py,native-journey.log,native-result.json,native-published-validation.txt}.
+Private seed/wallet data is not included. Consumers must regenerate bindings
+for the added optional record field.

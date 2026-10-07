@@ -58,7 +58,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 [[package]]
 name = "ark-lib"
 version = "0.7.1"
-source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3ab4298662ff8e9ec2c2622fcf886e8cd59c9818#3ab4298662ff8e9ec2c2622fcf886e8cd59c9818"
+source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3a8f9694ad41c08be4d2ca634d380b99dbb1d427#3a8f9694ad41c08be4d2ca634d380b99dbb1d427"
 dependencies = [
  "async-trait",
  "bark-bitcoin-ext",
@@ -200,7 +200,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 [[package]]
 name = "bark-bitcoin-ext"
 version = "0.7.1"
-source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3ab4298662ff8e9ec2c2622fcf886e8cd59c9818#3ab4298662ff8e9ec2c2622fcf886e8cd59c9818"
+source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3a8f9694ad41c08be4d2ca634d380b99dbb1d427#3a8f9694ad41c08be4d2ca634d380b99dbb1d427"
 dependencies = [
  "async-trait",
  "bdk_bitcoind_rpc",
@@ -219,7 +219,7 @@ dependencies = [
 [[package]]
 name = "bark-common"
 version = "0.7.1"
-source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3ab4298662ff8e9ec2c2622fcf886e8cd59c9818#3ab4298662ff8e9ec2c2622fcf886e8cd59c9818"
+source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3a8f9694ad41c08be4d2ca634d380b99dbb1d427#3a8f9694ad41c08be4d2ca634d380b99dbb1d427"
 dependencies = [
  "anyhow",
  "serde",
@@ -259,7 +259,7 @@ dependencies = [
 [[package]]
 name = "bark-runtime"
 version = "0.7.1"
-source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3ab4298662ff8e9ec2c2622fcf886e8cd59c9818#3ab4298662ff8e9ec2c2622fcf886e8cd59c9818"
+source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3a8f9694ad41c08be4d2ca634d380b99dbb1d427#3a8f9694ad41c08be4d2ca634d380b99dbb1d427"
 dependencies = [
  "futures",
  "gloo-timers",
@@ -272,7 +272,7 @@ dependencies = [
 [[package]]
 name = "bark-server-rpc"
 version = "0.7.1"
-source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3ab4298662ff8e9ec2c2622fcf886e8cd59c9818#3ab4298662ff8e9ec2c2622fcf886e8cd59c9818"
+source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3a8f9694ad41c08be4d2ca634d380b99dbb1d427#3a8f9694ad41c08be4d2ca634d380b99dbb1d427"
 dependencies = [
  "ark-lib",
  "bitcoin",
@@ -292,7 +292,7 @@ dependencies = [
 [[package]]
 name = "bark-wallet"
 version = "0.7.1"
-source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3ab4298662ff8e9ec2c2622fcf886e8cd59c9818#3ab4298662ff8e9ec2c2622fcf886e8cd59c9818"
+source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3a8f9694ad41c08be4d2ca634d380b99dbb1d427#3a8f9694ad41c08be4d2ca634d380b99dbb1d427"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -324,6 +324,7 @@ dependencies = [
  "log",
  "parking_lot",
  "rand 0.10.2",
+ "reqwest",
  "rmp-serde",
  "rusqlite",
  "serde",
@@ -446,7 +447,7 @@ checksum = "32637268377fc7b10a8c6d51de3e7fba1ce5dd371a96e342b34e6078db558e7f"
 [[package]]
 name = "bip321"
 version = "0.4.0"
-source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3ab4298662ff8e9ec2c2622fcf886e8cd59c9818#3ab4298662ff8e9ec2c2622fcf886e8cd59c9818"
+source = "git+https://github.com/BullishNode/abandon-ship-bark?rev=3a8f9694ad41c08be4d2ca634d380b99dbb1d427#3a8f9694ad41c08be4d2ca634d380b99dbb1d427"
 dependencies = [
  "bark-bitcoin-ext",
  "bitcoin",
