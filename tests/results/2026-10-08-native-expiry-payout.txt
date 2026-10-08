@@ -1,0 +1,42 @@
+2026-10-08: native expiry payout through generated Python/UniFFI
+
+Bark dependency: 08f1844173334922f5111e98f4019195052720ab.
+Change: three manifest pins and seven lockfile source references. No registry
+package version changes. Includes the fresh-round refresh correction and
+previously tested fresh Core-wallet creation behavior.
+
+Results:
+- cargo test --locked: 53 PASS, 0 FAIL; 0 doc tests.
+- cargo build --locked --lib: PASS.
+- Generated Python module compilation and import: PASS.
+- cargo check --locked --no-default-features --features wasm-web
+  --target wasm32-unknown-unknown: PASS.
+- Funded native-client scenario: PASS, 181.934 seconds.
+
+The scenario boards actual regtest bitcoin, creates an unclaimed delegated-round
+replacement, and lets native captaind pay it after expiry and its backing sweep.
+A new native wallet restores from the same seed through the generated bindings.
+It discovers the payout without an injected replacement VTXO ID, checks the exact
+net amount and fee, and preserves the amount with an unknown fee during a receipt
+outage. It then spends only that payout output and confirms the spending transaction.
+
+Payout: 18c478ecc49f1ba14ae48eff378fb6cf93264a84af0616203f5a2a16e73c0da0:28.
+Received: 59459 sat; payout mining fee: 61 sat.
+Spend: b01457cef0c91ef6da3d64e2da04193f29f2d60dd26655e0d143c67e1c61cee2.
+On-chain wallet proceeds: 58904 sat; later spending fee: 555 sat.
+
+Native server: abandon-ship/captaind:expiry-d-c594b92abe78.
+Fixture CLI: abandon-ship/bark:refresh-boundary-b226bda962f2.
+Python module SHA-256: 6e843827c163a65c567b110cf7268d55f8f185a21e8cc8cc8ba709eeea4ae069.
+Native library SHA-256: 8977bc65c19ca167030a8190b3d56264eda85a920ebaf5c3dd838f5a7b5b9335.
+
+Evidence: bark-integration-2026-10-01/expiry-task-evidence/native-ffi-client-1/
+and runtime/20261008T180635Z-native-client/, plus native-ffi-fresh-round-build.log,
+native-ffi-fresh-round-wasm-toolpaths.log and native-ffi-fresh-round-bindings/.
+Two WASM setup failures remain recorded: missing Rust 1.90 target, then missing
+unversioned llvm-ar. Target installation and the existing llvm-ar-18 path fixed
+the environment. No source change was needed for those failures.
+
+Scope: Linux generated-language interoperability with a real native regtest
+payout. This is not a mobile-device, browser, signet or production-readiness verdict.
+No private seed, wallet database or credentials are included here.
